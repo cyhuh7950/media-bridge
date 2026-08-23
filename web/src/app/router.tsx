@@ -8,6 +8,8 @@ import {
 } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
+import { ConnectionsPage } from "../dependencies/ConnectionsPage";
+import { TestLabPage } from "../dependencies/TestLabPage";
 import { OnboardingShell } from "../onboarding/OnboardingShell";
 import { PublishedSnapshotGuard } from "../onboarding/PublishedSnapshotGuard";
 import { AuditEventsPage } from "../operations/AuditEventsPage";
@@ -83,6 +85,8 @@ function ConsoleLayout() {
         {auth.principal.role === "admin" ? <NavLink to="/snapshots">Snapshots</NavLink> : null}
         <NavLink to="/audit">Audit &amp; Events</NavLink>
         <NavLink to="/system">System</NavLink>
+        <NavLink to="/connections">Connections</NavLink>
+        <NavLink to="/test-lab">Test Lab</NavLink>
       </nav>
       <main>
         <Routes>
@@ -96,6 +100,8 @@ function ConsoleLayout() {
             <Route path="/snapshots" element={<SnapshotsPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
             <Route path="/audit" element={<AuditEventsPage />} />
             <Route path="/system" element={<SystemPage />} />
+            <Route path="/connections" element={<ConnectionsPage />} />
+            <Route path="/test-lab" element={<TestLabPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

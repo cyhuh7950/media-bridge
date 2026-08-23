@@ -28,6 +28,8 @@ input, textarea { min-height: 2.75rem; border: 1px solid var(--border); border-r
 table { width: 100%; margin: 1rem 0; border-collapse: collapse; }
 th, td { padding: .75rem; border-bottom: 1px solid var(--border); text-align: left; overflow-wrap: anywhere; }
 .compact-form { max-width: 42rem; margin-top: 2rem; }
+.dependency-badge { display: inline-block; padding: .3rem .55rem; border-radius: 999px; color: #714900; background: #fff0c7; font-size: .8rem; font-weight: 800; letter-spacing: .04em; }
+.dependency-placeholder { display: grid; gap: .35rem; margin-top: 1.5rem; padding: 1rem; border: 1px dashed var(--border); border-radius: .75rem; background: var(--panel); }
 @media (max-width: 47.99rem) {
   .app-shell { grid-template: auto auto 1fr / 1fr; }
   .app-shell nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
