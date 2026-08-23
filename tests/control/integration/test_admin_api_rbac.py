@@ -121,6 +121,28 @@ def test_roles_are_enforced_by_admin_api(migrated_postgres: str) -> None:
         json={"enabled": False},
     )
     assert allowed_patch.status_code == 200
+    forbidden_secret_change = operator.patch(
+        f"/admin/v1/providers/{created_provider_id}",
+        headers={"origin": "https://control.test", "x-csrf-token": operator_csrf},
+        json={
+            "secret_ref": {
+                "kind": "external",
+                "identifier": "vault://media-bridge/provider-key",
+            }
+        },
+    )
+    assert forbidden_secret_change.status_code == 403
+    allowed_secret_change = admin.patch(
+        f"/admin/v1/providers/{created_provider_id}",
+        headers={"origin": "https://control.test", "x-csrf-token": admin_csrf},
+        json={
+            "secret_ref": {
+                "kind": "external",
+                "identifier": "vault://media-bridge/provider-key",
+            }
+        },
+    )
+    assert allowed_secret_change.status_code == 200
     database.close()
 
 
@@ -148,6 +170,32 @@ def test_only_admin_can_create_users(migrated_postgres: str) -> None:
     assert created.status_code == 201
     assert created.json()["role"] == "viewer"
     assert "password" not in created.text
+
+    users = admin.get("/admin/v1/users").json()
+    admin_id = next(item["id"] for item in users if item["username"] == "admin")
+    new_viewer_id = next(
+        item["id"] for item in users if item["username"] == "new-viewer"
+    )
+    forbidden_update = operator.patch(
+        f"/admin/v1/users/{new_viewer_id}",
+        headers={"origin": "https://control.test", "x-csrf-token": operator_csrf},
+        json={"role": "operator"},
+    )
+    assert forbidden_update.status_code == 403
+    updated = admin.patch(
+        f"/admin/v1/users/{new_viewer_id}",
+        headers={"origin": "https://control.test", "x-csrf-token": admin_csrf},
+        json={"role": "operator", "is_active": True},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["role"] == "operator"
+    last_admin = admin.patch(
+        f"/admin/v1/users/{admin_id}",
+        headers={"origin": "https://control.test", "x-csrf-token": admin_csrf},
+        json={"role": "viewer"},
+    )
+    assert last_admin.status_code == 409
+    assert last_admin.json() == {"error": {"code": "last_admin_required"}}
     database.close()
 
 

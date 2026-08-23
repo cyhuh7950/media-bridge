@@ -100,3 +100,78 @@ def test_login_rejects_bad_origin_http_and_rate_limits(migrated_postgres: str) -
     assert blocked.status_code == 429
     assert blocked.json() == {"error": {"code": "login_rate_limited"}}
     database.close()
+
+
+def test_recovery_code_resets_password_once_and_revokes_sessions(
+    migrated_postgres: str,
+) -> None:
+    database = Database(migrated_postgres)
+    service = ControlPlaneService(
+        database=database,
+        security=SecurityContext(pepper=b"z" * 32),
+        now=lambda: datetime(2026, 8, 24, 1, 0, tzinfo=UTC),
+    )
+    token = service.issue_bootstrap_token()
+    original_value = _long_test_value()
+    bootstrap = service.complete_bootstrap(
+        token=token,
+        username="admin",
+        password=original_value,
+    )
+    client = TestClient(
+        build_control_app(
+            service=service,
+            allowed_origin="https://control.test",
+            allowed_host="control.test",
+        ),
+        base_url="https://control.test",
+    )
+    origin = {"origin": "https://control.test"}
+    assert (
+        client.post(
+            "/admin/v1/auth/login",
+            headers=origin,
+            json={"username": "admin", "password": original_value},
+        ).status_code
+        == 200
+    )
+    new_value = "updated correct horse battery staple"
+    recovered = client.post(
+        "/admin/v1/auth/recover",
+        headers=origin,
+        json={
+            "username": "admin",
+            "recovery_code": bootstrap.recovery_codes[0],
+            "new_password": new_value,
+        },
+    )
+    assert recovered.status_code == 204
+    assert client.get("/admin/v1/me").status_code == 401
+    assert (
+        client.post(
+            "/admin/v1/auth/login",
+            headers=origin,
+            json={"username": "admin", "password": original_value},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/admin/v1/auth/login",
+            headers=origin,
+            json={"username": "admin", "password": new_value},
+        ).status_code
+        == 200
+    )
+    reused = client.post(
+        "/admin/v1/auth/recover",
+        headers=origin,
+        json={
+            "username": "admin",
+            "recovery_code": bootstrap.recovery_codes[0],
+            "new_password": original_value,
+        },
+    )
+    assert reused.status_code == 400
+    assert reused.json() == {"error": {"code": "recovery_rejected"}}
+    database.close()
