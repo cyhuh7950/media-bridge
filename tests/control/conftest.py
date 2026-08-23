@@ -5,6 +5,8 @@ from collections.abc import Iterator
 from urllib.parse import urlparse
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 
 
@@ -31,3 +33,13 @@ def clean_postgres(postgres_url: str) -> Iterator[str]:
         connection.execute(text("CREATE SCHEMA public"))
     engine.dispose()
     yield postgres_url
+
+
+@pytest.fixture()
+def migrated_postgres(clean_postgres: str) -> str:
+    root = __import__("pathlib").Path(__file__).resolve().parents[2]
+    config = Config(str(root / "migrations" / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "migrations"))
+    config.set_main_option("sqlalchemy.url", clean_postgres)
+    command.upgrade(config, "head")
+    return clean_postgres
