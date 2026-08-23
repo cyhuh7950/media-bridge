@@ -84,3 +84,36 @@ class PrepareForModelResult(StrictModel):
     sanitized_text: Annotated[str, StringConstraints(max_length=200_000)] | None
     original_image_removed: bool
     error: SafeError | None
+
+
+class ExtractImageContextRequest(StrictModel):
+    content: Annotated[list[ContentPart], Field(min_length=1, max_length=32)]
+    conversion_profile: Literal["generic", "error_screenshot", "document"] = "generic"
+
+
+class ExtractImageContextResult(StrictModel):
+    status: Literal["converted", "blocked"]
+    media_type: Literal["generic", "error_screenshot", "document"]
+    media_modalities: list[Literal["image", "pdf"]]
+    ocr_text: Annotated[str, StringConstraints(max_length=200_000)] | None
+    visual_description: Annotated[str, StringConstraints(max_length=200_000)] | None
+    structured_context: Annotated[str, StringConstraints(max_length=200_000)] | None
+    original_image_removed: bool
+    error: SafeError | None
+
+
+class AnalyzeErrorImageRequest(ExtractImageContextRequest):
+    user_request: Annotated[str, StringConstraints(min_length=1, max_length=20_000)]
+    analysis_backend: Annotated[
+        str,
+        StringConstraints(pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$"),
+    ] = "solar"
+
+
+class AnalyzeErrorImageResult(StrictModel):
+    status: Literal["analyzed", "blocked"]
+    analysis_backend: str
+    analysis: Annotated[str, StringConstraints(max_length=200_000)] | None
+    structured_context: Annotated[str, StringConstraints(max_length=200_000)] | None
+    original_image_removed: bool
+    error: SafeError | None

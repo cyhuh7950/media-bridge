@@ -71,6 +71,14 @@ class GateOutcome:
     prepared: DownstreamPayload | None
 
 
+@dataclass(frozen=True, slots=True)
+class ConvertedContext:
+    ocr_text: str
+    visual_description: str
+    structured_context: str
+    media_modalities: tuple[Literal["image", "pdf"], ...]
+
+
 def _canonical_digest(value: object) -> str:
     encoded = json.dumps(
         value,
@@ -143,15 +151,19 @@ class PreRequestGate:
 
         if resolution.state is CapabilityState.NON_VISION and detection.media_count:
             try:
-                sanitized_text = await self._convert_for_nonvision(request, tenant_id=tenant_id)
+                converted = await self.extract_context(
+                    request.content,
+                    conversion_profile=request.conversion_profile,
+                    tenant_id=tenant_id,
+                )
             except GateFailureError as failure:
                 return self._blocked(request, failure.code, failure.safe_message)
             return self._ready(
                 request,
-                content=(TextPart(text=sanitized_text),),
+                content=(TextPart(text=converted.structured_context),),
                 capability=resolution.state,
                 action="converted",
-                sanitized_text=sanitized_text,
+                sanitized_text=converted.structured_context,
                 original_image_removed=True,
             )
 
@@ -165,20 +177,26 @@ class PreRequestGate:
             original_image_removed=True,
         )
 
-    async def _convert_for_nonvision(
+    async def extract_context(
         self,
-        request: PrepareForModelRequest,
+        content: list[ContentPart],
         *,
+        conversion_profile: Literal["generic", "error_screenshot", "document"],
         tenant_id: str,
-    ) -> str:
+    ) -> ConvertedContext:
+        if detect_media(content).media_count == 0:
+            raise GateFailureError("media_required", "At least one media item is required.")
         converted_sections: list[str] = []
+        ocr_sections: list[str] = []
+        description_sections: list[str] = []
+        media_modalities: list[Literal["image", "pdf"]] = []
         forbidden_locators: list[str] = []
-        text = self._join_text(request.content)
+        text = self._join_text(content)
         if text:
             converted_sections.append(text)
 
         media_index = 0
-        for part in request.content:
+        for part in content:
             if not isinstance(part, MediaPart):
                 continue
             media_index += 1
@@ -212,7 +230,7 @@ class PreRequestGate:
                 vision_result = await self._vision_backend.describe(
                     data=acquired.data,
                     mime_type=acquired.mime_type,
-                    profile=request.conversion_profile,
+                    profile=conversion_profile,
                 )
                 if (
                     vision_result.status is not BackendStatus.SUCCESS
@@ -236,16 +254,32 @@ class PreRequestGate:
                 ) from None
             if processing_failure is not None:
                 raise processing_failure
+            ocr_sections.append(ocr_text or "No text detected.")
+            description_sections.append(description or "")
+            media_modalities.append(acquired.media_type)  # type: ignore[arg-type]
             converted_sections.append(
                 f"[Media {media_index} OCR]\n{ocr_text}\n"
                 f"[Media {media_index} visual description]\n{description}"
             )
 
         try:
-            return self._sanitizer(
-                "\n\n".join(converted_sections),
-                forbidden_locators=forbidden_locators,
-                max_length=200_000,
+            return ConvertedContext(
+                ocr_text=self._sanitizer(
+                    "\n".join(ocr_sections),
+                    forbidden_locators=forbidden_locators,
+                    max_length=200_000,
+                ),
+                visual_description=self._sanitizer(
+                    "\n".join(description_sections),
+                    forbidden_locators=forbidden_locators,
+                    max_length=200_000,
+                ),
+                structured_context=self._sanitizer(
+                    "\n\n".join(converted_sections),
+                    forbidden_locators=forbidden_locators,
+                    max_length=200_000,
+                ),
+                media_modalities=tuple(media_modalities),
             )
         except (SanitizationError, ValueError):
             raise GateFailureError(

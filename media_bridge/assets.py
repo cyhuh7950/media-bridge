@@ -32,6 +32,11 @@ class _AssetRecord:
 _TENANT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
+def validate_tenant_id(tenant_id: str) -> None:
+    if _TENANT_ID.fullmatch(tenant_id) is None:
+        raise AssetAccessError("tenant identifier is invalid")
+
+
 class AssetStore:
     """An ephemeral asset store that deletes bytes before returning consumption."""
 
@@ -53,7 +58,7 @@ class AssetStore:
         filename: str | None = None,
         declared_mime: str | None = None,
     ) -> str:
-        self._validate_tenant(tenant_id)
+        validate_tenant_id(tenant_id)
         if len(data) > self.max_bytes:
             raise AssetAccessError("asset exceeds the configured byte limit")
         if filename is not None and (Path(filename).name != filename or len(filename) > 255):
@@ -82,7 +87,7 @@ class AssetStore:
     def consume(self, *, asset_id: str, tenant_id: str) -> ConsumedAsset:
         """Read, delete, verify deletion, then return a tenant-owned asset."""
 
-        self._validate_tenant(tenant_id)
+        validate_tenant_id(tenant_id)
         with self._lock:
             record = self._records.get(asset_id)
             if record is None or not secrets.compare_digest(record.tenant_id, tenant_id):
@@ -103,8 +108,3 @@ class AssetStore:
             filename=record.filename,
             declared_mime=record.declared_mime,
         )
-
-    @staticmethod
-    def _validate_tenant(tenant_id: str) -> None:
-        if _TENANT_ID.fullmatch(tenant_id) is None:
-            raise AssetAccessError("tenant identifier is invalid")
