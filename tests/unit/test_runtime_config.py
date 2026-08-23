@@ -24,6 +24,9 @@ def _configure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, registry: str) -
         "https://vision.example/v1/chat/completions",
     )
     monkeypatch.setenv("MEDIA_BRIDGE_VISION_MODEL", "vision-converter")
+    monkeypatch.delenv("MEDIA_BRIDGE_OMNIROUTE_BASE_URL", raising=False)
+    monkeypatch.delenv("MEDIA_BRIDGE_OMNIROUTE_API_KEY", raising=False)
+    monkeypatch.delenv("MEDIA_BRIDGE_OMNIROUTE_API_KEY_FILE", raising=False)
 
 
 @pytest.mark.asyncio
@@ -57,6 +60,7 @@ models:
     assert result.action == "passthrough"
     assert callable(run_stdio)
     assert callable(run_http)
+    assert runtime.responses_gateway is None
     await runtime.close()
 
 
@@ -152,4 +156,46 @@ models: []
     monkeypatch.setenv("UNRELATED_SECRET", "must-not-be-used")
 
     with pytest.raises(RuntimeConfigurationError, match="receipt"):
+        build_runtime_from_environment()
+
+
+@pytest.mark.asyncio
+async def test_runtime_optionally_wires_gateway_from_exact_secret_sources(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _configure(monkeypatch, tmp_path, """version: test-v1
+models:
+  - id: text-model
+    input_modalities: [text]
+    expires_at: 2099-01-01T00:00:00Z
+""")
+    monkeypatch.setenv(
+        "MEDIA_BRIDGE_OMNIROUTE_BASE_URL",
+        "http://127.0.0.1:20128/v1/responses",
+    )
+    secret_file = tmp_path / "omniroute.key"
+    secret_file.write_text("omniroute-secret\n", encoding="utf-8")
+    monkeypatch.setenv("MEDIA_BRIDGE_OMNIROUTE_API_KEY_FILE", str(secret_file))
+
+    runtime = build_runtime_from_environment()
+
+    assert runtime.responses_gateway is not None
+    await runtime.close()
+
+
+def test_runtime_blocks_enabled_gateway_without_exact_secret(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _configure(monkeypatch, tmp_path, """version: test-v1
+models: []
+""")
+    monkeypatch.setenv(
+        "MEDIA_BRIDGE_OMNIROUTE_BASE_URL",
+        "http://127.0.0.1:20128/v1/responses",
+    )
+    monkeypatch.setenv("UNRELATED_OMNIROUTE_SECRET", "must-not-be-used")
+
+    with pytest.raises(RuntimeConfigurationError, match="OmniRoute"):
         build_runtime_from_environment()
