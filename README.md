@@ -33,6 +33,8 @@ OpenAI Responses request
 - PDF: PDFium 5.12.1로 144 DPI page PNG 변환 후 OCR·Vision 수행
 - base64, asset, 제한적 local path, 기본 차단 URL 입력 경계
 - HMAC gate receipt, 임시 workspace 삭제 확인, asset TTL·종료 시 정리
+- 분리 Control Plane: PostgreSQL, Argon2id 계정, Admin API RBAC, 외부 Secret 참조,
+  digest-only credential, Ed25519 signed snapshot
 
 ## 개발 환경 설치
 
@@ -74,11 +76,18 @@ registry 형식은 `config/model_registry.example.yaml`을 복사한 뒤 실제 
 ```bash
 .venv/bin/media-bridge-stdio
 .venv/bin/media-bridge-http
+.venv/bin/media-bridge-control
 ```
 
 HTTP는 기본적으로 `127.0.0.1:8000`에 바인딩합니다. `/mcp`, `/assets`, 활성화된
 `/v1/responses` 모두 bearer 및 `X-Media-Bridge-Tenant`가 필요합니다. 운영 OAuth/mTLS,
 reverse proxy, 방화벽은 별도 배포 계층의 책임입니다.
+
+Control Plane은 실행 전에 Alembic revision `0001_control_plane`을 확인하고 다르면 fail-closed로
+중단합니다. 필요한 변수명과 Secret file 경로는 `config/control-plane.example.env`에 있으며,
+Provider·DB credential·security pepper·Ed25519 개인키 원문을 설정 파일에 넣지 않습니다. P1에서는
+격리 PostgreSQL 시험만 수행했고 운영 migration, 서비스 등록, 포트·proxy 변경, 배포는 수행하지
+않았습니다.
 
 ## 강제 router 사용
 
@@ -106,9 +115,9 @@ OmniRoute 직접 inference endpoint가 caller에서 계속 접근 가능하면 i
 
 ```bash
 .venv/bin/pytest -q
-.venv/bin/pytest --cov=media_bridge --cov-branch --cov-report=term-missing -q
-.venv/bin/ruff check .
-.venv/bin/mypy media_bridge
+.venv/bin/pytest --cov=media_bridge --cov=media_bridge_control --cov-branch --cov-report=term-missing -q
+.venv/bin/ruff check media_bridge media_bridge_control migrations tests
+.venv/bin/mypy media_bridge media_bridge_control
 ```
 
 실제 provider 자격증명을 사용하는 OCR·Vision·Solar 호출, PCWSL Codex→실제 OmniRoute E2E,
