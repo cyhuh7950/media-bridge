@@ -11,7 +11,11 @@ import pytest
 from media_bridge.acquisition import MediaAcquirer
 from media_bridge.assets import AssetStore
 from media_bridge.backends import BackendStatus, OcrResult, VisionResult
-from media_bridge.config_snapshot import SnapshotVerificationError, SnapshotVerifier
+from media_bridge.config_snapshot import (
+    SignedSnapshot,
+    SnapshotVerificationError,
+    SnapshotVerifier,
+)
 from media_bridge.gate import PreRequestGate
 from media_bridge.receipts import GateReceiptSigner
 from media_bridge.responses_state import ResponsesStateStore
@@ -58,7 +62,7 @@ class BlockingDownstream:
         )
 
 
-def _signed(signer: SnapshotSigner, version: int, *, model_id: str) -> object:
+def _signed(signer: SnapshotSigner, version: int, *, model_id: str) -> SignedSnapshot:
     return signer.sign(
         snapshot_id=UUID(f"00000000-0000-0000-0000-{version:012d}"),
         version=version,

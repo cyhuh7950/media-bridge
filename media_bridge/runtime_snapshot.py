@@ -8,7 +8,11 @@ from typing import Annotated, Literal
 from pydantic import Field, StringConstraints, ValidationError, field_validator
 
 from media_bridge.capabilities import CapabilityRegistry, ModelCapability
-from media_bridge.config_snapshot import LastKnownGoodSnapshot, SnapshotVerificationError
+from media_bridge.config_snapshot import (
+    LastKnownGoodSnapshot,
+    SignedSnapshot,
+    SnapshotVerificationError,
+)
 from media_bridge.contracts import StrictModel
 
 
@@ -43,18 +47,23 @@ class SnapshotRuntimeSource:
         return self._store.current().version
 
     def capability_registry(self) -> CapabilityRegistry:
-        snapshot = self._store.current()
-        try:
-            registry = SnapshotRegistry.model_validate(snapshot.body.get("registry"))
-            capabilities = [
-                ModelCapability(
-                    model_id=item.model_id,
-                    input_modalities=set(item.input_modalities),
-                    expires_at=item.expires_at,
-                    pdf_passthrough_verified=item.pdf_passthrough_verified,
-                )
-                for item in registry.models
-            ]
-            return CapabilityRegistry(capabilities, version=registry.version)
-        except (ValidationError, ValueError, TypeError) as error:
-            raise SnapshotVerificationError("snapshot registry is invalid") from error
+        return capability_registry_from_snapshot(self._store.current())
+
+
+def capability_registry_from_snapshot(snapshot: SignedSnapshot) -> CapabilityRegistry:
+    """Build an exact immutable registry from one already verified snapshot."""
+
+    try:
+        registry = SnapshotRegistry.model_validate(snapshot.body.get("registry"))
+        capabilities = [
+            ModelCapability(
+                model_id=item.model_id,
+                input_modalities=set(item.input_modalities),
+                expires_at=item.expires_at,
+                pdf_passthrough_verified=item.pdf_passthrough_verified,
+            )
+            for item in registry.models
+        ]
+        return CapabilityRegistry(capabilities, version=registry.version)
+    except (ValidationError, ValueError, TypeError) as error:
+        raise SnapshotVerificationError("snapshot registry is invalid") from error
