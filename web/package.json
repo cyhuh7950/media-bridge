@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "lint": "eslint src vite.config.ts",
+    "lint": "eslint src e2e vite.config.ts playwright.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:e2e": "playwright test"
