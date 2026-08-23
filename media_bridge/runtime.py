@@ -64,7 +64,10 @@ class MediaBridgeRuntime:
     http_client: httpx.AsyncClient
 
     async def close(self) -> None:
-        await self.http_client.aclose()
+        try:
+            self.asset_store.clear()
+        finally:
+            await self.http_client.aclose()
 
 
 def _required_environment(name: str) -> str:

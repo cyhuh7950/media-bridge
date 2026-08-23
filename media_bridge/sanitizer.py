@@ -20,6 +20,10 @@ _BASE64_BLOB = re.compile(
     r"(?<![a-z0-9+/_-])[a-z0-9+/_-]{128,}={0,2}(?![a-z0-9+/_-])",
     re.IGNORECASE,
 )
+_MEDIA_DATA_REFERENCE = re.compile(
+    r"data\s*:\s*(?:image\s*/|application\s*/\s*pdf)",
+    re.IGNORECASE,
+)
 _REMOVED_REFERENCE = "[removed-media-reference]"
 _REMOVED_BINARY = "[removed-binary-data]"
 
@@ -54,6 +58,8 @@ def sanitize_model_text(
         raise SanitizationError("sanitized text exceeds the configured limit")
     if any(locator in sanitized for locator in normalized_locators):
         raise SanitizationError("original media locator remains after sanitization")
+    if _MEDIA_DATA_REFERENCE.search(sanitized):
+        raise SanitizationError("media reference remains after sanitization")
     if _DATA_URL.search(sanitized) or _BASE64_BLOB.search(sanitized):
         raise SanitizationError("binary media reference remains after sanitization")
 
