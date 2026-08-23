@@ -231,8 +231,23 @@ class ControlPlaneService:
                 session_selector=stored.selector,
             )
 
-    def logout(self, *, session_token: str, csrf_token: str) -> None:
+    def authenticate_with_csrf(self, *, session_token: str, csrf_token: str) -> Principal:
         principal = self.authenticate(session_token)
+        with self.database.session() as session:
+            stored = session.get(AdminSession, principal.session_selector)
+            if stored is None or not self.security.matches(
+                csrf_token,
+                stored.csrf_digest,
+                purpose="csrf",
+            ):
+                raise AuthenticationError("csrf_rejected")
+        return principal
+
+    def logout(self, *, session_token: str, csrf_token: str) -> None:
+        principal = self.authenticate_with_csrf(
+            session_token=session_token,
+            csrf_token=csrf_token,
+        )
         now = self._now()
         with self.database.session() as session:
             stored = session.scalar(
@@ -240,10 +255,6 @@ class ControlPlaneService:
                 .where(AdminSession.selector == principal.session_selector)
                 .with_for_update()
             )
-            if stored is None or not self.security.matches(
-                csrf_token,
-                stored.csrf_digest,
-                purpose="csrf",
-            ):
-                raise AuthenticationError("csrf_rejected")
+            if stored is None:
+                raise AuthenticationError("unauthorized")
             stored.revoked_at = now

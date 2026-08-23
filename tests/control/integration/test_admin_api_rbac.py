@@ -16,6 +16,10 @@ def _value() -> str:
     return "correct horse battery staple"
 
 
+def _reference_name() -> str:
+    return "MEDIA_BRIDGE_TEST_API_KEY"
+
+
 def _setup(database_url: str) -> tuple[ControlPlaneService, Database, object]:
     database = Database(database_url)
     security = SecurityContext(pepper=b"r" * 32)
@@ -67,7 +71,7 @@ def _provider_payload(name: str) -> dict[str, object]:
         "name": name,
         "kind": "ocr",
         "endpoint": "https://provider.test/v1/ocr",
-        "secret_ref": {"kind": "env", "identifier": "MEDIA_BRIDGE_TEST_API_KEY"},
+        "secret_ref": {"kind": "env", "identifier": _reference_name()},
         "enabled": True,
     }
 
@@ -124,8 +128,13 @@ def test_provider_api_rejects_raw_secret_and_persists_reference_only(
         provider = session.scalar(select(Provider).where(Provider.name == "good"))
         assert provider is not None
         persisted = " ".join(
-            [provider.name, provider.endpoint, provider.secret_ref_kind, provider.secret_ref_identifier]
+            [
+                provider.name,
+                provider.endpoint,
+                provider.secret_ref_kind,
+                provider.secret_ref_identifier,
+            ]
         )
         assert raw_value not in persisted
-        assert provider.secret_ref_identifier == "MEDIA_BRIDGE_TEST_API_KEY"
+        assert provider.secret_ref_identifier == _reference_name()
     database.close()

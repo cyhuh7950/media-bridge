@@ -18,7 +18,14 @@ from media_bridge_control.bootstrap import (
     ControlPlaneError,
     ControlPlaneService,
 )
-from media_bridge_control.schemas import BootstrapRequest, LoginRequest
+from media_bridge_control.configuration import ConfigurationError, ConfigurationService
+from media_bridge_control.schemas import (
+    BootstrapRequest,
+    LoginRequest,
+    ModelCapabilityCreate,
+    PolicyCreate,
+    ProviderCreate,
+)
 
 Handler = Callable[[Request], Awaitable[Response]]
 
@@ -45,6 +52,8 @@ def build_control_app(
     allowed_origin: str,
     allowed_host: str,
 ) -> Starlette:
+    configuration = ConfigurationService(service.database)
+
     def secure_request(request: Request) -> Response | None:
         host = request.headers.get("host", "").partition(":")[0].lower()
         if request.url.scheme != "https":
@@ -143,6 +152,106 @@ def build_control_app(
         response.delete_cookie("mb_admin_session", path="/admin/v1")
         return response
 
+    async def authorize(
+        request: Request,
+        *,
+        roles: frozenset[str],
+        require_csrf: bool = False,
+    ) -> tuple[Any | None, Response | None]:
+        if require_csrf and (rejected := secure_request(request)):
+            return None, rejected
+        raw = request.cookies.get("mb_admin_session", "")
+        csrf = request.headers.get("x-csrf-token", "")
+        try:
+            if require_csrf:
+                if not csrf:
+                    return None, _error("csrf_rejected", 403)
+                principal = await run_in_threadpool(
+                    service.authenticate_with_csrf,
+                    session_token=raw,
+                    csrf_token=csrf,
+                )
+            else:
+                principal = await run_in_threadpool(service.authenticate, raw)
+        except AuthenticationError as error:
+            status = 403 if error.code == "csrf_rejected" else 401
+            return None, _error(error.code, status)
+        if principal.role not in roles:
+            return None, _error("forbidden", 403)
+        return principal, None
+
+    async def users(request: Request) -> Response:
+        _, rejected = await authorize(request, roles=frozenset({"admin"}))
+        if rejected is not None:
+            return rejected
+        return JSONResponse(await run_in_threadpool(configuration.list_users))
+
+    async def providers(request: Request) -> Response:
+        writable = request.method == "POST"
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator"}) if writable else frozenset(
+                {"admin", "operator", "viewer"}
+            ),
+            require_csrf=writable,
+        )
+        if rejected is not None:
+            return rejected
+        if not writable:
+            return JSONResponse(await run_in_threadpool(configuration.list_providers))
+        try:
+            body = await _json(request, ProviderCreate)
+            result = await run_in_threadpool(configuration.create_provider, body)
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except ConfigurationError as error:
+            return _error(error.code, 409)
+        return JSONResponse(result, status_code=201)
+
+    async def models(request: Request) -> Response:
+        writable = request.method == "POST"
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator"}) if writable else frozenset(
+                {"admin", "operator", "viewer"}
+            ),
+            require_csrf=writable,
+        )
+        if rejected is not None:
+            return rejected
+        if not writable:
+            return JSONResponse(await run_in_threadpool(configuration.list_models))
+        try:
+            body = await _json(request, ModelCapabilityCreate)
+            result = await run_in_threadpool(configuration.create_model, body)
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except ConfigurationError as error:
+            return _error(error.code, 409)
+        return JSONResponse(result, status_code=201)
+
+    async def policies(request: Request) -> Response:
+        writable = request.method == "POST"
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator"}) if writable else frozenset(
+                {"admin", "operator", "viewer"}
+            ),
+            require_csrf=writable,
+        )
+        if rejected is not None:
+            return rejected
+        if not writable:
+            return JSONResponse(await run_in_threadpool(configuration.list_policies))
+        try:
+            body = await _json(request, PolicyCreate)
+            result = await run_in_threadpool(configuration.create_policy, body)
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except ConfigurationError as error:
+            return _error(error.code, 409)
+        return JSONResponse(result, status_code=201)
+
     return Starlette(
         routes=[
             Route("/admin/v1/health", health, methods=["GET"]),
@@ -150,5 +259,9 @@ def build_control_app(
             Route("/admin/v1/auth/login", login, methods=["POST"]),
             Route("/admin/v1/auth/logout", logout, methods=["POST"]),
             Route("/admin/v1/me", me, methods=["GET"]),
+            Route("/admin/v1/users", users, methods=["GET"]),
+            Route("/admin/v1/providers", providers, methods=["GET", "POST"]),
+            Route("/admin/v1/models", models, methods=["GET", "POST"]),
+            Route("/admin/v1/policies", policies, methods=["GET", "POST"]),
         ]
     )
