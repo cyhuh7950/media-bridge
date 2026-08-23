@@ -72,6 +72,24 @@ def test_contract_rejects_base64_larger_than_public_limit() -> None:
         Base64Source(data="A" * 2_796_205)
 
 
+def test_abandoned_asset_expires_and_is_deleted(tmp_path: Path) -> None:
+    now = [1_000.0]
+    store = AssetStore(
+        tmp_path / "assets-expiring",
+        ttl_seconds=5,
+        clock=lambda: now[0],
+    )
+    asset_id = store.put(tenant_id="tenant-a", data=_png())
+    assert list((tmp_path / "assets-expiring").glob("*.bin"))
+
+    now[0] = 1_006.0
+    store.purge_expired()
+
+    assert list((tmp_path / "assets-expiring").glob("*.bin")) == []
+    with pytest.raises(AssetAccessError):
+        store.consume(asset_id=asset_id, tenant_id="tenant-a")
+
+
 @pytest.mark.asyncio
 async def test_asset_is_tenant_scoped_consumed_once_and_deleted(tmp_path: Path) -> None:
     store = AssetStore(tmp_path / "assets")

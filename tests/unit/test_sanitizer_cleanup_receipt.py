@@ -45,6 +45,11 @@ def test_sanitizer_rejects_output_with_no_safe_text(unsafe_text: str) -> None:
         sanitize_model_text(unsafe_text)
 
 
+def test_sanitizer_rejects_obfuscated_media_data_reference() -> None:
+    with pytest.raises(SanitizationError, match="media reference"):
+        sanitize_model_text("Visible text followed by data : image/png;base64,\nAAAA")
+
+
 def test_workspace_cleanup_must_remove_all_materialized_media(tmp_path: Path) -> None:
     workspace = TemporaryMediaWorkspace(parent=tmp_path)
     materialized = workspace.write_bytes("capture.png", b"not-secret-test-bytes")
