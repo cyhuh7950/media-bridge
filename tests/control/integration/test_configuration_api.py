@@ -91,3 +91,88 @@ def test_model_and_fail_closed_policy_round_trip(migrated_postgres: str) -> None
     assert safe_policy.status_code == 201
     assert client.get("/admin/v1/policies").json()[0]["fail_closed"] is True
     database.close()
+
+
+def test_configuration_items_support_guarded_patch_and_delete(
+    migrated_postgres: str,
+) -> None:
+    client, csrf, database = _configured_client(migrated_postgres)
+    headers = {"origin": "https://control.test", "x-csrf-token": csrf}
+    reviewed = datetime(2026, 8, 24, 3, 0, tzinfo=UTC)
+    created_provider = client.post(
+        "/admin/v1/providers",
+        headers=headers,
+        json={
+            "name": "vision-primary",
+            "kind": "vision",
+            "endpoint": "https://provider.test/v1/vision",
+            "secret_ref": {
+                "kind": "docker_secret",
+                "identifier": "vision_api_key",
+            },
+            "enabled": True,
+        },
+    ).json()
+    created_model = client.post(
+        "/admin/v1/models",
+        headers=headers,
+        json={
+            "model_id": "vendor/vision-model",
+            "aliases": [],
+            "input_modalities": ["text", "image"],
+            "evidence": "vendor capability statement",
+            "reviewed_at": reviewed.isoformat(),
+            "expires_at": (reviewed + timedelta(days=30)).isoformat(),
+            "pdf_passthrough_verified": False,
+        },
+    ).json()
+    created_policy = client.post(
+        "/admin/v1/policies",
+        headers=headers,
+        json={
+            "name": "default",
+            "max_files": 4,
+            "max_media_bytes": 2097152,
+            "max_pdf_pages": 20,
+            "allow_url": False,
+            "allow_base64": True,
+            "allow_asset": True,
+            "allow_local_path": False,
+            "fail_closed": True,
+        },
+    ).json()
+
+    provider_patch = client.patch(
+        f"/admin/v1/providers/{created_provider['id']}",
+        headers=headers,
+        json={"enabled": False},
+    )
+    assert provider_patch.status_code == 200
+    assert provider_patch.json()["enabled"] is False
+    model_patch = client.patch(
+        f"/admin/v1/models/{created_model['id']}",
+        headers=headers,
+        json={"evidence": "reviewed vendor documentation"},
+    )
+    assert model_patch.status_code == 200
+    assert model_patch.json()["evidence"] == "reviewed vendor documentation"
+    policy_patch = client.patch(
+        f"/admin/v1/policies/{created_policy['id']}",
+        headers=headers,
+        json={"max_files": 8},
+    )
+    assert policy_patch.status_code == 200
+    assert policy_patch.json()["max_files"] == 8
+
+    for collection, item_id in (
+        ("providers", created_provider["id"]),
+        ("models", created_model["id"]),
+        ("policies", created_policy["id"]),
+    ):
+        deleted = client.delete(
+            f"/admin/v1/{collection}/{item_id}",
+            headers=headers,
+        )
+        assert deleted.status_code == 204
+        assert client.get(f"/admin/v1/{collection}").json() == []
+    database.close()
