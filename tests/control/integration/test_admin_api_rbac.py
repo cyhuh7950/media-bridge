@@ -89,6 +89,7 @@ def test_roles_are_enforced_by_admin_api(migrated_postgres: str) -> None:
     assert operator.get("/admin/v1/providers").status_code == 200
     assert viewer.get("/admin/v1/providers").status_code == 200
 
+    created_provider_id = ""
     for client, csrf, name, expected in [
         (admin, admin_csrf, "admin-provider", 201),
         (operator, operator_csrf, "operator-provider", 201),
@@ -100,6 +101,26 @@ def test_roles_are_enforced_by_admin_api(migrated_postgres: str) -> None:
             json=_provider_payload(name),
         )
         assert response.status_code == expected
+        if name == "operator-provider":
+            created_provider_id = response.json()["id"]
+
+    forbidden_patch = viewer.patch(
+        f"/admin/v1/providers/{created_provider_id}",
+        headers={"origin": "https://control.test", "x-csrf-token": viewer_csrf},
+        json={"enabled": False},
+    )
+    assert forbidden_patch.status_code == 403
+    forbidden_delete = viewer.delete(
+        f"/admin/v1/providers/{created_provider_id}",
+        headers={"origin": "https://control.test", "x-csrf-token": viewer_csrf},
+    )
+    assert forbidden_delete.status_code == 403
+    allowed_patch = operator.patch(
+        f"/admin/v1/providers/{created_provider_id}",
+        headers={"origin": "https://control.test", "x-csrf-token": operator_csrf},
+        json={"enabled": False},
+    )
+    assert allowed_patch.status_code == 200
     database.close()
 
 

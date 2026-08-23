@@ -5,12 +5,20 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from media_bridge_control.db import Database
 from media_bridge_control.models import ConfigDraft, ModelCapability, Policy, Provider, User
-from media_bridge_control.schemas import ModelCapabilityCreate, PolicyCreate, ProviderCreate
+from media_bridge_control.schemas import (
+    ModelCapabilityCreate,
+    ModelCapabilityUpdate,
+    PolicyCreate,
+    PolicyUpdate,
+    ProviderCreate,
+    ProviderUpdate,
+)
 
 
 class ConfigurationError(RuntimeError):
@@ -58,6 +66,45 @@ class ConfigurationService:
             rows = list(session.scalars(select(Provider).order_by(Provider.name)))
             return [self._provider(row) for row in rows]
 
+    def update_provider(self, provider_id: UUID, request: ProviderUpdate) -> dict[str, Any]:
+        try:
+            with self._database.session() as session:
+                row = session.get(Provider, provider_id)
+                if row is None:
+                    raise ConfigurationError("configuration_not_found")
+                candidate = ProviderCreate.model_validate(
+                    {
+                        "name": row.name,
+                        "kind": row.kind,
+                        "endpoint": row.endpoint,
+                        "secret_ref": {
+                            "kind": row.secret_ref_kind,
+                            "identifier": row.secret_ref_identifier,
+                        },
+                        "enabled": row.enabled,
+                        **request.model_dump(exclude_unset=True),
+                    }
+                )
+                row.name = candidate.name
+                row.kind = candidate.kind
+                row.endpoint = candidate.endpoint
+                row.secret_ref_kind = candidate.secret_ref.kind
+                row.secret_ref_identifier = candidate.secret_ref.identifier
+                row.enabled = candidate.enabled
+                session.flush()
+                return self._provider(row)
+        except IntegrityError as error:
+            raise ConfigurationError("configuration_conflict") from error
+        except ValidationError as error:
+            raise ConfigurationError("invalid_configuration") from error
+
+    def delete_provider(self, provider_id: UUID) -> None:
+        with self._database.session() as session:
+            row = session.get(Provider, provider_id)
+            if row is None:
+                raise ConfigurationError("configuration_not_found")
+            session.delete(row)
+
     @staticmethod
     def _provider(row: Provider) -> dict[str, Any]:
         return {
@@ -95,6 +142,49 @@ class ConfigurationService:
             rows = list(session.scalars(select(ModelCapability).order_by(ModelCapability.model_id)))
             return [self._model(row) for row in rows]
 
+    def update_model(
+        self,
+        model_id: UUID,
+        request: ModelCapabilityUpdate,
+    ) -> dict[str, Any]:
+        try:
+            with self._database.session() as session:
+                row = session.get(ModelCapability, model_id)
+                if row is None:
+                    raise ConfigurationError("configuration_not_found")
+                candidate = ModelCapabilityCreate.model_validate(
+                    {
+                        "model_id": row.model_id,
+                        "aliases": row.aliases,
+                        "input_modalities": set(row.input_modalities),
+                        "evidence": row.evidence,
+                        "reviewed_at": row.reviewed_at,
+                        "expires_at": row.expires_at,
+                        "pdf_passthrough_verified": row.pdf_passthrough_verified,
+                        **request.model_dump(exclude_unset=True),
+                    }
+                )
+                row.model_id = candidate.model_id
+                row.aliases = sorted(candidate.aliases)
+                row.input_modalities = sorted(candidate.input_modalities)
+                row.evidence = candidate.evidence
+                row.reviewed_at = candidate.reviewed_at
+                row.expires_at = candidate.expires_at
+                row.pdf_passthrough_verified = candidate.pdf_passthrough_verified
+                session.flush()
+                return self._model(row)
+        except IntegrityError as error:
+            raise ConfigurationError("configuration_conflict") from error
+        except ValidationError as error:
+            raise ConfigurationError("invalid_configuration") from error
+
+    def delete_model(self, model_id: UUID) -> None:
+        with self._database.session() as session:
+            row = session.get(ModelCapability, model_id)
+            if row is None:
+                raise ConfigurationError("configuration_not_found")
+            session.delete(row)
+
     @staticmethod
     def _model(row: ModelCapability) -> dict[str, Any]:
         return {
@@ -123,6 +213,35 @@ class ConfigurationService:
         with self._database.session() as session:
             rows = list(session.scalars(select(Policy).order_by(Policy.name)))
             return [self._policy(row) for row in rows]
+
+    def update_policy(self, policy_id: UUID, request: PolicyUpdate) -> dict[str, Any]:
+        try:
+            with self._database.session() as session:
+                row = session.get(Policy, policy_id)
+                if row is None:
+                    raise ConfigurationError("configuration_not_found")
+                candidate = PolicyCreate.model_validate(
+                    {
+                        "name": row.name,
+                        **row.body,
+                        **request.model_dump(exclude_unset=True),
+                    }
+                )
+                row.name = candidate.name
+                row.body = candidate.model_dump(exclude={"name"})
+                session.flush()
+                return self._policy(row)
+        except IntegrityError as error:
+            raise ConfigurationError("configuration_conflict") from error
+        except ValidationError as error:
+            raise ConfigurationError("invalid_configuration") from error
+
+    def delete_policy(self, policy_id: UUID) -> None:
+        with self._database.session() as session:
+            row = session.get(Policy, policy_id)
+            if row is None:
+                raise ConfigurationError("configuration_not_found")
+            session.delete(row)
 
     @staticmethod
     def _policy(row: Policy) -> dict[str, Any]:

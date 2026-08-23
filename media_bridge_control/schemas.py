@@ -37,6 +37,16 @@ class UserCreate(AdminStrictModel):
     role: Literal["admin", "operator", "viewer"]
 
 
+class NonEmptyUpdate(AdminStrictModel):
+    @model_validator(mode="after")
+    def require_non_null_change(self) -> "NonEmptyUpdate":
+        if not self.model_fields_set or any(
+            getattr(self, field_name) is None for field_name in self.model_fields_set
+        ):
+            raise ValueError("update must contain non-null fields")
+        return self
+
+
 class SecretReference(AdminStrictModel):
     kind: Literal["env", "docker_secret", "external"]
     identifier: Annotated[str, StringConstraints(min_length=1, max_length=255)]
@@ -71,6 +81,20 @@ class ProviderCreate(AdminStrictModel):
     enabled: bool = True
 
 
+class ProviderUpdate(NonEmptyUpdate):
+    name: Annotated[
+        str,
+        StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"),
+    ] | None = None
+    kind: Literal["ocr", "vision", "analysis"] | None = None
+    endpoint: Annotated[
+        str,
+        StringConstraints(max_length=2_048, pattern=r"^https://"),
+    ] | None = None
+    secret_ref: SecretReference | None = None
+    enabled: bool | None = None
+
+
 class ModelCapabilityCreate(AdminStrictModel):
     model_id: Annotated[
         str,
@@ -102,6 +126,31 @@ class ModelCapabilityCreate(AdminStrictModel):
         return self
 
 
+class ModelCapabilityUpdate(NonEmptyUpdate):
+    model_id: Annotated[
+        str,
+        StringConstraints(pattern=r"^[a-z0-9][a-z0-9./:_-]{0,127}$"),
+    ] | None = None
+    aliases: Annotated[list[str], Field(max_length=32)] | None = None
+    input_modalities: Annotated[
+        set[Literal["text", "image", "pdf"]],
+        Field(min_length=1, max_length=3),
+    ] | None = None
+    evidence: Annotated[str, StringConstraints(min_length=1, max_length=1_024)] | None = (
+        None
+    )
+    reviewed_at: datetime | None = None
+    expires_at: datetime | None = None
+    pdf_passthrough_verified: bool | None = None
+
+    @field_validator("reviewed_at", "expires_at")
+    @classmethod
+    def require_optional_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("capability timestamps must be timezone-aware")
+        return value
+
+
 class PolicyCreate(AdminStrictModel):
     name: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")]
     max_files: Annotated[int, Field(ge=1, le=32)]
@@ -112,6 +161,21 @@ class PolicyCreate(AdminStrictModel):
     allow_asset: bool
     allow_local_path: bool
     fail_closed: Literal[True]
+
+
+class PolicyUpdate(NonEmptyUpdate):
+    name: Annotated[
+        str,
+        StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"),
+    ] | None = None
+    max_files: Annotated[int, Field(ge=1, le=32)] | None = None
+    max_media_bytes: Annotated[int, Field(ge=1, le=50 * 1024 * 1024)] | None = None
+    max_pdf_pages: Annotated[int, Field(ge=1, le=100)] | None = None
+    allow_url: bool | None = None
+    allow_base64: bool | None = None
+    allow_asset: bool | None = None
+    allow_local_path: bool | None = None
+    fail_closed: Literal[True] | None = None
 
 
 class CredentialCreate(AdminStrictModel):

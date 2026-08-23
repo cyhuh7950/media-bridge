@@ -28,8 +28,11 @@ from media_bridge_control.schemas import (
     CredentialCreate,
     LoginRequest,
     ModelCapabilityCreate,
+    ModelCapabilityUpdate,
     PolicyCreate,
+    PolicyUpdate,
     ProviderCreate,
+    ProviderUpdate,
     PublishSnapshotRequest,
     UserCreate,
 )
@@ -258,6 +261,32 @@ def build_control_app(
             return _error(error.code, 409)
         return JSONResponse(result, status_code=201)
 
+    async def provider_item(request: Request) -> Response:
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        provider_id = request.path_params["item_id"]
+        try:
+            if request.method == "PATCH":
+                body = await _json(request, ProviderUpdate)
+                result = await run_in_threadpool(
+                    configuration.update_provider,
+                    provider_id,
+                    body,
+                )
+                return JSONResponse(result)
+            await run_in_threadpool(configuration.delete_provider, provider_id)
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except ConfigurationError as error:
+            status = 404 if error.code == "configuration_not_found" else 409
+            return _error(error.code, status)
+        return Response(status_code=204)
+
     async def models(request: Request) -> Response:
         writable = request.method == "POST"
         _, rejected = await authorize(
@@ -280,6 +309,32 @@ def build_control_app(
             return _error(error.code, 409)
         return JSONResponse(result, status_code=201)
 
+    async def model_item(request: Request) -> Response:
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        model_id = request.path_params["item_id"]
+        try:
+            if request.method == "PATCH":
+                body = await _json(request, ModelCapabilityUpdate)
+                result = await run_in_threadpool(
+                    configuration.update_model,
+                    model_id,
+                    body,
+                )
+                return JSONResponse(result)
+            await run_in_threadpool(configuration.delete_model, model_id)
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except ConfigurationError as error:
+            status = 404 if error.code == "configuration_not_found" else 409
+            return _error(error.code, status)
+        return Response(status_code=204)
+
     async def policies(request: Request) -> Response:
         writable = request.method == "POST"
         _, rejected = await authorize(
@@ -301,6 +356,32 @@ def build_control_app(
         except ConfigurationError as error:
             return _error(error.code, 409)
         return JSONResponse(result, status_code=201)
+
+    async def policy_item(request: Request) -> Response:
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        policy_id = request.path_params["item_id"]
+        try:
+            if request.method == "PATCH":
+                body = await _json(request, PolicyUpdate)
+                result = await run_in_threadpool(
+                    configuration.update_policy,
+                    policy_id,
+                    body,
+                )
+                return JSONResponse(result)
+            await run_in_threadpool(configuration.delete_policy, policy_id)
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except ConfigurationError as error:
+            status = 404 if error.code == "configuration_not_found" else 409
+            return _error(error.code, status)
+        return Response(status_code=204)
 
     async def credential_collection(request: Request) -> Response:
         writable = request.method == "POST"
@@ -508,8 +589,23 @@ def build_control_app(
             Route("/admin/v1/me", me, methods=["GET"]),
             Route("/admin/v1/users", users, methods=["GET", "POST"]),
             Route("/admin/v1/providers", providers, methods=["GET", "POST"]),
+            Route(
+                "/admin/v1/providers/{item_id:uuid}",
+                provider_item,
+                methods=["PATCH", "DELETE"],
+            ),
             Route("/admin/v1/models", models, methods=["GET", "POST"]),
+            Route(
+                "/admin/v1/models/{item_id:uuid}",
+                model_item,
+                methods=["PATCH", "DELETE"],
+            ),
             Route("/admin/v1/policies", policies, methods=["GET", "POST"]),
+            Route(
+                "/admin/v1/policies/{item_id:uuid}",
+                policy_item,
+                methods=["PATCH", "DELETE"],
+            ),
             Route(
                 "/admin/v1/credentials",
                 credential_collection,
