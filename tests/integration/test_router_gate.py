@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from PIL import Image
+from pypdf import PdfWriter
 
 from media_bridge.acquisition import MediaAcquirer
 from media_bridge.assets import AssetStore
@@ -51,6 +52,24 @@ def _media_part(data: bytes | None = None) -> MediaPart:
             },
             "filename": "original-secret.png",
             "declared_mime": "image/png",
+        }
+    )
+
+
+def _pdf_part() -> MediaPart:
+    output = BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    writer.write(output)
+    return MediaPart.model_validate(
+        {
+            "type": "media",
+            "media_type": "pdf",
+            "source": {
+                "kind": "base64",
+                "data": base64.b64encode(output.getvalue()).decode("ascii"),
+            },
+            "declared_mime": "application/pdf",
         }
     )
 
@@ -147,6 +166,28 @@ async def test_image_nonvision_delivers_only_converted_text(tmp_path: Path) -> N
     assert "red stack trace" in serialized
     assert "original-secret.png" not in serialized
     assert "base64" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_pdf_nonvision_delivers_only_converted_text(tmp_path: Path) -> None:
+    now = datetime(2026, 8, 23, tzinfo=UTC)
+    gate, signer = _gate(tmp_path, now=now)
+    spy = SpyDownstream()
+    router = RouterAdapter(gate=gate, downstream=GuardedDownstream(spy, signer))
+
+    invocation = await router.invoke(
+        PrepareForModelRequest(
+            content=[TextPart(text="Summarize this PDF"), _pdf_part()],
+            target=TargetModel(registry_id="text-model"),
+            conversion_profile="document",
+        ),
+        tenant_id="tenant-a",
+    )
+
+    assert invocation.gate_result.action == "converted"
+    assert invocation.gate_result.contains_pdf is True
+    assert len(spy.calls) == 1
+    assert spy.calls[0].media_count == 0
 
 
 @pytest.mark.asyncio
