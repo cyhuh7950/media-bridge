@@ -5,57 +5,34 @@ from __future__ import annotations
 import json
 import re
 import secrets
-from dataclasses import dataclass
-from typing import Any, cast
+from typing import cast
 from urllib.parse import urlsplit
 
 import httpx
 
 from media_bridge.backends import SecretConfigurationError, load_secret
-from media_bridge.receipts import GateReceiptSigner, ReceiptBinding, ReceiptValidationError
+from media_bridge.receipts import GateReceiptSigner, ReceiptValidationError
+from media_bridge_gateway.contracts import (
+    DownstreamError,
+    DownstreamGuardError,
+    GatewayResponse,
+    SealedGatewayRequest,
+)
+from media_bridge_gateway.normalizer import digest_gateway_payload
 
 _RESPONSE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 
-class OmniRouteGuardError(RuntimeError):
+class OmniRouteGuardError(DownstreamGuardError):
     """Raised before a network call when sealed payload evidence is invalid."""
 
 
-class OmniRouteAdapterError(RuntimeError):
-    def __init__(self, code: str, message: str, *, http_status: int = 502) -> None:
-        super().__init__(message)
-        self.code = code
-        self.safe_message = message
-        self.http_status = http_status
+class OmniRouteAdapterError(DownstreamError):
+    """Backward-compatible OmniRoute-specific downstream error name."""
 
 
-@dataclass(frozen=True, slots=True)
-class SealedResponsesRequest:
-    target_id: str
-    capability: str
-    action: str
-    payload: dict[str, Any]
-    input_digest: str
-    output_digest: str
-    receipt: str
-
-    @property
-    def binding(self) -> ReceiptBinding:
-        return ReceiptBinding(
-            target_id=self.target_id,
-            capability=self.capability,
-            input_digest=self.input_digest,
-            output_digest=self.output_digest,
-            action=self.action,
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class OmniRouteResponse:
-    body: bytes
-    content_type: str
-    response_id: str
-    status_code: int
+SealedResponsesRequest = SealedGatewayRequest
+OmniRouteResponse = GatewayResponse
 
 
 def _canonical_json(value: object) -> bytes:
@@ -69,9 +46,7 @@ def _canonical_json(value: object) -> bytes:
 
 
 def digest_responses_payload(payload: object) -> str:
-    import hashlib
-
-    return hashlib.sha256(_canonical_json(payload)).hexdigest()
+    return digest_gateway_payload(payload)
 
 
 def _contains_media_reference(value: object) -> bool:
