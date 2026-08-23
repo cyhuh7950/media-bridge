@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
+    environment:
+      POSTGRES_DB: media_bridge_test
+      POSTGRES_USER: media_bridge_test
+      POSTGRES_PASSWORD: media_bridge_test_only
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U media_bridge_test -d media_bridge_test"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql:rw,noexec,nosuid,size=256m
+    security_opt:
+      - no-new-privileges:true
