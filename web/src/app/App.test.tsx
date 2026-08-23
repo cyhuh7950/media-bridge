@@ -17,7 +17,8 @@ it("redirects an anonymous user to login and clears the password after authentic
     .mockResolvedValueOnce(jsonResponse({ error: { code: "unauthorized" } }, 401))
     .mockResolvedValueOnce(
       jsonResponse({ username: "admin", role: "admin", csrf_token: "csrf-memory-only" }),
-    );
+    )
+    .mockResolvedValueOnce(jsonResponse([{ version: 1 }]));
   vi.stubGlobal("fetch", fetchMock);
   const user = userEvent.setup();
   const passwordMarker = "browser-password-marker";
@@ -32,7 +33,7 @@ it("redirects an anonymous user to login and clears the password after authentic
   await waitFor(() => {
     expect(screen.getByRole("navigation")).toBeInTheDocument();
   });
-  expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
   expect(document.documentElement.outerHTML).not.toContain(passwordMarker);
   expect(document.documentElement.outerHTML).not.toContain("csrf-memory-only");
   expect(window.localStorage).toHaveLength(0);

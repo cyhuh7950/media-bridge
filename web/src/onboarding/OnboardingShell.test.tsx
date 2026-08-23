@@ -2,16 +2,21 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import {
-  deriveOnboardingStep,
   OnboardingWorkflow,
-  type OnboardingInventory,
 } from "./OnboardingShell";
+import { deriveOnboardingStep, type OnboardingInventory } from "./onboardingState";
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function requestPath(input: Parameters<typeof fetch>[0]): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
 }
 
 const completeInventory: OnboardingInventory = {
@@ -37,18 +42,18 @@ it("does not publish when P1 draft validation fails", async () => {
   const requests: string[] = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn<typeof fetch>(async (input, init) => {
-      const path = String(input);
+    vi.fn<typeof fetch>((input, init) => {
+      const path = requestPath(input);
       requests.push(`${init?.method ?? "GET"} ${path}`);
-      if (path.endsWith("/providers")) return jsonResponse(completeInventory.providers);
-      if (path.endsWith("/models")) return jsonResponse(completeInventory.models);
-      if (path.endsWith("/policies")) return jsonResponse(completeInventory.policies);
-      if (path.endsWith("/credentials")) return jsonResponse(completeInventory.credentials);
-      if (path.endsWith("/snapshots")) return jsonResponse([]);
+      if (path.endsWith("/providers")) return Promise.resolve(jsonResponse(completeInventory.providers));
+      if (path.endsWith("/models")) return Promise.resolve(jsonResponse(completeInventory.models));
+      if (path.endsWith("/policies")) return Promise.resolve(jsonResponse(completeInventory.policies));
+      if (path.endsWith("/credentials")) return Promise.resolve(jsonResponse(completeInventory.credentials));
+      if (path.endsWith("/snapshots")) return Promise.resolve(jsonResponse([]));
       if (path.endsWith("/drafts/validate")) {
-        return jsonResponse({ error: { code: "configuration_incomplete" } }, 409);
+        return Promise.resolve(jsonResponse({ error: { code: "configuration_incomplete" } }, 409));
       }
-      throw new Error(`unexpected request: ${path}`);
+      return Promise.reject(new Error(`unexpected request: ${path}`));
     }),
   );
   const user = userEvent.setup();
@@ -65,22 +70,22 @@ it("shows a client credential once and removes it from DOM and storage on close"
   const marker = "mbc_selector.raw-browser-secret-marker";
   vi.stubGlobal(
     "fetch",
-    vi.fn<typeof fetch>(async (input, init) => {
-      const path = String(input);
-      if (path.endsWith("/providers")) return jsonResponse(completeInventory.providers);
-      if (path.endsWith("/models")) return jsonResponse(completeInventory.models);
-      if (path.endsWith("/policies")) return jsonResponse(completeInventory.policies);
+    vi.fn<typeof fetch>((input, init) => {
+      const path = requestPath(input);
+      if (path.endsWith("/providers")) return Promise.resolve(jsonResponse(completeInventory.providers));
+      if (path.endsWith("/models")) return Promise.resolve(jsonResponse(completeInventory.models));
+      if (path.endsWith("/policies")) return Promise.resolve(jsonResponse(completeInventory.policies));
       if (path.endsWith("/credentials") && (init?.method ?? "GET") === "GET") {
-        return jsonResponse([]);
+        return Promise.resolve(jsonResponse([]));
       }
       if (path.endsWith("/credentials") && init?.method === "POST") {
-        return jsonResponse(
+        return Promise.resolve(jsonResponse(
           { credential: marker, selector: "selector", name: "desktop-agent", scopes: ["mcp:invoke"] },
           201,
-        );
+        ));
       }
-      if (path.endsWith("/snapshots")) return jsonResponse([]);
-      throw new Error(`unexpected request: ${path}`);
+      if (path.endsWith("/snapshots")) return Promise.resolve(jsonResponse([]));
+      return Promise.reject(new Error(`unexpected request: ${path}`));
     }),
   );
   const user = userEvent.setup();

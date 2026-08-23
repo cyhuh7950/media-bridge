@@ -8,6 +8,8 @@ import {
 } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
+import { OnboardingShell } from "../onboarding/OnboardingShell";
+import { PublishedSnapshotGuard } from "../onboarding/PublishedSnapshotGuard";
 
 function LoginPage() {
   const auth = useAuth();
@@ -80,7 +82,14 @@ function ConsoleLayout() {
         <NavLink to="/models">Models</NavLink>
         <NavLink to="/policies">Policies</NavLink>
       </nav>
-      <main><Routes><Route path="*" element={<Dashboard />} /></Routes></main>
+      <main>
+        <Routes>
+          <Route path="/setup" element={<OnboardingShell />} />
+          <Route element={<PublishedSnapshotGuard />}>
+            <Route path="*" element={<Dashboard />} />
+          </Route>
+        </Routes>
+      </main>
     </div>
   );
 }
@@ -91,6 +100,7 @@ function AuthenticatedRoutes() {
   if (auth.status === "anonymous") {
     return (
       <Routes>
+        <Route path="/setup" element={<OnboardingShell />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>

@@ -3,7 +3,7 @@ body { margin: 0; color: var(--ink); background: var(--surface); line-height: 1.
 button, input { font: inherit; }
 button { min-height: 2.75rem; border: 0; border-radius: .6rem; padding: .65rem 1rem; color: white; background: var(--accent); cursor: pointer; }
 button:hover { background: var(--accent-strong); }
-input { min-height: 2.75rem; border: 1px solid var(--border); border-radius: .5rem; padding: .6rem .7rem; }
+input, textarea { min-height: 2.75rem; border: 1px solid var(--border); border-radius: .5rem; padding: .6rem .7rem; font: inherit; }
 :focus-visible { outline: 3px solid #f0a43c; outline-offset: 3px; }
 .auth-layout { min-height: 100vh; display: grid; place-items: center; padding: 1.25rem; }
 .auth-card { width: min(100%, 28rem); padding: clamp(1.25rem, 4vw, 2.5rem); border: 1px solid var(--border); border-radius: 1rem; background: var(--panel); box-shadow: 0 1rem 3rem rgb(19 33 31 / 10%); }
@@ -15,6 +15,13 @@ input { min-height: 2.75rem; border: 1px solid var(--border); border-radius: .5r
 .app-shell nav a { border-radius: .45rem; padding: .65rem .75rem; color: var(--ink); text-decoration: none; }
 .app-shell nav a.active { color: white; background: var(--accent); }
 .app-shell main { min-width: 0; padding: clamp(1rem, 4vw, 2.5rem); }
+.setup-card { width: min(100%, 48rem); margin-inline: auto; padding: clamp(1rem, 3vw, 2rem); border: 1px solid var(--border); border-radius: 1rem; background: var(--panel); }
+.step-label { color: var(--accent); font-weight: 750; }
+.form-grid { display: grid; gap: .7rem; }
+.summary-list div { display: flex; justify-content: space-between; gap: 1rem; padding-block: .35rem; border-bottom: 1px solid var(--border); }
+.dialog-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 1rem; background: rgb(7 22 19 / 72%); }
+.dialog-card { width: min(100%, 38rem); max-height: 90vh; overflow: auto; padding: 1.5rem; border-radius: .8rem; background: var(--panel); }
+.secret-once { overflow-wrap: anywhere; white-space: pre-wrap; }
 @media (max-width: 47.99rem) {
   .app-shell { grid-template: auto auto 1fr / 1fr; }
   .app-shell nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
