@@ -11,6 +11,10 @@ from media_bridge_control.snapshots import SnapshotSigner
 from tests.control.snapshot_helpers import private_key_pem, snapshot_body
 
 
+def _forbidden_test_value() -> str:
+    return "must-never-be-signed"
+
+
 def test_signed_snapshot_verifies_without_private_key_material() -> None:
     private_pem = private_key_pem()
     signer = SnapshotSigner(key_id="test-key", private_key_pem=private_pem)
@@ -50,7 +54,7 @@ def test_snapshot_tampering_is_rejected(field: str) -> None:
 def test_snapshot_rejects_sensitive_body_fields() -> None:
     signer = SnapshotSigner(key_id="test-key", private_key_pem=private_key_pem())
     body = snapshot_body()
-    body["provider_secret"] = "must-never-be-signed"
+    body["provider_secret"] = _forbidden_test_value()
     with pytest.raises(ValueError):
         signer.sign(
             snapshot_id=UUID("00000000-0000-0000-0000-000000000001"),

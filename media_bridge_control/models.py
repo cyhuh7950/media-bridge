@@ -193,7 +193,7 @@ class Snapshot(Base):
     version: Mapped[int] = mapped_column(Integer, unique=True)
     schema_version: Mapped[str] = mapped_column(String(64))
     body: Mapped[dict[str, Any]] = mapped_column(JSONB)
-    digest: Mapped[str] = mapped_column(String(128), unique=True)
+    digest: Mapped[str] = mapped_column(String(128))
     signature: Mapped[str] = mapped_column(Text)
     key_id: Mapped[str] = mapped_column(ForeignKey("signing_keys.key_id"))
     source_draft_id: Mapped[UUID | None] = mapped_column(ForeignKey("config_drafts.id"))

@@ -138,7 +138,7 @@ def upgrade() -> None:
         sa.Column("version", sa.Integer(), nullable=False, unique=True),
         sa.Column("schema_version", sa.String(64), nullable=False),
         sa.Column("body", JSON, nullable=False),
-        sa.Column("digest", sa.String(128), nullable=False, unique=True),
+        sa.Column("digest", sa.String(128), nullable=False),
         sa.Column("signature", sa.Text(), nullable=False),
         sa.Column("key_id", sa.String(64), sa.ForeignKey("signing_keys.key_id"), nullable=False),
         sa.Column("source_draft_id", UUID, sa.ForeignKey("config_drafts.id")),
