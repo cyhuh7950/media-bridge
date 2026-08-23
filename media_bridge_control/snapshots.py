@@ -147,6 +147,21 @@ class SnapshotPublisher:
             body = dict(previous.body)
         return self.publish(body)
 
+    def list(self) -> list[dict[str, Any]]:
+        with self._database.session() as session:
+            rows = list(session.scalars(select(Snapshot).order_by(Snapshot.version.desc())))
+            return [
+                {
+                    "snapshot_id": str(row.id),
+                    "version": row.version,
+                    "schema": row.schema_version,
+                    "digest": row.digest,
+                    "key_id": row.key_id,
+                    "created_at": row.created_at.isoformat(),
+                }
+                for row in rows
+            ]
+
     def _atomic_write(self, snapshot: SignedSnapshot) -> None:
         parent = self._output_path.parent
         parent.mkdir(parents=True, exist_ok=True)

@@ -107,6 +107,22 @@ class PolicyCreate(AdminStrictModel):
     fail_closed: Literal[True]
 
 
+class CredentialCreate(AdminStrictModel):
+    name: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")]
+    scopes: Annotated[
+        set[Literal["assets:write", "mcp:invoke", "responses:invoke"]],
+        Field(min_length=1, max_length=3),
+    ]
+    expires_at: datetime | None = None
+
+    @field_validator("expires_at")
+    @classmethod
+    def require_expiry_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("credential expiry must be timezone-aware")
+        return value
+
+
 class SafeAdminError(AdminStrictModel):
     code: Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
 

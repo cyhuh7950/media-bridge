@@ -51,7 +51,9 @@ def test_client_credential_is_shown_once_stored_as_digest_and_revocable(
         json={
             "name": "desktop-agent",
             "scopes": ["responses:invoke"],
-            "expires_at": (datetime(2026, 8, 24, 5, 0, tzinfo=UTC) + timedelta(days=30)).isoformat(),
+            "expires_at": (
+                datetime(2026, 8, 24, 5, 0, tzinfo=UTC) + timedelta(days=30)
+            ).isoformat(),
         },
     )
     assert created.status_code == 201

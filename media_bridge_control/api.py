@@ -12,20 +12,25 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from media_bridge_control.audit import AuditEventWriter, OperationalEventWriter
 from media_bridge_control.bootstrap import (
     AuthenticationError,
     BootstrapError,
     ControlPlaneError,
     ControlPlaneService,
+    Principal,
 )
 from media_bridge_control.configuration import ConfigurationError, ConfigurationService
+from media_bridge_control.credentials import CredentialError, CredentialService
 from media_bridge_control.schemas import (
     BootstrapRequest,
+    CredentialCreate,
     LoginRequest,
     ModelCapabilityCreate,
     PolicyCreate,
     ProviderCreate,
 )
+from media_bridge_control.snapshots import SnapshotPublisher, SnapshotPublishError
 
 Handler = Callable[[Request], Awaitable[Response]]
 
@@ -51,8 +56,16 @@ def build_control_app(
     service: ControlPlaneService,
     allowed_origin: str,
     allowed_host: str,
+    snapshot_publisher: SnapshotPublisher | None = None,
 ) -> Starlette:
     configuration = ConfigurationService(service.database)
+    credentials = CredentialService(
+        database=service.database,
+        security=service.security,
+        now=service.now,
+    )
+    audit = AuditEventWriter(service.database)
+    events = OperationalEventWriter(service.database)
 
     def secure_request(request: Request) -> Response | None:
         host = request.headers.get("host", "").partition(":")[0].lower()
@@ -157,7 +170,7 @@ def build_control_app(
         *,
         roles: frozenset[str],
         require_csrf: bool = False,
-    ) -> tuple[Any | None, Response | None]:
+    ) -> tuple[Principal | None, Response | None]:
         if require_csrf and (rejected := secure_request(request)):
             return None, rejected
         raw = request.cookies.get("mb_admin_session", "")
@@ -252,6 +265,158 @@ def build_control_app(
             return _error(error.code, 409)
         return JSONResponse(result, status_code=201)
 
+    async def credential_collection(request: Request) -> Response:
+        writable = request.method == "POST"
+        principal, rejected = await authorize(
+            request,
+            roles=frozenset({"admin"}),
+            require_csrf=writable,
+        )
+        if rejected is not None:
+            return rejected
+        if not writable:
+            return JSONResponse(await run_in_threadpool(credentials.list))
+        if principal is None:
+            return _error("unauthorized", 401)
+        try:
+            body = await _json(request, CredentialCreate)
+            issued = await run_in_threadpool(
+                credentials.issue,
+                name=body.name,
+                scopes=body.scopes,
+                expires_at=body.expires_at,
+                created_by=principal.user_id,
+            )
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="credential.issued",
+                target_type="credential",
+                target_id=issued.selector,
+                details={
+                    "name": issued.name,
+                    "scope_count": len(issued.scopes),
+                    "status": "issued",
+                },
+            )
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except CredentialError as error:
+            return _error(error.code, 400)
+        return JSONResponse(
+            {
+                "credential": issued.credential,
+                "selector": issued.selector,
+                "name": issued.name,
+                "scopes": issued.scopes,
+                "expires_at": issued.expires_at.isoformat() if issued.expires_at else None,
+            },
+            status_code=201,
+        )
+
+    async def credential_item(request: Request) -> Response:
+        principal, rejected = await authorize(
+            request,
+            roles=frozenset({"admin"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
+        selector = request.path_params["selector"]
+        try:
+            await run_in_threadpool(credentials.revoke, selector)
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="credential.revoked",
+                target_type="credential",
+                target_id=selector,
+                details={"status": "revoked"},
+            )
+        except CredentialError as error:
+            status = 404 if error.code == "credential_not_found" else 400
+            return _error(error.code, status)
+        return Response(status_code=204)
+
+    async def snapshots(request: Request) -> Response:
+        writable = request.method == "POST"
+        principal, rejected = await authorize(
+            request,
+            roles=frozenset({"admin"}),
+            require_csrf=writable,
+        )
+        if rejected is not None:
+            return rejected
+        if snapshot_publisher is None:
+            return _error("snapshot_unavailable", 503)
+        if not writable:
+            return JSONResponse(await run_in_threadpool(snapshot_publisher.list))
+        if principal is None:
+            return _error("unauthorized", 401)
+        try:
+            body = await run_in_threadpool(configuration.snapshot_body)
+            published = await run_in_threadpool(snapshot_publisher.publish, body)
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="snapshot.published",
+                target_type="snapshot",
+                target_id=str(published.snapshot_id),
+                details={"version": published.version, "status": "published"},
+            )
+        except ConfigurationError as error:
+            return _error(error.code, 409)
+        except SnapshotPublishError:
+            return _error("snapshot_publish_failed", 500)
+        return JSONResponse(published.model_dump(mode="json"), status_code=201)
+
+    async def snapshot_rollback(request: Request) -> Response:
+        principal, rejected = await authorize(
+            request,
+            roles=frozenset({"admin"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        if snapshot_publisher is None:
+            return _error("snapshot_unavailable", 503)
+        if principal is None:
+            return _error("unauthorized", 401)
+        try:
+            version = int(request.path_params["version"])
+            published = await run_in_threadpool(snapshot_publisher.rollback, version)
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="snapshot.rolled_back",
+                target_type="snapshot",
+                target_id=str(published.snapshot_id),
+                details={"before_id": str(version), "version": published.version},
+            )
+        except (ValueError, SnapshotPublishError):
+            return _error("snapshot_rollback_failed", 400)
+        return JSONResponse(published.model_dump(mode="json"), status_code=201)
+
+    async def audit_events(request: Request) -> Response:
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator", "viewer"}),
+        )
+        if rejected is not None:
+            return rejected
+        return JSONResponse(await run_in_threadpool(audit.list))
+
+    async def operational_events(request: Request) -> Response:
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator", "viewer"}),
+        )
+        if rejected is not None:
+            return rejected
+        return JSONResponse(await run_in_threadpool(events.list))
+
     return Starlette(
         routes=[
             Route("/admin/v1/health", health, methods=["GET"]),
@@ -263,5 +428,23 @@ def build_control_app(
             Route("/admin/v1/providers", providers, methods=["GET", "POST"]),
             Route("/admin/v1/models", models, methods=["GET", "POST"]),
             Route("/admin/v1/policies", policies, methods=["GET", "POST"]),
+            Route(
+                "/admin/v1/credentials",
+                credential_collection,
+                methods=["GET", "POST"],
+            ),
+            Route(
+                "/admin/v1/credentials/{selector:str}",
+                credential_item,
+                methods=["DELETE"],
+            ),
+            Route("/admin/v1/snapshots", snapshots, methods=["GET", "POST"]),
+            Route(
+                "/admin/v1/snapshots/{version:int}/rollback",
+                snapshot_rollback,
+                methods=["POST"],
+            ),
+            Route("/admin/v1/audit", audit_events, methods=["GET"]),
+            Route("/admin/v1/events", operational_events, methods=["GET"]),
         ]
     )

@@ -47,21 +47,19 @@ def test_audit_event_and_database_reject_sensitive_bodies(
         created_at=datetime(2026, 8, 24, 5, 0, tzinfo=UTC),
     )
 
-    table_names = [
-        "audit_events",
-        "operational_events",
-        "providers",
-        "users",
-        "client_credentials",
-        "snapshots",
+    safe_queries = [
+        text("SELECT row_to_json(entry)::text FROM audit_events AS entry"),
+        text("SELECT row_to_json(entry)::text FROM operational_events AS entry"),
+        text("SELECT row_to_json(entry)::text FROM providers AS entry"),
+        text("SELECT row_to_json(entry)::text FROM users AS entry"),
+        text("SELECT row_to_json(entry)::text FROM client_credentials AS entry"),
+        text("SELECT row_to_json(entry)::text FROM snapshots AS entry"),
     ]
     with database.session() as session:
         dump = " ".join(
             str(value)
-            for table_name in table_names
-            for value in session.scalars(
-                text(f"SELECT row_to_json(entry)::text FROM {table_name} AS entry")
-            )
+            for query in safe_queries
+            for value in session.scalars(query)
         )
     assert raw_marker not in dump
     assert raw_marker not in caplog.text

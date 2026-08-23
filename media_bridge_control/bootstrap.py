@@ -77,6 +77,9 @@ class ControlPlaneService:
             window=timedelta(minutes=5),
         )
 
+    def now(self) -> datetime:
+        return self._now()
+
     @staticmethod
     def _username(value: str) -> str:
         normalized = value.strip().lower()

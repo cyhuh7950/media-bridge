@@ -126,3 +126,26 @@ class ConfigurationService:
     @staticmethod
     def _policy(row: Policy) -> dict[str, Any]:
         return {"id": str(row.id), "name": row.name, **row.body}
+
+    def snapshot_body(self) -> dict[str, Any]:
+        providers = self.list_providers()
+        models = self.list_models()
+        policies = self.list_policies()
+        if not models or len(policies) != 1:
+            raise ConfigurationError("configuration_incomplete")
+        return {
+            "registry": {
+                "version": f"registry-{len(models)}",
+                "models": [
+                    {
+                        "id": item["model_id"],
+                        "input_modalities": item["input_modalities"],
+                        "expires_at": item["expires_at"],
+                        "pdf_passthrough_verified": item["pdf_passthrough_verified"],
+                    }
+                    for item in models
+                ],
+            },
+            "providers": providers,
+            "policy": policies[0],
+        }
