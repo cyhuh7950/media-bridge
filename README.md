@@ -6,6 +6,10 @@ sanitizer를 통과한 텍스트만 전달하는 fail-closed MCP 제품입니다
 
 핵심 안전 경계는 MCP 도구의 선택 호출이 아니라 `RouterAdapter`입니다.
 
+현재 commit의 core만으로 PCWSL Codex 요청이 자동 보호되는 것은 아닙니다. 승인된 다음 단계는
+Media Bridge가 `/v1/responses` ingress가 되어 gate 성공 후에만 OmniRoute를 호출하는 A안이며,
+실제 PCWSL provider 설정과 배포는 별도 승인 범위입니다.
+
 ```text
 normalized request
   -> exact capability registry
