@@ -55,7 +55,7 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-source = ["media_bridge"]
+source = ["media_bridge", "media_bridge_control"]
 
 [tool.coverage.report]
 fail_under = 80

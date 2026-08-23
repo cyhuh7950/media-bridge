@@ -103,6 +103,33 @@ def test_roles_are_enforced_by_admin_api(migrated_postgres: str) -> None:
     database.close()
 
 
+def test_only_admin_can_create_users(migrated_postgres: str) -> None:
+    _, database, app = _setup(migrated_postgres)
+    admin, admin_csrf = _login(app, "admin")
+    operator, operator_csrf = _login(app, "operator")
+    payload = {
+        "username": "new-viewer",
+        "password": _value(),
+        "role": "viewer",
+    }
+
+    forbidden = operator.post(
+        "/admin/v1/users",
+        headers={"origin": "https://control.test", "x-csrf-token": operator_csrf},
+        json=payload,
+    )
+    assert forbidden.status_code == 403
+    created = admin.post(
+        "/admin/v1/users",
+        headers={"origin": "https://control.test", "x-csrf-token": admin_csrf},
+        json=payload,
+    )
+    assert created.status_code == 201
+    assert created.json()["role"] == "viewer"
+    assert "password" not in created.text
+    database.close()
+
+
 def test_provider_api_rejects_raw_secret_and_persists_reference_only(
     migrated_postgres: str,
 ) -> None:
