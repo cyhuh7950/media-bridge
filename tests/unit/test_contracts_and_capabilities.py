@@ -91,6 +91,18 @@ def test_registry_requires_support_for_every_detected_media_modality() -> None:
     assert image_only.supports_all(frozenset({"image", "pdf"})) is False
 
 
+def test_registry_rejects_duplicate_ids_and_entries_without_text() -> None:
+    duplicate = active_capability("same-model", {"text"})
+    with pytest.raises(ValueError, match="duplicate"):
+        CapabilityRegistry([duplicate, duplicate], version="registry-v1")
+
+    with pytest.raises(ValueError, match="text"):
+        CapabilityRegistry(
+            [active_capability("image-without-text", {"image"})],
+            version="registry-v1",
+        )
+
+
 def test_contract_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         PrepareForModelRequest.model_validate(

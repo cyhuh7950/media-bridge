@@ -342,6 +342,54 @@ async def test_vision_passthrough_requires_exact_active_modality_support(tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_vision_passthrough_still_validates_media_source(tmp_path: Path) -> None:
+    now = datetime(2026, 8, 23, tzinfo=UTC)
+    gate, signer = _gate(tmp_path, now=now)
+    spy = SpyDownstream()
+    router = RouterAdapter(gate=gate, downstream=GuardedDownstream(spy, signer))
+    invalid_media = MediaPart(
+        media_type="image",
+        source={"kind": "base64", "data": "not-valid-base64"},
+    )
+
+    invocation = await router.invoke(
+        PrepareForModelRequest(
+            content=[invalid_media],
+            target=TargetModel(registry_id="vision-model"),
+        ),
+        tenant_id="tenant-a",
+    )
+
+    assert invocation.gate_result.action == "blocked"
+    assert len(spy.calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_unexpected_sanitizer_crash_is_blocked(tmp_path: Path) -> None:
+    now = datetime(2026, 8, 23, tzinfo=UTC)
+
+    def crashed_sanitizer(_text: str, **_kwargs: Any) -> str:
+        raise RuntimeError("sensitive internal detail")
+
+    gate, signer = _gate(tmp_path, now=now, sanitizer=crashed_sanitizer)
+    spy = SpyDownstream()
+    router = RouterAdapter(gate=gate, downstream=GuardedDownstream(spy, signer))
+
+    invocation = await router.invoke(
+        PrepareForModelRequest(
+            content=[_media_part()],
+            target=TargetModel(registry_id="text-model"),
+        ),
+        tenant_id="tenant-a",
+    )
+
+    assert invocation.gate_result.action == "blocked"
+    assert invocation.gate_result.error is not None
+    assert "sensitive" not in invocation.gate_result.error.message
+    assert len(spy.calls) == 0
+
+
+@pytest.mark.asyncio
 async def test_guard_blocks_forged_nonvision_media_even_with_valid_signature() -> None:
     signer = GateReceiptSigner(secret=b"g" * 32, clock=lambda: 10_000)
     spy = SpyDownstream()
@@ -365,5 +413,33 @@ async def test_guard_blocks_forged_nonvision_media_even_with_valid_signature() -
     )
 
     with pytest.raises(GuardRejectedError, match="media"):
+        await guarded.invoke(payload)
+    assert len(spy.calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_guard_rejects_signed_but_unknown_action() -> None:
+    signer = GateReceiptSigner(secret=b"g" * 32, clock=lambda: 10_000)
+    spy = SpyDownstream()
+    guarded = GuardedDownstream(spy, signer)
+    content = (TextPart(text="safe text"),)
+    binding = ReceiptBinding(
+        target_id="text-model",
+        capability="non_vision",
+        input_digest="input",
+        output_digest=digest_content(content),
+        action="unreviewed-action",
+    )
+    payload = DownstreamPayload(
+        target_id=binding.target_id,
+        capability=binding.capability,
+        action=binding.action,
+        content=content,
+        input_digest=binding.input_digest,
+        output_digest=binding.output_digest,
+        receipt=signer.sign(binding),
+    )
+
+    with pytest.raises(GuardRejectedError, match="action"):
         await guarded.invoke(payload)
     assert len(spy.calls) == 0
