@@ -34,7 +34,9 @@ from media_bridge_control.schemas import (
     ProviderCreate,
     ProviderUpdate,
     PublishSnapshotRequest,
+    RecoveryRequest,
     UserCreate,
+    UserUpdate,
 )
 from media_bridge_control.snapshots import SnapshotPublisher, SnapshotPublishError
 
@@ -151,6 +153,26 @@ def build_control_app(
             return _error("unauthorized", 401)
         return JSONResponse({"username": principal.username, "role": principal.role})
 
+    async def recover(request: Request) -> Response:
+        if rejected := secure_request(request):
+            return rejected
+        try:
+            body = await _json(request, RecoveryRequest)
+            client_host = request.client.host if request.client is not None else "unknown"
+            await run_in_threadpool(
+                service.recover_password,
+                username=body.username,
+                recovery_code=body.recovery_code,
+                new_password=body.new_password,
+                client_key=client_host,
+            )
+        except AuthenticationError as error:
+            status = 429 if error.code == "recovery_rate_limited" else 400
+            return _error(error.code, status)
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        return Response(status_code=204)
+
     async def logout(request: Request) -> Response:
         if rejected := secure_request(request):
             return rejected
@@ -239,6 +261,46 @@ def build_control_app(
             status_code=201,
         )
 
+    async def user_item(request: Request) -> Response:
+        principal, rejected = await authorize(
+            request,
+            roles=frozenset({"admin"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
+        try:
+            body = await _json(request, UserUpdate)
+            updated = await run_in_threadpool(
+                service.update_user,
+                user_id=str(request.path_params["item_id"]),
+                password=body.password,
+                role=body.role,
+                is_active=body.is_active,
+            )
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="user.updated",
+                target_type="user",
+                target_id=updated.user_id,
+                details={"role": updated.role, "status": "updated"},
+            )
+        except ControlPlaneError as error:
+            status = 409 if error.code == "last_admin_required" else 400
+            if error.code == "user_not_found":
+                status = 404
+            return _error(error.code, status)
+        return JSONResponse(
+            {
+                "user_id": updated.user_id,
+                "username": updated.username,
+                "role": updated.role,
+            }
+        )
+
     async def providers(request: Request) -> Response:
         writable = request.method == "POST"
         _, rejected = await authorize(
@@ -262,17 +324,21 @@ def build_control_app(
         return JSONResponse(result, status_code=201)
 
     async def provider_item(request: Request) -> Response:
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}),
             require_csrf=True,
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         provider_id = request.path_params["item_id"]
         try:
             if request.method == "PATCH":
                 body = await _json(request, ProviderUpdate)
+                if "secret_ref" in body.model_fields_set and principal.role != "admin":
+                    return _error("forbidden", 403)
                 result = await run_in_threadpool(
                     configuration.update_provider,
                     provider_id,
@@ -585,9 +651,15 @@ def build_control_app(
             Route("/admin/v1/health", health, methods=["GET"]),
             Route("/admin/v1/bootstrap", bootstrap, methods=["POST"]),
             Route("/admin/v1/auth/login", login, methods=["POST"]),
+            Route("/admin/v1/auth/recover", recover, methods=["POST"]),
             Route("/admin/v1/auth/logout", logout, methods=["POST"]),
             Route("/admin/v1/me", me, methods=["GET"]),
             Route("/admin/v1/users", users, methods=["GET", "POST"]),
+            Route(
+                "/admin/v1/users/{item_id:uuid}",
+                user_item,
+                methods=["PATCH"],
+            ),
             Route("/admin/v1/providers", providers, methods=["GET", "POST"]),
             Route(
                 "/admin/v1/providers/{item_id:uuid}",

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from media_bridge_control.db import Database
 from media_bridge_control.models import (
@@ -229,6 +229,110 @@ class ControlPlaneService:
                 )
         except ValueError as error:
             raise ControlPlaneError("invalid_input") from error
+
+    def update_user(
+        self,
+        *,
+        user_id: str,
+        password: str | None,
+        role: str | None,
+        is_active: bool | None,
+    ) -> Principal:
+        if role is not None and role not in {item.value for item in Role}:
+            raise ControlPlaneError("invalid_input")
+        try:
+            password_hash = (
+                self.security.passwords.hash(password) if password is not None else None
+            )
+            with self.database.session() as session:
+                user = session.scalar(
+                    select(User).where(User.id == user_id).with_for_update()
+                )
+                if user is None:
+                    raise ControlPlaneError("user_not_found")
+                next_role = role if role is not None else user.role
+                next_active = is_active if is_active is not None else user.is_active
+                if user.role == Role.ADMIN.value and user.is_active and (
+                    next_role != Role.ADMIN.value or not next_active
+                ):
+                    active_admins = session.scalar(
+                        select(func.count()).select_from(User).where(
+                            User.role == Role.ADMIN.value,
+                            User.is_active.is_(True),
+                        )
+                    )
+                    if int(active_admins or 0) <= 1:
+                        raise ControlPlaneError("last_admin_required")
+                user.role = next_role
+                user.is_active = next_active
+                if password_hash is not None:
+                    user.password_hash = password_hash
+                session.flush()
+                return Principal(
+                    user_id=str(user.id),
+                    username=user.username,
+                    role=user.role,
+                    session_selector="",
+                )
+        except ValueError as error:
+            raise ControlPlaneError("invalid_input") from error
+
+    def recover_password(
+        self,
+        *,
+        username: str,
+        recovery_code: str,
+        new_password: str,
+        client_key: str,
+    ) -> None:
+        now = self._now()
+        try:
+            normalized = self._username(username)
+            password_hash = self.security.passwords.hash(new_password)
+        except (ControlPlaneError, ValueError) as error:
+            raise AuthenticationError("recovery_rejected") from error
+        rate_key = f"recovery:{client_key}:{normalized}"
+        if not self._login_limiter.allow(rate_key, now=now):
+            raise AuthenticationError("recovery_rate_limited")
+        with self.database.session() as session:
+            user = session.scalar(
+                select(User).where(User.username == normalized).with_for_update()
+            )
+            codes = []
+            if user is not None and user.is_active:
+                codes = list(
+                    session.scalars(
+                        select(RecoveryCode)
+                        .where(
+                            RecoveryCode.user_id == user.id,
+                            RecoveryCode.used_at.is_(None),
+                        )
+                        .with_for_update()
+                    )
+                )
+            matches = [
+                code
+                for code in codes
+                if self.security.matches(
+                    recovery_code,
+                    code.code_digest,
+                    purpose="recovery",
+                )
+            ]
+            if user is None or len(matches) != 1:
+                self._login_limiter.record_failure(rate_key, now=now)
+                raise AuthenticationError("recovery_rejected")
+            matches[0].used_at = now
+            user.password_hash = password_hash
+            session.execute(
+                update(AdminSession)
+                .where(
+                    AdminSession.user_id == user.id,
+                    AdminSession.revoked_at.is_(None),
+                )
+                .values(revoked_at=now)
+            )
+        self._login_limiter.clear(rate_key)
 
     def authenticate(self, session_token: str) -> Principal:
         now = self._now()

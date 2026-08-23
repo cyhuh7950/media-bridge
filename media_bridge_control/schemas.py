@@ -31,6 +31,12 @@ class LoginRequest(AdminStrictModel):
     password: Annotated[str, StringConstraints(min_length=1, max_length=1_024)]
 
 
+class RecoveryRequest(AdminStrictModel):
+    username: Username
+    recovery_code: Annotated[str, StringConstraints(min_length=16, max_length=128)]
+    new_password: Password
+
+
 class UserCreate(AdminStrictModel):
     username: Username
     password: Password
@@ -45,6 +51,12 @@ class NonEmptyUpdate(AdminStrictModel):
         ):
             raise ValueError("update must contain non-null fields")
         return self
+
+
+class UserUpdate(NonEmptyUpdate):
+    password: Password | None = None
+    role: Literal["admin", "operator", "viewer"] | None = None
+    is_active: bool | None = None
 
 
 class SecretReference(AdminStrictModel):
