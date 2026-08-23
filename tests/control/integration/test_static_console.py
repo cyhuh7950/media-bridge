@@ -38,7 +38,7 @@ def test_console_serves_spa_fallback_and_delegates_admin_api(tmp_path: Path) -> 
     health = client.get("/admin/v1/health")
     missing_admin = client.get("/admin/v1/not-implemented")
 
-    assert root.status_code == fallback.status_code == asset.status_code == health.status_code == 200
+    assert {root.status_code, fallback.status_code, asset.status_code, health.status_code} == {200}
     assert '<div id="root"></div>' in root.text
     assert fallback.text == root.text
     assert "globalThis.mediaBridge" in asset.text

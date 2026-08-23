@@ -53,6 +53,7 @@ class ControlSettings:
     snapshot_path: Path
     allowed_origin: str
     allowed_host: str
+    console_static_root: Path | None = None
 
     @classmethod
     def from_environment(cls) -> ControlSettings:
@@ -94,6 +95,12 @@ class ControlSettings:
         host = _required("MEDIA_BRIDGE_CONTROL_HOST").lower()
         if host != parsed.hostname.lower():
             raise ControlSettingsError("Control Plane host and origin do not match")
+        static_value = os.environ.get("MEDIA_BRIDGE_CONSOLE_STATIC_ROOT", "").strip()
+        console_static_root = Path(static_value) if static_value else None
+        if console_static_root is not None and (
+            not console_static_root.is_absolute() or console_static_root.is_symlink()
+        ):
+            raise ControlSettingsError("Web Console static root is invalid")
         return cls(
             database_url=database_url,
             security_pepper=pepper,
@@ -102,4 +109,5 @@ class ControlSettings:
             snapshot_path=snapshot_path,
             allowed_origin=origin,
             allowed_host=host,
+            console_static_root=console_static_root,
         )

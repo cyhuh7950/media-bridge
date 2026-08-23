@@ -29,11 +29,15 @@ def test_control_secrets_load_only_from_exact_environment_or_secret_files(
     monkeypatch.setenv("MEDIA_BRIDGE_SNAPSHOT_PATH", str(tmp_path / "active.json"))
     monkeypatch.setenv("MEDIA_BRIDGE_CONTROL_ORIGIN", "https://control.test")
     monkeypatch.setenv("MEDIA_BRIDGE_CONTROL_HOST", "control.test")
+    console_root = tmp_path / "console"
+    console_root.mkdir()
+    monkeypatch.setenv("MEDIA_BRIDGE_CONSOLE_STATIC_ROOT", str(console_root))
 
     settings = ControlSettings.from_environment()
 
     assert settings.database_url.startswith("postgresql+psycopg://")
     assert settings.snapshot_key_id == "test-key"
+    assert settings.console_static_root == console_root
     rendered = repr(settings)
     assert "p" * 64 not in rendered
     assert "BEGIN PRIVATE KEY" not in rendered
