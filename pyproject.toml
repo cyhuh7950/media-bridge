@@ -34,7 +34,7 @@ media-bridge-stdio = "media_bridge.entrypoints:run_stdio"
 media-bridge-http = "media_bridge.entrypoints:run_http"
 
 [tool.setuptools.packages.find]
-include = ["media_bridge*", "solar_error_analyzer*"]
+include = ["media_bridge*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -57,6 +57,7 @@ skip_covered = true
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+exclude = ["solar_error_analyzer"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "S"]

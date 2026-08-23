@@ -1,0 +1,11 @@
+version: "2026-08-23-example"
+models:
+  - id: solar-pro4
+    input_modalities: [text]
+    expires_at: 2027-01-31T00:00:00Z
+  - id: local/text-model-v1
+    input_modalities: [text]
+    expires_at: 2027-01-31T00:00:00Z
+  - id: verified/vision-model-v1
+    input_modalities: [text, image, pdf]
+    expires_at: 2027-01-31T00:00:00Z
