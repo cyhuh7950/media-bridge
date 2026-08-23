@@ -72,4 +72,26 @@ describe("adminRequest", () => {
       "csrf-test-value",
     );
   });
+
+  it("sends a bootstrap token only to the bootstrap endpoint", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}, 201));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await adminRequest("/bootstrap", {
+      method: "POST",
+      bootstrapToken: "bootstrap-one-time-value",
+      body: { username: "admin", password: "long-enough-value" },
+    });
+
+    const request = fetchMock.mock.calls[0];
+    expect(new Headers(request?.[1]?.headers).get("x-bootstrap-token")).toBe(
+      "bootstrap-one-time-value",
+    );
+    await expect(
+      adminRequest("/providers", {
+        bootstrapToken: "bootstrap-one-time-value",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_admin_path" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
 });
