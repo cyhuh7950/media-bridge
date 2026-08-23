@@ -14,8 +14,7 @@ it("clears bootstrap, password, and recovery values after the one-time dialog cl
   const bootstrapMarker = "mbb_selector.bootstrap-browser-marker";
   const passwordMarker = "correct horse battery password-browser-marker";
   const recoveryMarker = "recovery-browser-marker";
-  const completed = vi.fn<(username: string, password: string) => Promise<void>>()
-    .mockResolvedValue(undefined);
+  const completed = vi.fn<() => void>();
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>().mockResolvedValue(
@@ -32,7 +31,7 @@ it("clears bootstrap, password, and recovery values after the one-time dialog cl
 
   expect(await screen.findByText(recoveryMarker)).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "복구 코드를 보관했습니다" }));
-  expect(completed).toHaveBeenCalledWith("admin", passwordMarker);
+  expect(completed).toHaveBeenCalledOnce();
   expect(document.documentElement.outerHTML).not.toContain(bootstrapMarker);
   expect(document.documentElement.outerHTML).not.toContain(passwordMarker);
   expect(document.documentElement.outerHTML).not.toContain(recoveryMarker);

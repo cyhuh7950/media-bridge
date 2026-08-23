@@ -91,8 +91,8 @@ function ConsoleLayout() {
       <main>
         <Routes>
           <Route path="/setup" element={<OnboardingShell />} />
-          <Route element={<PublishedSnapshotGuard />}>
-            <Route path="/" element={<DashboardPage />} />
+          <Route element={<PublishedSnapshotGuard role={auth.principal.role} />}>
+            <Route path="/" element={<DashboardPage role={auth.principal.role} />} />
             <Route path="/providers" element={<ProvidersPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
             <Route path="/models" element={<ModelsPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
             <Route path="/policies" element={<PoliciesPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />

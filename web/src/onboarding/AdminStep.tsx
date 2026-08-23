@@ -10,7 +10,7 @@ interface BootstrapResponse {
 export function AdminStep({
   onComplete,
 }: {
-  onComplete: (username: string, password: string) => Promise<void>;
+  onComplete: () => void;
 }) {
   const [bootstrapToken, setBootstrapToken] = useState("");
   const [username, setUsername] = useState("");
@@ -35,7 +35,6 @@ export function AdminStep({
         throw new SafeApiError(502, "invalid_response");
       }
       setRecoveryCodes([...response.recovery_codes]);
-      await onComplete(username, oneTimePassword);
     } catch (error: unknown) {
       setErrorCode(error instanceof SafeApiError ? error.code : "request_failed");
     }
@@ -61,7 +60,10 @@ export function AdminStep({
           title="일회용 복구 코드"
           values={recoveryCodes}
           closeLabel="복구 코드를 보관했습니다"
-          onClose={() => { setRecoveryCodes(null); }}
+          onClose={() => {
+            setRecoveryCodes(null);
+            onComplete();
+          }}
         />
       ) : null}
     </section>

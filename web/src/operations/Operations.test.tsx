@@ -38,7 +38,7 @@ it("builds dashboard status only from current P1 API responses", async () => {
     }),
   );
 
-  render(<DashboardPage />);
+  render(<DashboardPage role="admin" />);
 
   expect(await screen.findByText("3")).toBeInTheDocument();
   expect(screen.getByText("2")).toBeInTheDocument();

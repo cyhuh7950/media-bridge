@@ -16,7 +16,7 @@ it("blocks the dashboard until a real snapshot exists", async () => {
   render(
     <MemoryRouter initialEntries={["/"]}>
       <Routes>
-        <Route element={<PublishedSnapshotGuard />}>
+        <Route element={<PublishedSnapshotGuard role="admin" />}>
           <Route path="/" element={<h1>Dashboard</h1>} />
         </Route>
         <Route path="/setup" element={<h1>온보딩</h1>} />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { adminRequest } from "../api/client";
+import type { Role } from "../api/contracts";
 import { numberField, records, textField } from "./operationTypes";
 
 interface DashboardState {
@@ -12,18 +13,21 @@ interface DashboardState {
   latestEvent: string;
 }
 
-export function DashboardPage() {
+export function DashboardPage({ role }: { role: Role }) {
   const [state, setState] = useState<DashboardState | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
+    const snapshotRequest = role === "admin"
+      ? adminRequest<unknown>("/snapshots")
+      : Promise.resolve([]);
     void Promise.all([
       adminRequest<Record<string, unknown>>("/health"),
       adminRequest<unknown>("/providers"),
       adminRequest<unknown>("/models"),
       adminRequest<unknown>("/policies"),
-      adminRequest<unknown>("/snapshots"),
+      snapshotRequest,
       adminRequest<unknown>("/events"),
     ]).then(
       ([health, providersValue, modelsValue, policiesValue, snapshotsValue, eventsValue]) => {
@@ -48,7 +52,7 @@ export function DashboardPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [role]);
 
   if (failed) return <p role="alert">Dashboard 상태를 불러올 수 없습니다.</p>;
   if (state === null) return <p role="status">Dashboard 상태를 불러오고 있습니다.</p>;
@@ -61,7 +65,7 @@ export function DashboardPage() {
         <div><dt>Providers</dt><dd>{state.providers}</dd></div>
         <div><dt>Models</dt><dd>{state.models}</dd></div>
         <div><dt>Policies</dt><dd>{state.policies}</dd></div>
-        <div><dt>활성 snapshot</dt><dd>{state.snapshotVersion ?? "없음"}</dd></div>
+        <div><dt>활성 snapshot</dt><dd>{role === "admin" ? (state.snapshotVersion ?? "없음") : "admin 전용"}</dd></div>
         <div><dt>최근 event</dt><dd>{state.latestEvent}</dd></div>
       </dl>
     </section>

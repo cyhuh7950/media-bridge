@@ -75,7 +75,7 @@ class _SecurityHeaders:
                 path = scope.get("path", "")
                 cache_value = (
                     b"public, max-age=31536000, immutable"
-                    if path.startswith("/assets/")
+                    if path.startswith("/console-static/")
                     else b"no-store"
                 )
                 if b"cache-control" not in lower_names:
@@ -96,7 +96,7 @@ def build_console_app(*, admin_app: ASGIApp, static_root: Path) -> ASGIApp:
     except OSError as error:
         raise ValueError("console_static_build_invalid") from error
     index_path = root / "index.html"
-    assets_path = root / "assets"
+    assets_path = root / "console-static"
     if (
         not root.is_dir()
         or root.is_symlink()

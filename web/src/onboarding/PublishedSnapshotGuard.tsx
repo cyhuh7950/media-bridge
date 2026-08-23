@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 
 import { adminRequest } from "../api/client";
+import type { Role } from "../api/contracts";
 
-export function PublishedSnapshotGuard() {
+function AdminPublishedSnapshotGuard() {
   const [state, setState] = useState<"loading" | "ready" | "setup" | "error">("loading");
   useEffect(() => {
     let active = true;
@@ -18,4 +19,8 @@ export function PublishedSnapshotGuard() {
   if (state === "setup") return <Navigate to="/setup" replace />;
   if (state === "error") return <p role="alert">활성 snapshot 상태를 확인할 수 없습니다.</p>;
   return <Outlet />;
+}
+
+export function PublishedSnapshotGuard({ role }: { role: Role }) {
+  return role === "admin" ? <AdminPublishedSnapshotGuard /> : <Outlet />;
 }

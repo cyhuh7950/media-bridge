@@ -17,12 +17,15 @@ def _admin_app() -> Starlette:
 
 def _static_root(tmp_path: Path) -> Path:
     root = tmp_path / "dist"
-    (root / "assets").mkdir(parents=True)
+    (root / "console-static").mkdir(parents=True)
     (root / "index.html").write_text(
-        '<!doctype html><div id="root"></div><script src="/assets/app.js"></script>',
+        '<!doctype html><div id="root"></div><script src="/console-static/app.js"></script>',
         encoding="utf-8",
     )
-    (root / "assets" / "app.js").write_text("globalThis.mediaBridge = true;", encoding="utf-8")
+    (root / "console-static" / "app.js").write_text(
+        "globalThis.mediaBridge = true;",
+        encoding="utf-8",
+    )
     return root
 
 
@@ -34,7 +37,7 @@ def test_console_serves_spa_fallback_and_delegates_admin_api(tmp_path: Path) -> 
 
     root = client.get("/")
     fallback = client.get("/providers")
-    asset = client.get("/assets/app.js")
+    asset = client.get("/console-static/app.js")
     health = client.get("/admin/v1/health")
     missing_admin = client.get("/admin/v1/not-implemented")
 

@@ -37,7 +37,7 @@ def test_control_runtime_optionally_serves_same_origin_console(
     tmp_path: Path,
 ) -> None:
     console_root = tmp_path / "console"
-    (console_root / "assets").mkdir(parents=True)
+    (console_root / "console-static").mkdir(parents=True)
     (console_root / "index.html").write_text('<div id="root"></div>', encoding="utf-8")
     settings = ControlSettings(
         database_url=migrated_postgres,
