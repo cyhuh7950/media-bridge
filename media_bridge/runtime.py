@@ -27,8 +27,11 @@ from media_bridge.contracts import StrictModel
 from media_bridge.gate import PreRequestGate
 from media_bridge.http_app import current_tenant
 from media_bridge.mcp_server import build_mcp_server
+from media_bridge.omniroute_adapter import GuardedOmniRouteAdapter
 from media_bridge.pdf_pipeline import PdfiumPageRenderer
 from media_bridge.receipts import GateReceiptSigner
+from media_bridge.responses_gateway import ResponsesIngressGateway
+from media_bridge.responses_state import ResponsesStateStore
 from media_bridge.service import MediaBridgeService
 
 
@@ -64,12 +67,20 @@ class MediaBridgeRuntime:
     asset_store: AssetStore
     server: MCPServer[None]
     http_client: httpx.AsyncClient
+    responses_gateway: ResponsesIngressGateway | None
+    omniroute_adapter: GuardedOmniRouteAdapter | None
 
     async def close(self) -> None:
         try:
             self.asset_store.clear()
         finally:
-            await self.http_client.aclose()
+            try:
+                if self.responses_gateway is not None:
+                    self.responses_gateway.clear_state()
+                if self.omniroute_adapter is not None:
+                    await self.omniroute_adapter.close()
+            finally:
+                await self.http_client.aclose()
 
 
 def _required_environment(name: str) -> str:
@@ -131,6 +142,20 @@ def build_runtime_from_environment() -> MediaBridgeRuntime:
     ocr_endpoint = _required_environment("MEDIA_BRIDGE_OCR_ENDPOINT")
     vision_endpoint = _required_environment("MEDIA_BRIDGE_VISION_ENDPOINT")
     vision_model = _required_environment("MEDIA_BRIDGE_VISION_MODEL")
+    omniroute_endpoint = os.environ.get("MEDIA_BRIDGE_OMNIROUTE_BASE_URL", "").strip()
+    omniroute_adapter: GuardedOmniRouteAdapter | None = None
+    if omniroute_endpoint:
+        try:
+            load_secret(
+                "MEDIA_BRIDGE_OMNIROUTE_API_KEY",
+                "MEDIA_BRIDGE_OMNIROUTE_API_KEY_FILE",
+            )
+            omniroute_adapter = GuardedOmniRouteAdapter(
+                endpoint=omniroute_endpoint,
+                receipt_signer=signer,
+            )
+        except (SecretConfigurationError, ValueError) as error:
+            raise RuntimeConfigurationError("OmniRoute gateway configuration is invalid") from error
     client = httpx.AsyncClient(
         timeout=httpx.Timeout(30),
         follow_redirects=False,
@@ -163,9 +188,21 @@ def build_runtime_from_environment() -> MediaBridgeRuntime:
     )
     service = MediaBridgeService(gate=gate, analysis_backends={"solar": solar})
     server = build_mcp_server(service, tenant_provider=_tenant_provider)
+    responses_gateway = (
+        ResponsesIngressGateway(
+            gate=gate,
+            adapter=omniroute_adapter,
+            receipt_signer=signer,
+            state_store=ResponsesStateStore(),
+        )
+        if omniroute_adapter is not None
+        else None
+    )
     return MediaBridgeRuntime(
         service=service,
         asset_store=asset_store,
         server=server,
         http_client=client,
+        responses_gateway=responses_gateway,
+        omniroute_adapter=omniroute_adapter,
     )

@@ -62,7 +62,10 @@ async def test_responses_route_reuses_bearer_and_tenant_auth(
     )
     app = _app(monkeypatch, tmp_path, gateway)
 
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
         unauthenticated = await client.post("/v1/responses", json={"model": "text", "input": "x"})
         missing_tenant = await client.post(
             "/v1/responses",
@@ -96,7 +99,10 @@ async def test_responses_route_returns_bounded_upstream_body(
         "X-Media-Bridge-Tenant": "tenant-a",
     }
 
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
         response = await client.post(
             "/v1/responses",
             headers=headers,
@@ -130,7 +136,10 @@ async def test_responses_route_bounds_json_and_returns_safe_error_shape(
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
         malformed = await client.post("/v1/responses", headers=headers, content=b"not-json")
         oversized = await client.post("/v1/responses", headers=headers, content=b"{" + b"x" * 65)
         blocked = await client.post(
@@ -166,7 +175,10 @@ async def test_responses_route_is_absent_when_gateway_is_not_configured(
         "X-Media-Bridge-Tenant": "tenant-a",
     }
 
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
         response = await client.post("/v1/responses", headers=headers, json={"input": "hello"})
 
     assert response.status_code == 404

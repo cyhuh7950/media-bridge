@@ -128,6 +128,9 @@ class ResponsesIngressGateway:
         self._receipt_signer = receipt_signer
         self._state_store = state_store
 
+    def clear_state(self) -> None:
+        self._state_store.clear()
+
     async def invoke(self, payload: object, *, tenant_id: str) -> ResponsesGatewayResult:
         state = None
         if isinstance(payload, dict):

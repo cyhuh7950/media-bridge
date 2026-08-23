@@ -36,7 +36,11 @@ def run_http() -> None:
         raise RuntimeConfigurationError("HTTP port must be an integer") from error
     if port < 1 or port > 65_535:
         raise RuntimeConfigurationError("HTTP port is outside the valid range")
-    app = build_http_app(server=runtime.server, asset_store=runtime.asset_store)
+    app = build_http_app(
+        server=runtime.server,
+        asset_store=runtime.asset_store,
+        responses_gateway=runtime.responses_gateway,
+    )
     try:
         uvicorn.run(
             app,
