@@ -67,3 +67,20 @@ class PrepareForModelRequest(StrictModel):
     content: Annotated[list[ContentPart], Field(min_length=1, max_length=32)]
     target: TargetModel
     conversion_profile: Literal["generic", "error_screenshot", "document"] = "generic"
+
+
+class SafeError(StrictModel):
+    code: Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
+    message: Annotated[str, StringConstraints(max_length=200)]
+
+
+class PrepareForModelResult(StrictModel):
+    action: Literal["passthrough", "converted", "blocked"]
+    target_model: str
+    contains_media: bool
+    contains_image: bool
+    contains_pdf: bool
+    target_supports_vision: bool | None
+    sanitized_text: Annotated[str, StringConstraints(max_length=200_000)] | None
+    original_image_removed: bool
+    error: SafeError | None

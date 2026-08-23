@@ -26,8 +26,8 @@ from media_bridge.gate import (
 from media_bridge.receipts import GateReceiptSigner, ReceiptBinding
 from media_bridge.router import (
     DownstreamRequest,
-    GuardRejected,
     GuardedDownstream,
+    GuardRejectedError,
     RouterAdapter,
 )
 from media_bridge.sanitizer import SanitizationError
@@ -364,6 +364,6 @@ async def test_guard_blocks_forged_nonvision_media_even_with_valid_signature() -
         receipt=signer.sign(binding),
     )
 
-    with pytest.raises(GuardRejected, match="media"):
+    with pytest.raises(GuardRejectedError, match="media"):
         await guarded.invoke(payload)
     assert len(spy.calls) == 0
