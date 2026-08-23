@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from media_bridge_control.db import Database
-from media_bridge_control.models import ModelCapability, Policy, Provider, User
+from media_bridge_control.models import ConfigDraft, ModelCapability, Policy, Provider, User
 from media_bridge_control.schemas import ModelCapabilityCreate, PolicyCreate, ProviderCreate
 
 
@@ -149,3 +150,29 @@ class ConfigurationService:
             "providers": providers,
             "policy": policies[0],
         }
+
+    def create_validated_draft(self, *, created_by: str) -> dict[str, Any]:
+        body = self.snapshot_body()
+        with self._database.session() as session:
+            current_revision = session.scalar(
+                select(func.coalesce(func.max(ConfigDraft.revision), 0))
+            )
+            draft = ConfigDraft(
+                revision=int(current_revision or 0) + 1,
+                body=body,
+                created_by=UUID(created_by),
+            )
+            session.add(draft)
+            session.flush()
+            return {
+                "draft_id": str(draft.id),
+                "revision": draft.revision,
+                "status": "validated",
+            }
+
+    def get_draft_body(self, draft_id: UUID) -> dict[str, Any]:
+        with self._database.session() as session:
+            draft = session.get(ConfigDraft, draft_id)
+            if draft is None:
+                raise ConfigurationError("draft_not_found")
+            return dict(draft.body)

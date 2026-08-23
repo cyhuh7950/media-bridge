@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from typing import Any
+from uuid import UUID
 
 from pydantic import ValidationError
 from starlette.applications import Starlette
@@ -29,6 +30,8 @@ from media_bridge_control.schemas import (
     ModelCapabilityCreate,
     PolicyCreate,
     ProviderCreate,
+    PublishSnapshotRequest,
+    UserCreate,
 )
 from media_bridge_control.snapshots import SnapshotPublisher, SnapshotPublishError
 
@@ -194,10 +197,44 @@ def build_control_app(
         return principal, None
 
     async def users(request: Request) -> Response:
-        _, rejected = await authorize(request, roles=frozenset({"admin"}))
+        writable = request.method == "POST"
+        principal, rejected = await authorize(
+            request,
+            roles=frozenset({"admin"}),
+            require_csrf=writable,
+        )
         if rejected is not None:
             return rejected
-        return JSONResponse(await run_in_threadpool(configuration.list_users))
+        if not writable:
+            return JSONResponse(await run_in_threadpool(configuration.list_users))
+        if principal is None:
+            return _error("unauthorized", 401)
+        try:
+            body = await _json(request, UserCreate)
+            created = await run_in_threadpool(
+                service.create_user,
+                username=body.username,
+                password=body.password,
+                role=body.role,
+            )
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="user.created",
+                target_type="user",
+                target_id=created.user_id,
+                details={"role": created.role, "status": "created"},
+            )
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        return JSONResponse(
+            {
+                "user_id": created.user_id,
+                "username": created.username,
+                "role": created.role,
+            },
+            status_code=201,
+        )
 
     async def providers(request: Request) -> Response:
         writable = request.method == "POST"
@@ -356,8 +393,17 @@ def build_control_app(
         if principal is None:
             return _error("unauthorized", 401)
         try:
-            body = await run_in_threadpool(configuration.snapshot_body)
-            published = await run_in_threadpool(snapshot_publisher.publish, body)
+            request_body = await _json(request, PublishSnapshotRequest)
+            body = await run_in_threadpool(
+                configuration.get_draft_body,
+                request_body.draft_id,
+            )
+            published = await run_in_threadpool(
+                snapshot_publisher.publish,
+                body,
+                source_draft_id=request_body.draft_id,
+                created_by=UUID(principal.user_id),
+            )
             await run_in_threadpool(
                 audit.write,
                 actor_id=principal.user_id,
@@ -366,8 +412,11 @@ def build_control_app(
                 target_id=str(published.snapshot_id),
                 details={"version": published.version, "status": "published"},
             )
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
         except ConfigurationError as error:
-            return _error(error.code, 409)
+            status = 404 if error.code == "draft_not_found" else 409
+            return _error(error.code, status)
         except SnapshotPublishError:
             return _error("snapshot_publish_failed", 500)
         return JSONResponse(published.model_dump(mode="json"), status_code=201)
@@ -386,7 +435,11 @@ def build_control_app(
             return _error("unauthorized", 401)
         try:
             version = int(request.path_params["version"])
-            published = await run_in_threadpool(snapshot_publisher.rollback, version)
+            published = await run_in_threadpool(
+                snapshot_publisher.rollback,
+                version,
+                created_by=UUID(principal.user_id),
+            )
             await run_in_threadpool(
                 audit.write,
                 actor_id=principal.user_id,
@@ -398,6 +451,35 @@ def build_control_app(
         except (ValueError, SnapshotPublishError):
             return _error("snapshot_rollback_failed", 400)
         return JSONResponse(published.model_dump(mode="json"), status_code=201)
+
+    async def validate_draft(request: Request) -> Response:
+        principal, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
+        try:
+            if await request.body() not in {b"", b"{}"}:
+                return _error("invalid_request", 400)
+            draft = await run_in_threadpool(
+                configuration.create_validated_draft,
+                created_by=principal.user_id,
+            )
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="draft.validated",
+                target_type="draft",
+                target_id=draft["draft_id"],
+                details={"version": draft["revision"], "status": "validated"},
+            )
+        except ConfigurationError as error:
+            return _error(error.code, 409)
+        return JSONResponse(draft, status_code=201)
 
     async def audit_events(request: Request) -> Response:
         _, rejected = await authorize(
@@ -424,7 +506,7 @@ def build_control_app(
             Route("/admin/v1/auth/login", login, methods=["POST"]),
             Route("/admin/v1/auth/logout", logout, methods=["POST"]),
             Route("/admin/v1/me", me, methods=["GET"]),
-            Route("/admin/v1/users", users, methods=["GET"]),
+            Route("/admin/v1/users", users, methods=["GET", "POST"]),
             Route("/admin/v1/providers", providers, methods=["GET", "POST"]),
             Route("/admin/v1/models", models, methods=["GET", "POST"]),
             Route("/admin/v1/policies", policies, methods=["GET", "POST"]),
@@ -439,6 +521,7 @@ def build_control_app(
                 methods=["DELETE"],
             ),
             Route("/admin/v1/snapshots", snapshots, methods=["GET", "POST"]),
+            Route("/admin/v1/drafts/validate", validate_draft, methods=["POST"]),
             Route(
                 "/admin/v1/snapshots/{version:int}/rollback",
                 snapshot_rollback,

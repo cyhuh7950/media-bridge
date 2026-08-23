@@ -206,6 +206,30 @@ class ControlPlaneService:
             role=role,
         )
 
+    def create_user(self, *, username: str, password: str, role: str) -> Principal:
+        if role not in {item.value for item in Role}:
+            raise ControlPlaneError("invalid_input")
+        normalized = self._username(username)
+        try:
+            password_hash = self.security.passwords.hash(password)
+            with self.database.session() as session:
+                user = User(
+                    username=normalized,
+                    password_hash=password_hash,
+                    role=role,
+                    is_active=True,
+                )
+                session.add(user)
+                session.flush()
+                return Principal(
+                    user_id=str(user.id),
+                    username=user.username,
+                    role=user.role,
+                    session_selector="",
+                )
+        except ValueError as error:
+            raise ControlPlaneError("invalid_input") from error
+
     def authenticate(self, session_token: str) -> Principal:
         now = self._now()
         selector = self.security.selector(session_token, prefix="mbs")

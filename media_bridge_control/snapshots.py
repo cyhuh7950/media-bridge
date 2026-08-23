@@ -98,7 +98,13 @@ class SnapshotPublisher:
         self._output_path = output_path
         self._now = now
 
-    def publish(self, body: dict[str, Any]) -> SignedSnapshot:
+    def publish(
+        self,
+        body: dict[str, Any],
+        *,
+        source_draft_id: UUID | None = None,
+        created_by: UUID | None = None,
+    ) -> SignedSnapshot:
         with self._database.session() as session:
             session.execute(text("SELECT pg_advisory_xact_lock(628194733)"))
             stored_key = session.get(SigningKey, self._signer.key_id)
@@ -134,18 +140,20 @@ class SnapshotPublisher:
                     digest=signed.digest,
                     signature=signed.signature,
                     key_id=signed.key_id,
+                    source_draft_id=source_draft_id,
+                    created_by=created_by,
                 )
             )
         self._atomic_write(signed)
         return signed
 
-    def rollback(self, version: int) -> SignedSnapshot:
+    def rollback(self, version: int, *, created_by: UUID | None = None) -> SignedSnapshot:
         with self._database.session() as session:
             previous = session.scalar(select(Snapshot).where(Snapshot.version == version))
             if previous is None:
                 raise SnapshotPublishError("snapshot version was not found")
             body = dict(previous.body)
-        return self.publish(body)
+        return self.publish(body, created_by=created_by)
 
     def list(self) -> list[dict[str, Any]]:
         with self._database.session() as session:

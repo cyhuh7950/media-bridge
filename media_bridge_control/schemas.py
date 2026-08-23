@@ -3,6 +3,7 @@
 import re
 from datetime import datetime
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import ConfigDict, Field, StringConstraints, field_validator, model_validator
 
@@ -28,6 +29,12 @@ class BootstrapRequest(AdminStrictModel):
 class LoginRequest(AdminStrictModel):
     username: Username
     password: Annotated[str, StringConstraints(min_length=1, max_length=1_024)]
+
+
+class UserCreate(AdminStrictModel):
+    username: Username
+    password: Password
+    role: Literal["admin", "operator", "viewer"]
 
 
 class SecretReference(AdminStrictModel):
@@ -121,6 +128,10 @@ class CredentialCreate(AdminStrictModel):
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("credential expiry must be timezone-aware")
         return value
+
+
+class PublishSnapshotRequest(AdminStrictModel):
+    draft_id: UUID
 
 
 class SafeAdminError(AdminStrictModel):
