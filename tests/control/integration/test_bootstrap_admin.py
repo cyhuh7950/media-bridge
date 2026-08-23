@@ -19,6 +19,10 @@ class MutableClock:
         return self.value
 
 
+def _long_test_value() -> str:
+    return "correct horse battery staple"
+
+
 @pytest.fixture()
 def service(migrated_postgres: str) -> tuple[ControlPlaneService, Database, MutableClock]:
     database = Database(migrated_postgres)
@@ -49,7 +53,7 @@ def test_bootstrap_token_expires_and_plaintext_is_not_persisted(
         control.complete_bootstrap(
             token=token,
             username="admin",
-            password="correct horse battery staple",
+            password=_long_test_value(),
         )
     assert failure.value.code == "bootstrap_token_invalid"
 
@@ -62,7 +66,7 @@ def test_bootstrap_is_single_use_and_password_recovery_values_are_hashed(
     result = control.complete_bootstrap(
         token=token,
         username="admin",
-        password="correct horse battery staple",
+        password=_long_test_value(),
     )
 
     assert result.role == "admin"
@@ -82,7 +86,7 @@ def test_bootstrap_is_single_use_and_password_recovery_values_are_hashed(
         control.complete_bootstrap(
             token=token,
             username="second",
-            password="correct horse battery staple",
+            password=_long_test_value(),
         )
     assert reused.value.code == "bootstrap_token_invalid"
 

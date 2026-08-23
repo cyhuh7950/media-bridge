@@ -10,6 +10,10 @@ from media_bridge_control.db import Database
 from media_bridge_control.security import SecurityContext
 
 
+def _long_test_value() -> str:
+    return "correct horse battery staple"
+
+
 def _client(database_url: str) -> tuple[TestClient, ControlPlaneService, Database]:
     database = Database(database_url)
     service = ControlPlaneService(
@@ -21,7 +25,7 @@ def _client(database_url: str) -> tuple[TestClient, ControlPlaneService, Databas
     service.complete_bootstrap(
         token=token,
         username="admin",
-        password="correct horse battery staple",
+        password=_long_test_value(),
     )
     app = build_control_app(
         service=service,
