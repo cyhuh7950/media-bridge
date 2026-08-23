@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nonvision-media-bridge"
+version = "0.1.0"
+description = "Fail-closed media pre-request gate and MCP server for non-vision models"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "httpx>=0.28.1,<1",
+  "mcp==2.0.0",
+  "Pillow>=11.3.0,<13",
+  "pydantic>=2.11.0,<3",
+  "pypdf>=6.0.0,<7",
+  "PyYAML>=6.0.2,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.17.0,<2",
+  "pytest>=8.4.0,<9",
+  "pytest-asyncio>=1.1.0,<2",
+  "pytest-cov>=6.2.0,<8",
+  "ruff>=0.12.0,<1",
+]
+
+[project.scripts]
+media-bridge-stdio = "media_bridge.entrypoints:run_stdio"
+media-bridge-http = "media_bridge.entrypoints:run_http"
+
+[tool.setuptools.packages.find]
+include = ["media_bridge*", "solar_error_analyzer*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "--strict-config"]
+asyncio_mode = "auto"
+markers = [
+  "integration: multi-component integration tests",
+  "security: security-boundary regression tests",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["media_bridge"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "S"]
+ignore = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["media_bridge"]
