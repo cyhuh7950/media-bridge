@@ -192,5 +192,6 @@ async def test_adapter_accepts_bounded_sse_and_extracts_response_id(
 
     assert response.response_id == "resp_sse"
     assert response.content_type == "text/event-stream"
-    assert json.loads(response.body.split(b"data: ")[1].splitlines()[0])["response"]["id"] == "resp_sse"
+    event = json.loads(response.body.split(b"data: ")[1].splitlines()[0])
+    assert event["response"]["id"] == "resp_sse"
     await adapter.close()

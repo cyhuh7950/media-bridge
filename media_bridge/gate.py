@@ -13,7 +13,7 @@ from typing import Literal, Protocol
 
 from media_bridge.acquisition import MediaAcquirer
 from media_bridge.backends import BackendStatus, OcrBackend, VisionBackend
-from media_bridge.capabilities import CapabilityRegistry, CapabilityState
+from media_bridge.capabilities import CapabilityRegistry, CapabilityResolution, CapabilityState
 from media_bridge.contracts import (
     Base64Source,
     ContentPart,
@@ -127,6 +127,9 @@ class PreRequestGate:
         self._pdf_renderer = pdf_renderer or PdfiumPageRenderer()
         self._now = now or (lambda: datetime.now(UTC))
 
+    def resolve_capability(self, target_id: str) -> CapabilityResolution:
+        return self._registry.resolve(target_id, self._now())
+
     async def prepare_for_model(
         self,
         request: PrepareForModelRequest,
@@ -135,7 +138,7 @@ class PreRequestGate:
     ) -> GateOutcome:
         detection = detect_media(request.content)
         target_id = request.target.registry_id
-        resolution = self._registry.resolve(target_id, self._now())
+        resolution = self.resolve_capability(target_id)
         if resolution.state is CapabilityState.UNKNOWN:
             return self._blocked(request, "capability_unknown", "Target capability is unknown.")
         if resolution.state is CapabilityState.STALE:

@@ -210,7 +210,10 @@ async def test_safe_followup_is_rebuilt_without_previous_or_assistant_items(
         monkeypatch,
         httpx.MockTransport(handler),
     )
-    first = await gateway.invoke({"model": "text-model", "input": "safe first"}, tenant_id="tenant-a")
+    first = await gateway.invoke(
+        {"model": "text-model", "input": "safe first"},
+        tenant_id="tenant-a",
+    )
     assert first.status == "completed"
 
     second = await gateway.invoke(
