@@ -8,7 +8,6 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
-
 ROOT = Path(__file__).resolve().parents[3]
 EXPECTED_TABLES = {
     "admin_sessions",
@@ -38,7 +37,7 @@ def test_fresh_upgrade_creates_control_plane_schema(clean_postgres: str) -> None
     command.upgrade(_config(clean_postgres), "head")
 
     engine = create_engine(clean_postgres)
-    assert EXPECTED_TABLES <= set(inspect(engine).get_table_names())
+    assert set(inspect(engine).get_table_names()) >= EXPECTED_TABLES
     with engine.connect() as connection:
         revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
     engine.dispose()
@@ -51,12 +50,12 @@ def test_migration_round_trip_is_reversible(clean_postgres: str) -> None:
     command.downgrade(config, "base")
 
     engine = create_engine(clean_postgres)
-    assert set(inspect(engine).get_table_names()) == set()
+    assert set(inspect(engine).get_table_names()) <= {"alembic_version"}
     engine.dispose()
 
     command.upgrade(config, "head")
     engine = create_engine(clean_postgres)
-    assert EXPECTED_TABLES <= set(inspect(engine).get_table_names())
+    assert set(inspect(engine).get_table_names()) >= EXPECTED_TABLES
     engine.dispose()
 
 
@@ -72,16 +71,15 @@ def test_user_identity_is_unique_and_snapshot_rows_are_immutable(clean_postgres:
                 "'admin', 'hash', 'admin', true)"
             )
         )
-    with pytest.raises(IntegrityError):
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO users "
-                    "(id, username, password_hash, role, is_active) "
-                    "VALUES ('00000000-0000-0000-0000-000000000002', "
-                    "'admin', 'hash', 'viewer', true)"
-                )
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users "
+                "(id, username, password_hash, role, is_active) "
+                "VALUES ('00000000-0000-0000-0000-000000000002', "
+                "'admin', 'hash', 'viewer', true)"
             )
+        )
 
     with engine.begin() as connection:
         connection.execute(
@@ -100,9 +98,8 @@ def test_user_identity_is_unique_and_snapshot_rows_are_immutable(clean_postgres:
                 "'ed25519:test', 'test-key')"
             )
         )
-    with pytest.raises(IntegrityError):
-        with engine.begin() as connection:
-            connection.execute(
-                text("UPDATE snapshots SET digest = 'sha256:changed' WHERE version = 1")
-            )
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text("UPDATE snapshots SET digest = 'sha256:changed' WHERE version = 1")
+        )
     engine.dispose()

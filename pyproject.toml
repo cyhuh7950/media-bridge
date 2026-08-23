@@ -9,6 +9,7 @@ description = "Fail-closed media pre-request gate and MCP server for non-vision 
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "cryptography>=50.0.0,<51",
   "httpx>=0.28.1,<1",
   "mcp==2.0.0",
   "Pillow>=11.3.0,<13",
@@ -21,6 +22,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+control = [
+  "alembic>=1.19.1,<2",
+  "argon2-cffi>=25.1.0,<26",
+  "psycopg[binary]>=3.3.4,<4",
+  "SQLAlchemy>=2.0.52,<3",
+]
 dev = [
   "mypy>=1.17.0,<2",
   "pytest>=8.4.0,<9",
@@ -67,4 +74,4 @@ ignore = ["S101"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["media_bridge"]
+packages = ["media_bridge", "media_bridge_control"]
