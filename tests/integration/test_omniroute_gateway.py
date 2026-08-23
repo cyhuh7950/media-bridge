@@ -20,6 +20,7 @@ from media_bridge.omniroute_adapter import GuardedOmniRouteAdapter
 from media_bridge.receipts import GateReceiptSigner
 from media_bridge.responses_gateway import ResponsesIngressGateway
 from media_bridge.responses_state import ResponsesStateStore
+from media_bridge.workspace import TemporaryMediaWorkspace
 
 
 def _png() -> bytes:
@@ -81,6 +82,8 @@ def _gateway(
     *,
     ocr: FakeOcr | None = None,
     vision: FakeVision | None = None,
+    sanitizer: Any = None,
+    workspace_factory: Any = None,
 ) -> tuple[ResponsesIngressGateway, GuardedOmniRouteAdapter, ResponsesStateStore]:
     now = datetime(2026, 8, 24, tzinfo=UTC)
     signer = GateReceiptSigner(secret=b"r" * 32, clock=lambda: now.timestamp())
@@ -90,6 +93,8 @@ def _gateway(
         ocr_backend=ocr or FakeOcr(),
         vision_backend=vision or FakeVision(),
         receipt_signer=signer,
+        sanitizer=sanitizer,
+        workspace_factory=workspace_factory,
         now=lambda: now,
     )
     monkeypatch.setenv("TEST_OMNIROUTE_KEY", "omniroute-secret")
@@ -321,9 +326,11 @@ async def test_unknown_and_stale_capability_make_zero_omniroute_calls(
 
 
 @pytest.mark.asyncio
-async def test_conversion_failure_makes_zero_omniroute_calls(
+@pytest.mark.parametrize("failure_stage", ["ocr", "vision", "sanitizer", "cleanup"])
+async def test_every_conversion_failure_makes_zero_omniroute_calls(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    failure_stage: str,
 ) -> None:
     downstream_calls = 0
 
@@ -332,11 +339,20 @@ async def test_conversion_failure_makes_zero_omniroute_calls(
         downstream_calls += 1
         return httpx.Response(200, json={"id": "resp_forbidden"})
 
+    def rejected_sanitizer(_text: str, **_kwargs: Any) -> str:
+        raise RuntimeError("unsafe converted text")
+
+    def failed_workspace() -> TemporaryMediaWorkspace:
+        return TemporaryMediaWorkspace(parent=tmp_path, remove_tree=lambda _path: None)
+
     gateway, adapter, _state_store = _gateway(
         tmp_path,
         monkeypatch,
         httpx.MockTransport(handler),
-        ocr=FakeOcr(fail=True),
+        ocr=FakeOcr(fail=failure_stage == "ocr"),
+        vision=FakeVision(fail=failure_stage == "vision"),
+        sanitizer=rejected_sanitizer if failure_stage == "sanitizer" else None,
+        workspace_factory=failed_workspace if failure_stage == "cleanup" else None,
     )
 
     result = await gateway.invoke(
@@ -354,6 +370,11 @@ async def test_conversion_failure_makes_zero_omniroute_calls(
 
     assert result.status == "blocked"
     assert result.error is not None
-    assert result.error.code == "ocr_failed"
+    assert result.error.code == {
+        "ocr": "ocr_failed",
+        "vision": "vision_failed",
+        "sanitizer": "sanitization_failed",
+        "cleanup": "cleanup_failed",
+    }[failure_stage]
     assert downstream_calls == 0
     await adapter.close()

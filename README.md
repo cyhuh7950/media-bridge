@@ -4,21 +4,21 @@
 sanitizer를 통과한 텍스트만 전달하는 fail-closed MCP 제품입니다. Solar는 교체 가능한 텍스트
 분석 backend 중 하나입니다.
 
-핵심 안전 경계는 MCP 도구의 선택 호출이 아니라 `RouterAdapter`입니다.
+핵심 안전 경계는 MCP 도구의 선택 호출이 아니라 `/v1/responses` ingress와 `RouterAdapter`입니다.
 
-현재 commit의 core만으로 PCWSL Codex 요청이 자동 보호되는 것은 아닙니다. 승인된 다음 단계는
-Media Bridge가 `/v1/responses` ingress가 되어 gate 성공 후에만 OmniRoute를 호출하는 A안이며,
-실제 PCWSL provider 설정과 배포는 별도 승인 범위입니다.
+현재 브랜치에는 승인된 A안 ingress 코드가 구현돼 있지만 PCWSL Codex provider 설정과 배포는
+수행하지 않았습니다. 실제 traffic이 Media Bridge를 통하도록 연결하고 직접 OmniRoute 접근을
+차단하기 전에는 PCWSL 요청이 자동 보호된다고 간주하지 않습니다.
 
 ```text
-normalized request
-  -> exact capability registry
-  -> PreRequestGate
+OpenAI Responses request
+  -> strict normalizer + tenant state isolation
+  -> exact capability registry + PreRequestGate
       -> verified Vision: original media passthrough
-      -> Non-Vision: acquire -> OCR + Vision -> sanitize -> cleanup
+      -> Non-Vision: acquire -> PDF rasterize -> OCR + Vision -> sanitize -> cleanup
       -> unknown/stale/failure: blocked
-  -> signed receipt verification
-  -> downstream model
+  -> sealed receipt + payload digest verification
+  -> OmniRoute /v1/responses
 ```
 
 ## 제공 기능
@@ -26,8 +26,11 @@ normalized request
 - MCP 도구: `extract_image_context`, `analyze_error_image`, `prepare_for_model`
 - 병행 transport: stdio, 인증된 Streamable HTTP `/mcp`
 - 인증 업로드: `POST /assets` → tenant-scoped, one-shot `asset_id`
+- 강제 ingress: 인증된 `POST /v1/responses` → gate 성공 후에만 OmniRoute 호출
 - reference integration: mandatory `RouterAdapter`와 `GuardedDownstream`
+- Responses 후속 상태: tenant-scoped TTL 30분, 최대 1,000개, sanitized text만 저장
 - exact-ID capability registry와 만료 시각 기반 stale 차단
+- PDF: PDFium 5.12.1로 144 DPI page PNG 변환 후 OCR·Vision 수행
 - base64, asset, 제한적 local path, 기본 차단 URL 입력 경계
 - HMAC gate receipt, 임시 workspace 삭제 확인, asset TTL·종료 시 정리
 
@@ -57,6 +60,8 @@ python3 -m venv .venv
 | `MEDIA_BRIDGE_VISION_API_KEY` 또는 `_FILE` | Vision provider Secret |
 | `MEDIA_BRIDGE_TENANT_ID` | stdio transport tenant |
 | `MEDIA_BRIDGE_SERVICE_TOKEN` 또는 `_FILE` | HTTP bearer Secret |
+| `MEDIA_BRIDGE_OMNIROUTE_BASE_URL` | optional OmniRoute `/v1/responses`; 설정 시 ingress 활성화 |
+| `MEDIA_BRIDGE_OMNIROUTE_API_KEY` 또는 `_FILE` | OmniRoute Secret |
 
 registry 형식은 `config/model_registry.example.yaml`을 복사한 뒤 실제 검증 정보와 만료 시각을
 갱신합니다. model 이름 추측은 지원하지 않습니다.
@@ -71,15 +76,31 @@ registry 형식은 `config/model_registry.example.yaml`을 복사한 뒤 실제 
 .venv/bin/media-bridge-http
 ```
 
-HTTP는 기본적으로 `127.0.0.1:8000`에 바인딩합니다. `/mcp`와 `/assets` 모두 bearer 및
-`X-Media-Bridge-Tenant`가 필요합니다. 운영 OAuth/mTLS, reverse proxy, 방화벽은 별도 배포
-계층의 책임입니다.
+HTTP는 기본적으로 `127.0.0.1:8000`에 바인딩합니다. `/mcp`, `/assets`, 활성화된
+`/v1/responses` 모두 bearer 및 `X-Media-Bridge-Tenant`가 필요합니다. 운영 OAuth/mTLS,
+reverse proxy, 방화벽은 별도 배포 계층의 책임입니다.
 
 ## 강제 router 사용
 
-일반 모델 요청, 후속 요청, subagent 요청은 모두 `RouterAdapter.invoke()`를 사용합니다.
-Non-Vision 호출에 기존 multimodal 대화 전체를 넘기지 않습니다. 자세한 reference adapter와
-OmniRoute 연결 지점은 `docs/router-integration.md`에 있습니다.
+일반 Codex·후속·subagent 요청은 Media Bridge provider의 `/v1/responses`를 사용해야 합니다.
+라이브러리 직접 통합은 `RouterAdapter.invoke()`를 사용합니다. Non-Vision 호출에 기존
+multimodal 대화 전체를 넘기지 않습니다. 자세한 연결 경계는 `docs/router-integration.md`에
+있습니다.
+
+배포 승인 후 사용할 Codex custom provider의 reference 형태는 다음과 같습니다. 이 설정은
+이번 작업에서 PCWSL에 적용하지 않았습니다.
+
+```toml
+[model_providers.media_bridge]
+name = "Media Bridge"
+base_url = "http://127.0.0.1:8000/v1"
+env_key = "MEDIA_BRIDGE_SERVICE_TOKEN"
+env_http_headers = { "X-Media-Bridge-Tenant" = "MEDIA_BRIDGE_TENANT_ID" }
+wire_api = "responses"
+```
+
+OmniRoute 직접 inference endpoint가 caller에서 계속 접근 가능하면 ingress를 우회할 수 있습니다.
+운영 연결에서는 network/router 계층에서 Media Bridge만 OmniRoute에 접근하도록 강제해야 합니다.
 
 ## 검증
 
@@ -90,8 +111,9 @@ OmniRoute 연결 지점은 `docs/router-integration.md`에 있습니다.
 .venv/bin/mypy media_bridge
 ```
 
-실제 provider 자격증명을 사용하는 OCR·Vision·Solar 호출과 운영 배포는 자동 테스트 범위가
-아닙니다. 상세 증거는 `docs/testing/media-bridge.tdd.md`를 확인합니다.
+실제 provider 자격증명을 사용하는 OCR·Vision·Solar 호출, PCWSL Codex→실제 OmniRoute E2E,
+운영 배포는 자동 테스트 범위가 아닙니다. 상세 증거는 `docs/testing/media-bridge.tdd.md`를
+확인합니다.
 
 ## 기존 Solar 코드
 
