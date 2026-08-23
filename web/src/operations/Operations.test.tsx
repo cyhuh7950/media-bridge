@@ -143,6 +143,6 @@ it("shows audit, operational event, health, and principal from their real endpoi
   expect(screen.getByText("snapshot_applied")).toBeInTheDocument();
   unmount();
   render(<SystemPage />);
-  expect(await screen.findByText("viewer")).toBeInTheDocument();
+  expect(await screen.findAllByText("viewer")).toHaveLength(2);
   expect(screen.getByText("ok")).toBeInTheDocument();
 });

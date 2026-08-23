@@ -10,6 +10,14 @@ import {
 import { useAuth } from "../auth/AuthProvider";
 import { OnboardingShell } from "../onboarding/OnboardingShell";
 import { PublishedSnapshotGuard } from "../onboarding/PublishedSnapshotGuard";
+import { AuditEventsPage } from "../operations/AuditEventsPage";
+import { CredentialsPage } from "../operations/CredentialsPage";
+import { DashboardPage } from "../operations/DashboardPage";
+import { ModelsPage } from "../operations/ModelsPage";
+import { PoliciesPage } from "../operations/PoliciesPage";
+import { ProvidersPage } from "../operations/ProvidersPage";
+import { SnapshotsPage } from "../operations/SnapshotsPage";
+import { SystemPage } from "../operations/SystemPage";
 
 function LoginPage() {
   const auth = useAuth();
@@ -57,16 +65,6 @@ function LoginPage() {
   );
 }
 
-function Dashboard() {
-  return (
-    <section aria-labelledby="dashboard-title">
-      <p className="eyebrow">Control Plane</p>
-      <h1 id="dashboard-title">Dashboard</h1>
-      <p>실제 Admin API 상태를 불러오는 중립적인 운영 화면입니다.</p>
-    </section>
-  );
-}
-
 function ConsoleLayout() {
   const auth = useAuth();
   if (auth.status !== "authenticated") return null;
@@ -81,12 +79,24 @@ function ConsoleLayout() {
         <NavLink to="/providers">Providers</NavLink>
         <NavLink to="/models">Models</NavLink>
         <NavLink to="/policies">Policies</NavLink>
+        {auth.principal.role === "admin" ? <NavLink to="/credentials">Credentials</NavLink> : null}
+        {auth.principal.role === "admin" ? <NavLink to="/snapshots">Snapshots</NavLink> : null}
+        <NavLink to="/audit">Audit &amp; Events</NavLink>
+        <NavLink to="/system">System</NavLink>
       </nav>
       <main>
         <Routes>
           <Route path="/setup" element={<OnboardingShell />} />
           <Route element={<PublishedSnapshotGuard />}>
-            <Route path="*" element={<Dashboard />} />
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/providers" element={<ProvidersPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
+            <Route path="/models" element={<ModelsPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
+            <Route path="/policies" element={<PoliciesPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
+            <Route path="/credentials" element={<CredentialsPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
+            <Route path="/snapshots" element={<SnapshotsPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
+            <Route path="/audit" element={<AuditEventsPage />} />
+            <Route path="/system" element={<SystemPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
       </main>

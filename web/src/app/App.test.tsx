@@ -10,15 +10,33 @@ function jsonResponse(body: object, status = 200): Response {
   });
 }
 
+function requestPath(input: Parameters<typeof fetch>[0]): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
 it("redirects an anonymous user to login and clears the password after authentication", async () => {
   window.history.replaceState({}, "", "/providers");
-  const fetchMock = vi
-    .fn()
-    .mockResolvedValueOnce(jsonResponse({ error: { code: "unauthorized" } }, 401))
-    .mockResolvedValueOnce(
-      jsonResponse({ username: "admin", role: "admin", csrf_token: "csrf-memory-only" }),
-    )
-    .mockResolvedValueOnce(jsonResponse([{ version: 1 }]));
+  let checkedSession = false;
+  const fetchMock = vi.fn<typeof fetch>((input, init) => {
+    const path = requestPath(input);
+    if (path === "/admin/v1/me" && !checkedSession) {
+      checkedSession = true;
+      return Promise.resolve(jsonResponse({ error: { code: "unauthorized" } }, 401));
+    }
+    if (path === "/admin/v1/auth/login" && init?.method === "POST") {
+      return Promise.resolve(
+        jsonResponse({ username: "admin", role: "admin", csrf_token: "csrf-memory-only" }),
+      );
+    }
+    if (path === "/admin/v1/health") return Promise.resolve(jsonResponse({ status: "ok" }));
+    if (path === "/admin/v1/snapshots") return Promise.resolve(jsonResponse([{ version: 1 }]));
+    if (["/admin/v1/providers", "/admin/v1/models", "/admin/v1/policies", "/admin/v1/events"].includes(path)) {
+      return Promise.resolve(jsonResponse([]));
+    }
+    return Promise.reject(new Error(`unexpected request: ${path}`));
+  });
   vi.stubGlobal("fetch", fetchMock);
   const user = userEvent.setup();
   const passwordMarker = "browser-password-marker";
@@ -38,5 +56,5 @@ it("redirects an anonymous user to login and clears the password after authentic
   expect(document.documentElement.outerHTML).not.toContain("csrf-memory-only");
   expect(window.localStorage).toHaveLength(0);
   expect(window.sessionStorage).toHaveLength(0);
-  expect(fetchMock.mock.calls[1]?.[0]).toBe("/admin/v1/auth/login");
+  expect(fetchMock.mock.calls.some(([input]) => requestPath(input) === "/admin/v1/auth/login")).toBe(true);
 });

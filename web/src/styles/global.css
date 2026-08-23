@@ -22,7 +22,16 @@ input, textarea { min-height: 2.75rem; border: 1px solid var(--border); border-r
 .dialog-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 1rem; background: rgb(7 22 19 / 72%); }
 .dialog-card { width: min(100%, 38rem); max-height: 90vh; overflow: auto; padding: 1.5rem; border-radius: .8rem; background: var(--panel); }
 .secret-once { overflow-wrap: anywhere; white-space: pre-wrap; }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+.metric-grid div { padding: 1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--panel); }
+.metric-grid dd { margin: .4rem 0 0; font-size: 1.6rem; font-weight: 700; }
+table { width: 100%; margin: 1rem 0; border-collapse: collapse; }
+th, td { padding: .75rem; border-bottom: 1px solid var(--border); text-align: left; overflow-wrap: anywhere; }
+.compact-form { max-width: 42rem; margin-top: 2rem; }
 @media (max-width: 47.99rem) {
   .app-shell { grid-template: auto auto 1fr / 1fr; }
   .app-shell nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  table, thead, tbody, tr, th, td { display: block; }
+  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  tr { margin-bottom: 1rem; border: 1px solid var(--border); border-radius: .75rem; }
 }
