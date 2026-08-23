@@ -15,6 +15,14 @@ from media_bridge_control.models import (
 from media_bridge_control.security import SecurityContext
 
 
+def _test_password_hash() -> str:
+    return "argon2id-placeholder"
+
+
+def _test_secret_ref() -> tuple[str, str]:
+    return "env", "MEDIA_BRIDGE_OCR_KEY"
+
+
 def test_control_snapshot_publishes_only_data_plane_credential_digest(
     migrated_postgres: str,
 ) -> None:
@@ -22,8 +30,9 @@ def test_control_snapshot_publishes_only_data_plane_credential_digest(
     database = Database(migrated_postgres)
     security = SecurityContext(pepper=b"p" * 32)
     raw = "mbc_selector-a.super-secret-value"
+    secret_ref_kind, secret_ref_identifier = _test_secret_ref()
     with database.session() as session:
-        user = User(username="admin", password_hash="argon2id-placeholder", role="admin")
+        user = User(username="admin", password_hash=_test_password_hash(), role="admin")
         session.add(user)
         session.flush()
         session.add_all(
@@ -40,8 +49,8 @@ def test_control_snapshot_publishes_only_data_plane_credential_digest(
                     name="ocr",
                     kind="ocr",
                     endpoint="https://provider.test/v1/ocr",
-                    secret_ref_kind="env",
-                    secret_ref_identifier="MEDIA_BRIDGE_OCR_KEY",
+                    secret_ref_kind=secret_ref_kind,
+                    secret_ref_identifier=secret_ref_identifier,
                 ),
                 ModelCapability(
                     model_id="vendor/text-model",
@@ -72,4 +81,4 @@ def test_control_snapshot_publishes_only_data_plane_credential_digest(
     assert entry["scopes"] == ["responses:invoke"]
     assert raw not in serialized
     assert "super-secret-value" not in serialized
-    database.dispose()
+    database.close()

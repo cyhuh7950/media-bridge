@@ -10,7 +10,14 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from media_bridge_control.db import Database
-from media_bridge_control.models import ConfigDraft, ModelCapability, Policy, Provider, User
+from media_bridge_control.models import (
+    ClientCredential,
+    ConfigDraft,
+    ModelCapability,
+    Policy,
+    Provider,
+    User,
+)
 from media_bridge_control.schemas import (
     ModelCapabilityCreate,
     ModelCapabilityUpdate,
@@ -268,7 +275,26 @@ class ConfigurationService:
             },
             "providers": providers,
             "policy": policies[0],
+            "data_plane_auth": {"entries": self._data_plane_auth_entries()},
         }
+
+    def _data_plane_auth_entries(self) -> list[dict[str, Any]]:
+        with self._database.session() as session:
+            rows = list(
+                session.scalars(
+                    select(ClientCredential).order_by(ClientCredential.selector)
+                )
+            )
+            return [
+                {
+                    "selector": row.selector,
+                    "digest": row.credential_digest,
+                    "scopes": sorted(row.scopes),
+                    "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+                    "revoked": row.revoked_at is not None,
+                }
+                for row in rows
+            ]
 
     def create_validated_draft(self, *, created_by: str) -> dict[str, Any]:
         body = self.snapshot_body()

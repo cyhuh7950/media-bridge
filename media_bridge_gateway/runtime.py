@@ -17,6 +17,7 @@ from media_bridge.config_snapshot import (
 from media_bridge.gate import PreRequestGate
 from media_bridge.receipts import GateReceiptSigner
 from media_bridge.responses_state import ResponsesStateStore
+from media_bridge_gateway.auth import SnapshotCredentialVerifier
 from media_bridge_gateway.contracts import (
     DataPlaneSubject,
     GatewayResult,
@@ -32,6 +33,7 @@ class GatewayGeneration:
     snapshot_digest: str
     gate: PreRequestGate
     downstream: ResponsesDownstream
+    credential_verifier: SnapshotCredentialVerifier
     transaction: GatewayTransaction
 
 
@@ -49,15 +51,21 @@ class GatewayTransactionFactory:
         downstream_factory: Callable[[SignedSnapshot], ResponsesDownstream],
         receipt_signer: GateReceiptSigner,
         state_store_factory: Callable[[], ResponsesStateStore],
+        credential_pepper: bytes,
     ) -> None:
         self._gate_factory = gate_factory
         self._downstream_factory = downstream_factory
         self._receipt_signer = receipt_signer
         self._state_store_factory = state_store_factory
+        self._credential_pepper = credential_pepper
 
     def build(self, snapshot: SignedSnapshot) -> GatewayGeneration:
         gate = self._gate_factory(snapshot)
         downstream = self._downstream_factory(snapshot)
+        credential_verifier = SnapshotCredentialVerifier(
+            snapshot=snapshot,
+            pepper=self._credential_pepper,
+        )
         transaction = GatewayTransaction(
             gate=gate,
             downstream=downstream,
@@ -71,6 +79,7 @@ class GatewayTransactionFactory:
             snapshot_digest=snapshot.digest,
             gate=gate,
             downstream=downstream,
+            credential_verifier=credential_verifier,
             transaction=transaction,
         )
 
