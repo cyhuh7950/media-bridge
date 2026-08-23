@@ -17,6 +17,7 @@ class ModelCapability:
     model_id: str
     input_modalities: set[str]
     expires_at: datetime
+    pdf_passthrough_verified: bool = False
 
     def supports_all(self, modalities: frozenset[str]) -> bool:
         return modalities.issubset(self.input_modalities)

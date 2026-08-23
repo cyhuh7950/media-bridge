@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -23,6 +24,12 @@ from media_bridge.contracts import (
     TextPart,
 )
 from media_bridge.detector import detect_media
+from media_bridge.pdf_pipeline import (
+    PdfiumPageRenderer,
+    PdfPageRenderer,
+    PdfRenderingError,
+    RenderedPdfPage,
+)
 from media_bridge.receipts import GateReceiptSigner, ReceiptBinding
 from media_bridge.sanitizer import sanitize_model_text
 from media_bridge.workspace import CleanupError, TemporaryMediaWorkspace
@@ -107,6 +114,7 @@ class PreRequestGate:
         receipt_signer: GateReceiptSigner,
         sanitizer: Sanitizer | None = None,
         workspace_factory: Callable[[], TemporaryMediaWorkspace] | None = None,
+        pdf_renderer: PdfPageRenderer | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self._registry = registry
@@ -116,6 +124,7 @@ class PreRequestGate:
         self._receipt_signer = receipt_signer
         self._sanitizer = sanitizer or sanitize_model_text
         self._workspace_factory = workspace_factory or TemporaryMediaWorkspace
+        self._pdf_renderer = pdf_renderer or PdfiumPageRenderer()
         self._now = now or (lambda: datetime.now(UTC))
 
     async def prepare_for_model(
@@ -140,6 +149,12 @@ class PreRequestGate:
                     request,
                     "unsupported_media_modality",
                     "Target does not support every requested media modality.",
+                )
+            if detection.contains_pdf and not resolution.capability.pdf_passthrough_verified:
+                return self._blocked(
+                    request,
+                    "pdf_passthrough_unverified",
+                    "Target PDF passthrough capability is not verified.",
                 )
             try:
                 normalized_vision_content = await self._normalize_vision_content(
@@ -262,31 +277,50 @@ class PreRequestGate:
                     "Temporary media workspace could not be created.",
                 ) from None
             processing_failure: GateFailureError | None = None
-            ocr_text: str | None = None
-            description: str | None = None
+            media_ocr_sections: list[str] = []
+            media_description_sections: list[str] = []
+            media_converted_sections: list[str] = []
             extension = ".pdf" if acquired.media_type == "pdf" else ".img"
             try:
                 workspace.write_bytes(f"media-{media_index}{extension}", acquired.data)
-                ocr_result = await self._ocr_backend.extract(
-                    data=acquired.data,
-                    mime_type=acquired.mime_type,
-                    filename=None,
-                )
-                if ocr_result.status is BackendStatus.FAILURE:
-                    raise GateFailureError("ocr_failed", "OCR conversion failed.")
-                ocr_text = ocr_result.text or "No text detected."
+                backend_pages = await self._backend_pages(acquired.data, acquired.media_type)
+                for page in backend_pages:
+                    if acquired.media_type == "pdf":
+                        workspace.write_bytes(
+                            f"media-{media_index}-{page.filename}",
+                            page.data,
+                        )
+                    ocr_result = await self._ocr_backend.extract(
+                        data=page.data,
+                        mime_type=page.mime_type,
+                        filename=page.filename if acquired.media_type == "pdf" else None,
+                    )
+                    if ocr_result.status is BackendStatus.FAILURE:
+                        raise GateFailureError("ocr_failed", "OCR conversion failed.")
+                    ocr_text = ocr_result.text or "No text detected."
 
-                vision_result = await self._vision_backend.describe(
-                    data=acquired.data,
-                    mime_type=acquired.mime_type,
-                    profile=conversion_profile,
-                )
-                if (
-                    vision_result.status is not BackendStatus.SUCCESS
-                    or not vision_result.description
-                ):
-                    raise GateFailureError("vision_failed", "Vision description failed.")
-                description = vision_result.description
+                    vision_result = await self._vision_backend.describe(
+                        data=page.data,
+                        mime_type=page.mime_type,
+                        profile=conversion_profile,
+                    )
+                    if (
+                        vision_result.status is not BackendStatus.SUCCESS
+                        or not vision_result.description
+                    ):
+                        raise GateFailureError("vision_failed", "Vision description failed.")
+                    description = vision_result.description
+                    media_ocr_sections.append(ocr_text)
+                    media_description_sections.append(description)
+                    page_label = (
+                        f"Media {media_index} page {page.page_number}"
+                        if acquired.media_type == "pdf"
+                        else f"Media {media_index}"
+                    )
+                    media_converted_sections.append(
+                        f"[{page_label} OCR]\n{ocr_text}\n"
+                        f"[{page_label} visual description]\n{description}"
+                    )
             except GateFailureError as failure:
                 processing_failure = failure
             except Exception:
@@ -303,13 +337,10 @@ class PreRequestGate:
                 ) from None
             if processing_failure is not None:
                 raise processing_failure
-            ocr_sections.append(ocr_text or "No text detected.")
-            description_sections.append(description or "")
+            ocr_sections.extend(media_ocr_sections)
+            description_sections.extend(media_description_sections)
             media_modalities.append(acquired.media_type)  # type: ignore[arg-type]
-            converted_sections.append(
-                f"[Media {media_index} OCR]\n{ocr_text}\n"
-                f"[Media {media_index} visual description]\n{description}"
-            )
+            converted_sections.extend(media_converted_sections)
 
         try:
             return ConvertedContext(
@@ -335,6 +366,43 @@ class PreRequestGate:
                 "sanitization_failed",
                 "Converted text could not be sanitized.",
             ) from None
+
+    async def _backend_pages(
+        self,
+        data: bytes,
+        media_type: str,
+    ) -> tuple[RenderedPdfPage, ...]:
+        if media_type != "pdf":
+            return (
+                RenderedPdfPage(
+                    page_number=1,
+                    data=data,
+                    mime_type="image/png"
+                    if data.startswith(b"\x89PNG\r\n\x1a\n")
+                    else "image/jpeg"
+                    if data.startswith(b"\xff\xd8\xff")
+                    else "image/webp",
+                    filename="image",
+                ),
+            )
+        try:
+            rendered = await asyncio.to_thread(self._pdf_renderer.render, data)
+        except PdfRenderingError:
+            raise GateFailureError(
+                "pdf_render_failed",
+                "PDF pages could not be rendered safely.",
+            ) from None
+        except Exception:
+            raise GateFailureError(
+                "pdf_render_failed",
+                "PDF pages could not be rendered safely.",
+            ) from None
+        if not rendered:
+            raise GateFailureError(
+                "pdf_render_failed",
+                "PDF pages could not be rendered safely.",
+            )
+        return rendered
 
     def _ready(
         self,

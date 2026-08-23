@@ -224,6 +224,8 @@ class OpenAICompatibleVisionBackend:
         mime_type: str,
         profile: str,
     ) -> VisionResult:
+        if mime_type not in {"image/png", "image/jpeg", "image/webp"}:
+            return VisionResult(BackendStatus.FAILURE, error_code="unsupported_media")
         try:
             secret = load_secret(self._api_key_env, self._api_key_file_env)
         except SecretConfigurationError:

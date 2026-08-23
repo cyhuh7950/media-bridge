@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 from pypdf import PdfWriter
 
-from media_bridge.pdf_pipeline import PdfRenderingError, PdfiumPageRenderer
+from media_bridge.pdf_pipeline import PdfiumPageRenderer, PdfRenderingError
 
 
 def _pdf(*, pages: int = 1, width: float = 72, height: float = 72) -> bytes:

@@ -27,6 +27,7 @@ from media_bridge.contracts import StrictModel
 from media_bridge.gate import PreRequestGate
 from media_bridge.http_app import current_tenant
 from media_bridge.mcp_server import build_mcp_server
+from media_bridge.pdf_pipeline import PdfiumPageRenderer
 from media_bridge.receipts import GateReceiptSigner
 from media_bridge.service import MediaBridgeService
 
@@ -42,6 +43,7 @@ class RegistryModelEntry(StrictModel):
     ] = Field(alias="id")
     input_modalities: set[Literal["text", "image", "pdf"]]
     expires_at: datetime
+    pdf_passthrough_verified: bool = False
 
     @field_validator("expires_at")
     @classmethod
@@ -94,6 +96,7 @@ def _load_registry(path: Path) -> CapabilityRegistry:
             model_id=entry.model_id,
             input_modalities=set(entry.input_modalities),
             expires_at=entry.expires_at,
+            pdf_passthrough_verified=entry.pdf_passthrough_verified,
         )
         for entry in document.models
     ]
@@ -156,6 +159,7 @@ def build_runtime_from_environment() -> MediaBridgeRuntime:
         ocr_backend=ocr,
         vision_backend=vision,
         receipt_signer=signer,
+        pdf_renderer=PdfiumPageRenderer(),
     )
     service = MediaBridgeService(gate=gate, analysis_backends={"solar": solar})
     server = build_mcp_server(service, tenant_provider=_tenant_provider)
