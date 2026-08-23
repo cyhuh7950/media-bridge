@@ -57,6 +57,8 @@ class GuardedDownstream:
             raise GuardRejectedError("non-vision downstream payload contains media")
         if payload.capability not in {"non_vision", "vision"}:
             raise GuardRejectedError("downstream capability is not active and exact")
+        if payload.action not in {"passthrough", "converted"}:
+            raise GuardRejectedError("downstream action is not permitted")
         if payload.action == "converted" and payload.capability != "non_vision":
             raise GuardRejectedError("converted payload has an invalid capability boundary")
 

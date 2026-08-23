@@ -36,6 +36,11 @@ class CapabilityRegistry:
     """Resolve only operator-registered exact model identifiers."""
 
     def __init__(self, capabilities: list[ModelCapability], version: str) -> None:
+        model_ids = [item.model_id for item in capabilities]
+        if len(model_ids) != len(set(model_ids)):
+            raise ValueError("capability registry contains duplicate model identifiers")
+        if any("text" not in item.input_modalities for item in capabilities):
+            raise ValueError("every registered model must explicitly support text input")
         self._capabilities = {item.model_id: item for item in capabilities}
         self.version = version
 

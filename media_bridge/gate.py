@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from collections.abc import Callable, Iterable
@@ -9,11 +10,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, Protocol
 
-from media_bridge.acquisition import AcquisitionError, MediaAcquirer
-from media_bridge.assets import AssetAccessError
+from media_bridge.acquisition import MediaAcquirer
 from media_bridge.backends import BackendStatus, OcrBackend, VisionBackend
 from media_bridge.capabilities import CapabilityRegistry, CapabilityState
 from media_bridge.contracts import (
+    Base64Source,
     ContentPart,
     MediaPart,
     PrepareForModelRequest,
@@ -23,7 +24,7 @@ from media_bridge.contracts import (
 )
 from media_bridge.detector import detect_media
 from media_bridge.receipts import GateReceiptSigner, ReceiptBinding
-from media_bridge.sanitizer import SanitizationError, sanitize_model_text
+from media_bridge.sanitizer import sanitize_model_text
 from media_bridge.workspace import CleanupError, TemporaryMediaWorkspace
 
 
@@ -140,9 +141,16 @@ class PreRequestGate:
                     "unsupported_media_modality",
                     "Target does not support every requested media modality.",
                 )
+            try:
+                normalized_vision_content = await self._normalize_vision_content(
+                    request.content,
+                    tenant_id=tenant_id,
+                )
+            except GateFailureError as failure:
+                return self._blocked(request, failure.code, failure.safe_message)
             return self._ready(
                 request,
-                content=tuple(request.content),
+                content=normalized_vision_content,
                 capability=resolution.state,
                 action="passthrough",
                 sanitized_text=self._join_text(request.content),
@@ -158,6 +166,12 @@ class PreRequestGate:
                 )
             except GateFailureError as failure:
                 return self._blocked(request, failure.code, failure.safe_message)
+            except Exception:
+                return self._blocked(
+                    request,
+                    "preprocessing_failed",
+                    "Media preprocessing failed safely.",
+                )
             return self._ready(
                 request,
                 content=(TextPart(text=converted.structured_context),),
@@ -176,6 +190,35 @@ class PreRequestGate:
             sanitized_text=text,
             original_image_removed=True,
         )
+
+    async def _normalize_vision_content(
+        self,
+        content: list[ContentPart],
+        *,
+        tenant_id: str,
+    ) -> tuple[ContentPart, ...]:
+        normalized: list[ContentPart] = []
+        for part in content:
+            if not isinstance(part, MediaPart):
+                normalized.append(part)
+                continue
+            try:
+                acquired = await self._acquirer.acquire(part, tenant_id=tenant_id)
+            except Exception:
+                raise GateFailureError(
+                    "media_acquisition_failed",
+                    "Media could not be acquired safely.",
+                ) from None
+            normalized.append(
+                MediaPart(
+                    media_type=part.media_type,
+                    source=Base64Source(
+                        data=base64.b64encode(acquired.data).decode("ascii"),
+                    ),
+                    declared_mime=acquired.mime_type,
+                )
+            )
+        return tuple(normalized)
 
     async def extract_context(
         self,
@@ -202,7 +245,7 @@ class PreRequestGate:
             media_index += 1
             try:
                 acquired = await self._acquirer.acquire(part, tenant_id=tenant_id)
-            except (AcquisitionError, AssetAccessError):
+            except Exception:
                 raise GateFailureError(
                     "media_acquisition_failed",
                     "Media could not be acquired safely.",
@@ -211,7 +254,13 @@ class PreRequestGate:
             if acquired.filename:
                 forbidden_locators.append(acquired.filename)
 
-            workspace = self._workspace_factory()
+            try:
+                workspace = self._workspace_factory()
+            except Exception:
+                raise GateFailureError(
+                    "workspace_failed",
+                    "Temporary media workspace could not be created.",
+                ) from None
             processing_failure: GateFailureError | None = None
             ocr_text: str | None = None
             description: str | None = None
@@ -281,7 +330,7 @@ class PreRequestGate:
                 ),
                 media_modalities=tuple(media_modalities),
             )
-        except (SanitizationError, ValueError):
+        except Exception:
             raise GateFailureError(
                 "sanitization_failed",
                 "Converted text could not be sanitized.",
