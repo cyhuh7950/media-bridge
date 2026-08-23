@@ -40,6 +40,7 @@ dev = [
 [project.scripts]
 media-bridge-stdio = "media_bridge.entrypoints:run_stdio"
 media-bridge-http = "media_bridge.entrypoints:run_http"
+media-bridge-control = "media_bridge_control.entrypoints:run_control"
 
 [tool.setuptools.packages.find]
 include = ["media_bridge*"]
