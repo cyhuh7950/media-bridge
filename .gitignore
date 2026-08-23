@@ -7,6 +7,10 @@ __pycache__/
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+node_modules/
+playwright-report/
+test-results/
+.vite/
 dist/
 build/
 *.egg-info/
