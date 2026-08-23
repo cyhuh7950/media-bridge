@@ -15,7 +15,11 @@ function AuthProbe() {
   const auth = useAuth();
   if (auth.status === "loading") return <p>loading</p>;
   if (auth.status === "anonymous") {
-    return <button onClick={() => void auth.login("admin", "test-value")}>login</button>;
+    return (
+      <button onClick={() => { void auth.login("admin", "test-value"); }}>
+        login
+      </button>
+    );
   }
   return (
     <>
@@ -52,7 +56,9 @@ describe("AuthProvider", () => {
     render(<AuthProvider><AuthProbe /></AuthProvider>);
     await user.click(await screen.findByRole("button", { name: "login" }));
 
-    await waitFor(() => expect(screen.getByText("admin:admin")).toBeInTheDocument());
+    await waitFor(() => {
+      expect(screen.getByText("admin:admin")).toBeInTheDocument();
+    });
     expect(window.localStorage).toHaveLength(0);
     expect(window.sessionStorage).toHaveLength(0);
     expect(document.documentElement.outerHTML).not.toContain("csrf-memory-only");

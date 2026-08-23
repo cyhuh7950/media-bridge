@@ -9,7 +9,7 @@ function jsonResponse(body: object, status = 200): Response {
 
 describe("adminRequest", () => {
   it("calls only the same-origin admin API with the session cookie", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({ username: "viewer", role: "viewer" }),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -57,7 +57,7 @@ describe("adminRequest", () => {
   });
 
   it("adds CSRF only to an explicit state-changing request", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}, 201));
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}, 201));
     vi.stubGlobal("fetch", fetchMock);
 
     await adminRequest("/providers", {
@@ -66,11 +66,10 @@ describe("adminRequest", () => {
       body: { name: "provider" },
     });
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/admin/v1/providers",
-      expect.objectContaining({
-        headers: expect.objectContaining({ "x-csrf-token": "csrf-test-value" }),
-      }),
+    const request = fetchMock.mock.calls[0];
+    expect(request?.[0]).toBe("/admin/v1/providers");
+    expect(new Headers(request?.[1]?.headers).get("x-csrf-token")).toBe(
+      "csrf-test-value",
     );
   });
 });

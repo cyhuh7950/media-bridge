@@ -29,7 +29,9 @@ it("redirects an anonymous user to login and clears the password after authentic
   await user.type(screen.getByLabelText("비밀번호"), passwordMarker);
   await user.click(screen.getByRole("button", { name: "로그인" }));
 
-  await waitFor(() => expect(screen.getByRole("navigation")).toBeInTheDocument());
+  await waitFor(() => {
+    expect(screen.getByRole("navigation")).toBeInTheDocument();
+  });
   expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
   expect(document.documentElement.outerHTML).not.toContain(passwordMarker);
   expect(document.documentElement.outerHTML).not.toContain("csrf-memory-only");
