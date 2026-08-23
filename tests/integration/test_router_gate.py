@@ -24,6 +24,7 @@ from media_bridge.gate import (
     PreRequestGate,
     digest_content,
 )
+from media_bridge.pdf_pipeline import PdfRenderingError, RenderedPdfPage
 from media_bridge.receipts import GateReceiptSigner, ReceiptBinding
 from media_bridge.router import (
     DownstreamRequest,
@@ -78,9 +79,11 @@ class FakeOcr:
     def __init__(self, result: OcrResult | None = None) -> None:
         self.result = result or OcrResult(BackendStatus.SUCCESS, text="ERROR 104: timeout")
         self.calls = 0
+        self.inputs: list[dict[str, Any]] = []
 
-    async def extract(self, **_kwargs: Any) -> OcrResult:
+    async def extract(self, **kwargs: Any) -> OcrResult:
         self.calls += 1
+        self.inputs.append(kwargs)
         return self.result
 
 
@@ -91,10 +94,32 @@ class FakeVision:
             description="Terminal screenshot with a red stack trace",
         )
         self.calls = 0
+        self.inputs: list[dict[str, Any]] = []
 
-    async def describe(self, **_kwargs: Any) -> VisionResult:
+    async def describe(self, **kwargs: Any) -> VisionResult:
         self.calls += 1
+        self.inputs.append(kwargs)
         return self.result
+
+
+class FakePdfRenderer:
+    def __init__(self, failure: bool = False) -> None:
+        self.failure = failure
+        self.calls = 0
+
+    def render(self, data: bytes) -> tuple[RenderedPdfPage, ...]:
+        self.calls += 1
+        assert data.startswith(b"%PDF-")
+        if self.failure:
+            raise PdfRenderingError("render failed")
+        return (
+            RenderedPdfPage(
+                page_number=1,
+                data=_png(),
+                mime_type="image/png",
+                filename="page-1.png",
+            ),
+        )
 
 
 class SpyDownstream:
@@ -111,7 +136,13 @@ def _registry(now: datetime) -> CapabilityRegistry:
     return CapabilityRegistry(
         [
             ModelCapability("text-model", {"text"}, future),
-            ModelCapability("vision-model", {"text", "image", "pdf"}, future),
+            ModelCapability(
+                "vision-model",
+                {"text", "image", "pdf"},
+                future,
+                pdf_passthrough_verified=True,
+            ),
+            ModelCapability("unverified-pdf-model", {"text", "pdf"}, future),
             ModelCapability("image-only-model", {"text", "image"}, future),
             ModelCapability("stale-model", {"text"}, now - timedelta(seconds=1)),
         ],
@@ -127,6 +158,7 @@ def _gate(
     vision: FakeVision | None = None,
     sanitizer: Any = None,
     workspace_factory: Any = None,
+    pdf_renderer: FakePdfRenderer | None = None,
 ) -> tuple[PreRequestGate, GateReceiptSigner]:
     signer = GateReceiptSigner(secret=b"g" * 32, clock=lambda: now.timestamp())
     gate = PreRequestGate(
@@ -137,6 +169,7 @@ def _gate(
         receipt_signer=signer,
         sanitizer=sanitizer,
         workspace_factory=workspace_factory,
+        pdf_renderer=pdf_renderer or FakePdfRenderer(),
         now=lambda: now,
     )
     return gate, signer
@@ -171,7 +204,16 @@ async def test_image_nonvision_delivers_only_converted_text(tmp_path: Path) -> N
 @pytest.mark.asyncio
 async def test_pdf_nonvision_delivers_only_converted_text(tmp_path: Path) -> None:
     now = datetime(2026, 8, 23, tzinfo=UTC)
-    gate, signer = _gate(tmp_path, now=now)
+    ocr = FakeOcr()
+    vision = FakeVision()
+    renderer = FakePdfRenderer()
+    gate, signer = _gate(
+        tmp_path,
+        now=now,
+        ocr=ocr,
+        vision=vision,
+        pdf_renderer=renderer,
+    )
     spy = SpyDownstream()
     router = RouterAdapter(gate=gate, downstream=GuardedDownstream(spy, signer))
 
@@ -188,6 +230,43 @@ async def test_pdf_nonvision_delivers_only_converted_text(tmp_path: Path) -> Non
     assert invocation.gate_result.contains_pdf is True
     assert len(spy.calls) == 1
     assert spy.calls[0].media_count == 0
+    assert renderer.calls == 1
+    assert ocr.inputs[0]["mime_type"] == "image/png"
+    assert vision.inputs[0]["mime_type"] == "image/png"
+    assert ocr.inputs[0]["data"].startswith(b"\x89PNG")
+    assert vision.inputs[0]["data"].startswith(b"\x89PNG")
+
+
+@pytest.mark.asyncio
+async def test_pdf_render_failure_blocks_before_backends_and_downstream(tmp_path: Path) -> None:
+    now = datetime(2026, 8, 23, tzinfo=UTC)
+    ocr = FakeOcr()
+    vision = FakeVision()
+    gate, signer = _gate(
+        tmp_path,
+        now=now,
+        ocr=ocr,
+        vision=vision,
+        pdf_renderer=FakePdfRenderer(failure=True),
+    )
+    spy = SpyDownstream()
+    router = RouterAdapter(gate=gate, downstream=GuardedDownstream(spy, signer))
+
+    invocation = await router.invoke(
+        PrepareForModelRequest(
+            content=[_pdf_part()],
+            target=TargetModel(registry_id="text-model"),
+            conversion_profile="document",
+        ),
+        tenant_id="tenant-a",
+    )
+
+    assert invocation.gate_result.action == "blocked"
+    assert invocation.gate_result.error is not None
+    assert invocation.gate_result.error.code == "pdf_render_failed"
+    assert ocr.calls == 0
+    assert vision.calls == 0
+    assert len(spy.calls) == 0
 
 
 @pytest.mark.asyncio
@@ -379,6 +458,16 @@ async def test_vision_passthrough_requires_exact_active_modality_support(tmp_pat
     )
     blocked = await router.invoke(pdf_for_image_only, tenant_id="tenant-a")
     assert blocked.gate_result.action == "blocked"
+    assert len(spy.calls) == 1
+
+    unverified_pdf = PrepareForModelRequest(
+        content=[_pdf_part()],
+        target=TargetModel(registry_id="unverified-pdf-model"),
+    )
+    unverified = await router.invoke(unverified_pdf, tenant_id="tenant-a")
+    assert unverified.gate_result.action == "blocked"
+    assert unverified.gate_result.error is not None
+    assert unverified.gate_result.error.code == "pdf_passthrough_unverified"
     assert len(spy.calls) == 1
 
 

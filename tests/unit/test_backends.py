@@ -127,6 +127,36 @@ async def test_vision_backend_extracts_description(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.asyncio
+async def test_vision_backend_rejects_non_image_mime_without_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEST_VISION_KEY", "vision-secret")
+    network_calls = 0
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal network_calls
+        network_calls += 1
+        return httpx.Response(200, json={})
+
+    async with _client(httpx.MockTransport(handler)) as client:
+        backend = OpenAICompatibleVisionBackend(
+            endpoint="https://vision.example/v1/chat/completions",
+            model="vision-model",
+            api_key_env="TEST_VISION_KEY",
+            client=client,
+        )
+        result = await backend.describe(
+            data=b"%PDF-1.7",
+            mime_type="application/pdf",
+            profile="document",
+        )
+
+    assert result.status is BackendStatus.FAILURE
+    assert result.error_code == "unsupported_media"
+    assert network_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_solar_is_one_analysis_backend_and_missing_key_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

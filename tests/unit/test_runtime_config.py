@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
+from io import BytesIO
 from pathlib import Path
 
 import pytest
+from pypdf import PdfWriter
 
 from media_bridge.contracts import PrepareForModelRequest
 from media_bridge.entrypoints import run_http, run_stdio
@@ -36,6 +39,7 @@ models:
   - id: text-model
     input_modalities: [text]
     expires_at: 2099-01-01T00:00:00Z
+    pdf_passthrough_verified: false
 """,
     )
 
@@ -53,6 +57,53 @@ models:
     assert result.action == "passthrough"
     assert callable(run_stdio)
     assert callable(run_http)
+    await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_runtime_registry_requires_explicit_pdf_passthrough_verification(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _configure(
+        monkeypatch,
+        tmp_path,
+        """version: test-v1
+models:
+  - id: pdf-model
+    input_modalities: [text, pdf]
+    expires_at: 2099-01-01T00:00:00Z
+    pdf_passthrough_verified: true
+""",
+    )
+
+    runtime = build_runtime_from_environment()
+    output = BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=72, height=72)
+    writer.write(output)
+    result = await runtime.service.prepare_for_model(
+        PrepareForModelRequest.model_validate(
+            {
+                "content": [
+                    {
+                        "type": "media",
+                        "media_type": "pdf",
+                        "source": {
+                            "kind": "base64",
+                            "data": base64.b64encode(output.getvalue()).decode("ascii"),
+                        },
+                        "declared_mime": "application/pdf",
+                    }
+                ],
+                "target": {"registry_id": "pdf-model"},
+            }
+        ),
+        tenant_id="tenant-a",
+    )
+
+    assert result.action == "passthrough"
+    assert result.original_image_removed is False
     await runtime.close()
 
 
