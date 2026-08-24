@@ -151,6 +151,42 @@ class ConnectionUpdate(NonEmptyUpdate):
         return ConnectionCreate.validate_gateway_url(value)
 
 
+class TestLabPreviewRequest(AdminStrictModel):
+    connection_id: UUID
+    target_model: Annotated[
+        str,
+        StringConstraints(pattern=r"^[a-z0-9][a-z0-9./:_-]{0,127}$"),
+    ]
+    conversion_profile: Literal["generic", "error_screenshot", "document"] = "generic"
+    user_request: Annotated[str, StringConstraints(min_length=1, max_length=20_000)]
+    media_type: Literal["image", "pdf"]
+    filename: Annotated[str, StringConstraints(min_length=1, max_length=255)] | None = None
+    declared_mime: Literal["image/png", "image/jpeg", "image/webp", "application/pdf"]
+    media_base64: Annotated[
+        str,
+        StringConstraints(min_length=1, max_length=2_796_204),
+    ]
+
+    @field_validator("filename")
+    @classmethod
+    def validate_filename(cls, value: str | None) -> str | None:
+        if value is not None and ("/" in value or "\\" in value or value in {".", ".."}):
+            raise ValueError("media filename is unsafe")
+        return value
+
+    @model_validator(mode="after")
+    def validate_media_mime(self) -> "TestLabPreviewRequest":
+        if self.media_type == "pdf" and self.declared_mime != "application/pdf":
+            raise ValueError("PDF media type and MIME do not match")
+        if self.media_type == "image" and not self.declared_mime.startswith("image/"):
+            raise ValueError("image media type and MIME do not match")
+        return self
+
+
+class TestLabRunRequest(TestLabPreviewRequest):
+    execute_downstream: Literal[True]
+
+
 class ModelCapabilityCreate(AdminStrictModel):
     model_id: Annotated[
         str,

@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 from pydantic import ValidationError
 
 from media_bridge.contracts import (
+    AssetSource,
     Base64Source,
     MediaPart,
     PrepareForModelRequest,
@@ -80,15 +81,29 @@ def _decode_data_uri(value: str, *, allowed_mimes: set[str]) -> tuple[str, str]:
     return mime_type, encoded
 
 
+def _asset_source(value: str) -> AssetSource:
+    try:
+        return AssetSource(asset_id=value)
+    except ValidationError:
+        _raise("unsupported_media_locator", "Asset identifier is not supported.")
+
+
 def _image_part(item: dict[str, Any]) -> MediaPart:
     if item.get("file_id") is not None or item.get("file_url") is not None:
         _raise("unsupported_media_locator", "Provider media identifiers are not supported.")
-    if not set(item).issubset({"type", "image_url", "detail", "file_id", "file_url"}):
+    if not set(item).issubset(
+        {"type", "image_url", "asset_id", "detail", "file_id", "file_url"}
+    ):
         _raise("invalid_request", "Image input contains unsupported fields.")
     detail = item.get("detail")
     if detail is not None and detail not in {"auto", "low", "high"}:
         _raise("invalid_request", "Image detail value is invalid.")
+    asset_id = item.get("asset_id")
     locator = item.get("image_url")
+    if asset_id is not None:
+        if locator is not None or not isinstance(asset_id, str):
+            _raise("unsupported_media_locator", "Image locator is not supported.")
+        return MediaPart(media_type="image", source=_asset_source(asset_id))
     if not isinstance(locator, str):
         _raise("unsupported_media_locator", "Image locator is not supported.")
     if locator.startswith("data:"):
@@ -113,9 +128,24 @@ def _image_part(item: dict[str, Any]) -> MediaPart:
 def _pdf_part(item: dict[str, Any]) -> MediaPart:
     if item.get("file_id") is not None or item.get("file_url") is not None:
         _raise("unsupported_media_locator", "Provider file identifiers are not supported.")
-    if not set(item).issubset({"type", "file_data", "filename", "file_id", "file_url"}):
+    if not set(item).issubset(
+        {"type", "file_data", "asset_id", "filename", "file_id", "file_url"}
+    ):
         _raise("invalid_request", "File input contains unsupported fields.")
+    asset_id = item.get("asset_id")
     locator = item.get("file_data")
+    if asset_id is not None:
+        if locator is not None or not isinstance(asset_id, str):
+            _raise("unsupported_media_locator", "File locator is not supported.")
+        filename = item.get("filename")
+        if filename is not None and not isinstance(filename, str):
+            _raise("invalid_request", "File name is invalid.")
+        return MediaPart(
+            media_type="pdf",
+            source=_asset_source(asset_id),
+            filename=filename,
+            declared_mime=_PDF_MIME,
+        )
     if not isinstance(locator, str):
         _raise("unsupported_media_locator", "File locator is not supported.")
     mime_type, encoded = _decode_data_uri(locator, allowed_mimes={_PDF_MIME})

@@ -22,9 +22,17 @@ from media_bridge_control.bootstrap import (
     Principal,
 )
 from media_bridge_control.configuration import ConfigurationError, ConfigurationService
+from media_bridge_control.connections import ConnectionService, ConnectionServiceError
 from media_bridge_control.credentials import CredentialError, CredentialService
+from media_bridge_control.gateway_client import (
+    GatewayClient,
+    GatewayClientError,
+    HttpGatewayClient,
+)
 from media_bridge_control.schemas import (
     BootstrapRequest,
+    ConnectionCreate,
+    ConnectionUpdate,
     CredentialCreate,
     LoginRequest,
     ModelCapabilityCreate,
@@ -35,10 +43,18 @@ from media_bridge_control.schemas import (
     ProviderUpdate,
     PublishSnapshotRequest,
     RecoveryRequest,
+    TestLabPreviewRequest,
+    TestLabRunRequest,
     UserCreate,
     UserUpdate,
 )
+from media_bridge_control.secrets import GatewaySecretResolver, SecretResolutionError
 from media_bridge_control.snapshots import SnapshotPublisher, SnapshotPublishError
+from media_bridge_control.test_lab import (
+    AdminActionRateLimiter,
+    TestLabError,
+    TestLabService,
+)
 
 Handler = Callable[[Request], Awaitable[Response]]
 
@@ -47,11 +63,16 @@ def _error(code: str, status_code: int) -> JSONResponse:
     return JSONResponse({"error": {"code": code}}, status_code=status_code)
 
 
-async def _json(request: Request, schema: type[Any]) -> Any:
+async def _json(
+    request: Request,
+    schema: type[Any],
+    *,
+    max_bytes: int = 64 * 1024,
+) -> Any:
     if request.headers.get("content-type", "").partition(";")[0].lower() != "application/json":
         raise ControlPlaneError("unsupported_content_type")
     body = await request.body()
-    if len(body) > 64 * 1024:
+    if len(body) > max_bytes:
         raise ControlPlaneError("request_too_large")
     try:
         return schema.model_validate_json(body)
@@ -65,6 +86,9 @@ def build_control_app(
     allowed_origin: str,
     allowed_host: str,
     snapshot_publisher: SnapshotPublisher | None = None,
+    gateway_client: GatewayClient | None = None,
+    secret_resolver: GatewaySecretResolver | None = None,
+    action_rate_limiter: AdminActionRateLimiter | None = None,
 ) -> Starlette:
     configuration = ConfigurationService(service.database)
     credentials = CredentialService(
@@ -74,6 +98,15 @@ def build_control_app(
     )
     audit = AuditEventWriter(service.database)
     events = OperationalEventWriter(service.database)
+    connections = ConnectionService(service.database)
+    gateway = gateway_client or HttpGatewayClient()
+    resolver = secret_resolver or GatewaySecretResolver()
+    test_lab = TestLabService(
+        connections=connections,
+        gateway_client=gateway,
+        secret_resolver=resolver,
+    )
+    action_limiter = action_rate_limiter or AdminActionRateLimiter()
 
     def secure_request(request: Request) -> Response | None:
         host = request.headers.get("host", "").partition(":")[0].lower()
@@ -524,6 +557,246 @@ def build_control_app(
             return _error(error.code, status)
         return Response(status_code=204)
 
+    async def connection_collection(request: Request) -> Response:
+        writable = request.method == "POST"
+        principal, rejected = await authorize(
+            request,
+            roles=(
+                frozenset({"admin"})
+                if writable
+                else frozenset({"admin", "operator", "viewer"})
+            ),
+            require_csrf=writable,
+        )
+        if rejected is not None:
+            return rejected
+        if not writable:
+            return JSONResponse(await run_in_threadpool(connections.list))
+        if principal is None:
+            return _error("unauthorized", 401)
+        try:
+            body = await _json(request, ConnectionCreate)
+            created = await run_in_threadpool(
+                connections.create,
+                body,
+                created_by=principal.user_id,
+            )
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="connection.created",
+                target_type="connection",
+                target_id=created["id"],
+                details={"name": created["name"], "status": "created"},
+            )
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except ConnectionServiceError as error:
+            status = 409 if error.code == "connection_conflict" else 400
+            return _error(error.code, status)
+        return JSONResponse(created, status_code=201)
+
+    async def connection_item(request: Request) -> Response:
+        principal, rejected = await authorize(
+            request,
+            roles=frozenset({"admin"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
+        connection_id = str(request.path_params["item_id"])
+        try:
+            if request.method == "PATCH":
+                body = await _json(request, ConnectionUpdate)
+                updated = await run_in_threadpool(
+                    connections.update,
+                    connection_id,
+                    body,
+                )
+                await run_in_threadpool(
+                    audit.write,
+                    actor_id=principal.user_id,
+                    action="connection.updated",
+                    target_type="connection",
+                    target_id=connection_id,
+                    details={"status": "updated"},
+                )
+                return JSONResponse(updated)
+            await run_in_threadpool(
+                connections.revoke,
+                connection_id,
+                revoked_at=service.now(),
+            )
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="connection.revoked",
+                target_type="connection",
+                target_id=connection_id,
+                details={"status": "revoked"},
+            )
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except ConnectionServiceError as error:
+            status = 404 if error.code == "connection_not_found" else 409
+            return _error(error.code, status)
+        return Response(status_code=204)
+
+    async def connection_test(request: Request) -> Response:
+        principal, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
+        if not action_limiter.allow(f"{principal.user_id}:connection-test"):
+            return _error("rate_limited", 429)
+        if await request.body() not in {b"", b"{}"}:
+            return _error("invalid_request", 400)
+        connection_id = str(request.path_params["item_id"])
+        credential = ""
+        try:
+            runtime_connection = await run_in_threadpool(
+                connections.runtime,
+                connection_id,
+            )
+            if not runtime_connection.enabled or runtime_connection.revoked:
+                raise ConnectionServiceError("connection_unavailable")
+            credential = resolver.resolve(
+                connections.secret_reference(runtime_connection)
+            )
+            await gateway.status(
+                base_url=runtime_connection.gateway_url,
+                credential=credential,
+            )
+            result = await run_in_threadpool(
+                connections.record_test_result,
+                connection_id,
+                succeeded=True,
+                error_code=None,
+                tested_at=service.now(),
+            )
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="connection.tested",
+                target_type="connection",
+                target_id=connection_id,
+                details={"status": "ready"},
+            )
+            return JSONResponse(result)
+        except (GatewayClientError, SecretResolutionError) as error:
+            await run_in_threadpool(
+                connections.record_test_result,
+                connection_id,
+                succeeded=False,
+                error_code=error.code,
+                tested_at=service.now(),
+            )
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="connection.test_failed",
+                target_type="connection",
+                target_id=connection_id,
+                details={"reason_code": error.code, "status": "failed"},
+            )
+            return _error(error.code, 502)
+        except ConnectionServiceError as error:
+            status = 404 if error.code == "connection_not_found" else 409
+            return _error(error.code, status)
+        finally:
+            credential = ""
+
+    async def test_lab_preview(request: Request) -> Response:
+        principal, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
+        if not action_limiter.allow(f"{principal.user_id}:preview"):
+            return _error("rate_limited", 429)
+        target_id: str | None = None
+        try:
+            body = await _json(request, TestLabPreviewRequest, max_bytes=3 * 1024 * 1024)
+            target_id = str(body.connection_id)
+            result = await test_lab.preview(body)
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="test_lab.previewed",
+                target_type="connection",
+                target_id=str(body.connection_id),
+                details={"status": str(result.get("action", "completed"))},
+            )
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except TestLabError as error:
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="test_lab.preview_failed",
+                target_type="connection",
+                target_id=target_id,
+                details={"reason_code": error.code, "status": "failed"},
+            )
+            status = 404 if error.code == "connection_not_found" else 502
+            if error.code in {"invalid_media_base64", "media_size_invalid"}:
+                status = 400
+            return _error(error.code, status)
+        return JSONResponse(result)
+
+    async def test_lab_run(request: Request) -> Response:
+        principal, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
+        if not action_limiter.allow(f"{principal.user_id}:run"):
+            return _error("rate_limited", 429)
+        target_id: str | None = None
+        try:
+            body = await _json(request, TestLabRunRequest, max_bytes=3 * 1024 * 1024)
+            target_id = str(body.connection_id)
+            result = await test_lab.run(body)
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="test_lab.executed",
+                target_type="connection",
+                target_id=str(body.connection_id),
+                details={"status": "completed"},
+            )
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except TestLabError as error:
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="test_lab.execute_failed",
+                target_type="connection",
+                target_id=target_id,
+                details={"reason_code": error.code, "status": "failed"},
+            )
+            status = 404 if error.code == "connection_not_found" else 502
+            if error.code in {"invalid_media_base64", "media_size_invalid"}:
+                status = 400
+            return _error(error.code, status)
+        return JSONResponse(result)
+
     async def snapshots(request: Request) -> Response:
         writable = request.method == "POST"
         principal, rejected = await authorize(
@@ -687,6 +960,31 @@ def build_control_app(
                 "/admin/v1/credentials/{selector:str}",
                 credential_item,
                 methods=["DELETE"],
+            ),
+            Route(
+                "/admin/v1/connections",
+                connection_collection,
+                methods=["GET", "POST"],
+            ),
+            Route(
+                "/admin/v1/connections/{item_id:uuid}",
+                connection_item,
+                methods=["PATCH", "DELETE"],
+            ),
+            Route(
+                "/admin/v1/connections/{item_id:uuid}/test",
+                connection_test,
+                methods=["POST"],
+            ),
+            Route(
+                "/admin/v1/test-lab/preview",
+                test_lab_preview,
+                methods=["POST"],
+            ),
+            Route(
+                "/admin/v1/test-lab/run",
+                test_lab_run,
+                methods=["POST"],
             ),
             Route("/admin/v1/snapshots", snapshots, methods=["GET", "POST"]),
             Route("/admin/v1/drafts/validate", validate_draft, methods=["POST"]),
