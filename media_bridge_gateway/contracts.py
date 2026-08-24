@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -54,6 +55,7 @@ class SealedGatewayRequest:
     input_digest: str
     output_digest: str
     receipt: str
+    request_nonce: str
     snapshot_version: int = 0
 
     @property
@@ -73,6 +75,7 @@ class GatewayResponse:
     content_type: str
     response_id: str
     status_code: int
+    stream: AsyncIterator[bytes] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +85,7 @@ class GatewayResult:
     gate_result: PrepareForModelResult | None
     error: SafeError | None
     http_status: int
+    warning: SafeError | None = None
 
 
 @runtime_checkable

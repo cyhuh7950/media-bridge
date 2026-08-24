@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -65,19 +67,27 @@ class FakeVision:
 class RecordingDownstream:
     def __init__(self) -> None:
         self.requests: list[SealedGatewayRequest] = []
+        self.stream_started = asyncio.Event()
+        self.stream_release = asyncio.Event()
 
     async def invoke(self, request: SealedGatewayRequest) -> GatewayResponse:
         self.requests.append(request)
         if request.payload.get("stream") is True:
-            return GatewayResponse(
-                body=(
+            async def stream_body() -> AsyncIterator[bytes]:
+                self.stream_started.set()
+                yield (
                     b"event: response.created\n"
                     b'data: {"type":"response.created","response":{"id":"resp_gateway"}}\n\n'
-                    b"data: [DONE]\n\n"
-                ),
+                )
+                await self.stream_release.wait()
+                yield b"data: [DONE]\n\n"
+
+            return GatewayResponse(
+                body=b"",
                 content_type="text/event-stream",
                 response_id="resp_gateway",
                 status_code=200,
+                stream=stream_body(),
             )
         return GatewayResponse(
             body=b'{"id":"resp_gateway","output":[]}',

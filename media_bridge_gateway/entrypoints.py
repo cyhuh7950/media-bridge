@@ -29,7 +29,11 @@ from media_bridge.runtime_snapshot import capability_registry_from_snapshot
 from media_bridge_gateway.app import build_gateway_app
 from media_bridge_gateway.downstream import GuardedResponsesDownstream
 from media_bridge_gateway.rate_limit import CredentialRouteRateLimiter
-from media_bridge_gateway.runtime import GatewayTransactionFactory, VerifiedSnapshotRuntime
+from media_bridge_gateway.runtime import (
+    GatewayTransactionFactory,
+    SnapshotFileReloader,
+    VerifiedSnapshotRuntime,
+)
 from media_bridge_gateway.state import GatewayStateStore
 
 
@@ -167,6 +171,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
     app = build_gateway_app(
         runtime=runtime,
         asset_store=asset_store,
+        snapshot_reloader=SnapshotFileReloader(path=snapshot_path, runtime=runtime),
         rate_limiter=CredentialRouteRateLimiter(
             capacity=_integer("MEDIA_BRIDGE_GATEWAY_RATE_CAPACITY", 60, minimum=1, maximum=10_000),
             refill_per_second=float(

@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from media_bridge_control.db import Database
 from media_bridge_control.models import (
@@ -255,9 +256,25 @@ class ConfigurationService:
         return {"id": str(row.id), "name": row.name, **row.body}
 
     def snapshot_body(self) -> dict[str, Any]:
-        providers = self.list_providers()
-        models = self.list_models()
-        policies = self.list_policies()
+        with self._database.session() as session:
+            self._set_repeatable_read(session)
+            return self._snapshot_body(session)
+
+    def _snapshot_body(self, session: Session) -> dict[str, Any]:
+        providers = [
+            self._provider(row)
+            for row in session.scalars(select(Provider).order_by(Provider.name))
+        ]
+        models = [
+            self._model(row)
+            for row in session.scalars(
+                select(ModelCapability).order_by(ModelCapability.model_id)
+            )
+        ]
+        policies = [
+            self._policy(row)
+            for row in session.scalars(select(Policy).order_by(Policy.name))
+        ]
         if not models or len(policies) != 1:
             raise ConfigurationError("configuration_incomplete")
         return {
@@ -275,30 +292,35 @@ class ConfigurationService:
             },
             "providers": providers,
             "policy": policies[0],
-            "data_plane_auth": {"entries": self._data_plane_auth_entries()},
+            "data_plane_auth": {"entries": self._data_plane_auth_entries(session)},
         }
 
-    def _data_plane_auth_entries(self) -> list[dict[str, Any]]:
-        with self._database.session() as session:
-            rows = list(
-                session.scalars(
-                    select(ClientCredential).order_by(ClientCredential.selector)
-                )
+    @staticmethod
+    def _data_plane_auth_entries(session: Session) -> list[dict[str, Any]]:
+        rows = list(
+            session.scalars(
+                select(ClientCredential).order_by(ClientCredential.selector)
             )
-            return [
-                {
-                    "selector": row.selector,
-                    "digest": row.credential_digest,
-                    "scopes": sorted(row.scopes),
-                    "expires_at": row.expires_at.isoformat() if row.expires_at else None,
-                    "revoked": row.revoked_at is not None,
-                }
-                for row in rows
-            ]
+        )
+        return [
+            {
+                "selector": row.selector,
+                "digest": row.credential_digest,
+                "scopes": sorted(row.scopes),
+                "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+                "revoked": row.revoked_at is not None,
+            }
+            for row in rows
+        ]
+
+    @staticmethod
+    def _set_repeatable_read(session: Session) -> None:
+        session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
 
     def create_validated_draft(self, *, created_by: str) -> dict[str, Any]:
-        body = self.snapshot_body()
         with self._database.session() as session:
+            self._set_repeatable_read(session)
+            body = self._snapshot_body(session)
             current_revision = session.scalar(
                 select(func.coalesce(func.max(ConfigDraft.revision), 0))
             )

@@ -19,7 +19,7 @@ from tests.gateway.helpers import TEST_RAW_CREDENTIAL, build_test_runtime
 async def test_actual_tcp_responses_json_sse_mcp_limits_and_no_redirect(
     tmp_path: Path,
 ) -> None:
-    runtime, _downstream, asset_store = build_test_runtime(tmp_path)
+    runtime, downstream, asset_store = build_test_runtime(tmp_path)
     app = build_gateway_app(
         runtime=runtime,
         asset_store=asset_store,
@@ -61,11 +61,21 @@ async def test_actual_tcp_responses_json_sse_mcp_limits_and_no_redirect(
                 headers=authorization,
                 json={"model": "text-model", "input": "hello"},
             )
-            sse_response = await client.post(
+            async with client.stream(
+                "POST",
                 "/v1/responses",
                 headers=authorization,
                 json={"model": "text-model", "input": "stream", "stream": True},
-            )
+            ) as sse_response:
+                sse_status = sse_response.status_code
+                sse_content_type = sse_response.headers["content-type"]
+                stream_iterator = sse_response.aiter_bytes()
+                first_event = await asyncio.wait_for(anext(stream_iterator), timeout=1)
+                assert downstream.stream_started.is_set()
+                assert downstream.stream_release.is_set() is False
+                assert b"response.created" in first_event
+                downstream.stream_release.set()
+                remaining_events = b"".join([chunk async for chunk in stream_iterator])
             oversized = await client.post(
                 "/v1/responses",
                 headers={**authorization, "Content-Type": "application/json"},
@@ -76,14 +86,29 @@ async def test_actual_tcp_responses_json_sse_mcp_limits_and_no_redirect(
                 headers=authorization,
                 json={"model": "text-model", "input": "no redirect"},
             )
+            unknown = await client.post(
+                "/not-a-gateway-route",
+                json={"model": "text-model", "input": "must not authenticate as MCP"},
+            )
+            duplicate_auth = await client.post(
+                "/v1/responses",
+                headers=[
+                    ("Authorization", "Bearer invalid-first-value"),
+                    ("Authorization", f"Bearer {TEST_RAW_CREDENTIAL}"),
+                ],
+                json={"model": "text-model", "input": "must fail closed"},
+            )
 
         assert json_response.status_code == 200
         assert json_response.json()["id"] == "resp_gateway"
-        assert sse_response.status_code == 200
-        assert sse_response.headers["content-type"].startswith("text/event-stream")
-        assert "response.created" in sse_response.text
+        assert sse_status == 200
+        assert sse_content_type.startswith("text/event-stream")
+        assert b"[DONE]" in remaining_events
         assert oversized.status_code == 413
         assert slash.status_code == 404
+        assert unknown.status_code == 404
+        assert duplicate_auth.status_code == 401
+        assert len(downstream.requests) == 2
 
         http_client = create_mcp_http_client(headers=authorization)
         async with (

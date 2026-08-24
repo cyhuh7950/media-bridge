@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Mount, Route
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -37,7 +37,11 @@ from media_bridge_gateway.events import (
     size_bucket,
 )
 from media_bridge_gateway.rate_limit import CredentialRouteRateLimiter
-from media_bridge_gateway.runtime import GatewayGeneration, VerifiedSnapshotRuntime
+from media_bridge_gateway.runtime import (
+    GatewayGeneration,
+    SnapshotFileReloader,
+    VerifiedSnapshotRuntime,
+)
 
 current_generation: contextvars.ContextVar[GatewayGeneration | None] = contextvars.ContextVar(
     "media_bridge_gateway_generation",
@@ -80,6 +84,7 @@ class DataPlaneAuthMiddleware:
         event_sink: GatewayEventSink,
         request_id_factory: Callable[[], str],
         monotonic: Callable[[], float],
+        snapshot_reloader: SnapshotFileReloader | None,
     ) -> None:
         self._app = app
         self._runtime = runtime
@@ -87,20 +92,51 @@ class DataPlaneAuthMiddleware:
         self._event_sink = event_sink
         self._request_id_factory = request_id_factory
         self._monotonic = monotonic
+        self._snapshot_reloader = snapshot_reloader
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self._app(scope, receive, send)
             return
         path = str(scope.get("path", ""))
-        required_scope, route_key = self._route_security(path)
+        route_security = self._route_security(path)
+        if route_security is None:
+            await _error("not_found", "Gateway route was not found.", 404)(
+                scope,
+                receive,
+                send,
+            )
+            return
+        required_scope, route_key = route_security
         request_id = self._request_id_factory()
         started_at = self._monotonic()
-        headers = {
-            key.decode("latin-1").lower(): value.decode("latin-1")
-            for key, value in scope.get("headers", [])
-        }
+        header_values: dict[str, list[str]] = {}
+        for key, value in scope.get("headers", []):
+            header_values.setdefault(key.decode("latin-1").lower(), []).append(
+                value.decode("latin-1")
+            )
+        if len(header_values.get("authorization", [])) > 1 or len(
+            header_values.get("cookie", [])
+        ) > 1:
+            await _error(
+                "credential_invalid",
+                "Data-plane credential was rejected.",
+                401,
+            )(scope, receive, send)
+            self._emit(
+                request_id=request_id,
+                route_key=route_key,
+                status_code="credential_invalid",
+                model_id=None,
+                policy_version=None,
+                started_at=started_at,
+                request_size=0,
+            )
+            return
+        headers = {key: values[0] for key, values in header_values.items() if values}
         request_size = self._request_size(headers.get("content-length"))
+        if self._snapshot_reloader is not None:
+            self._snapshot_reloader.refresh_if_changed()
         try:
             generation = self._runtime.current()
             subject = generation.credential_verifier.authenticate(
@@ -231,12 +267,14 @@ class DataPlaneAuthMiddleware:
             return 0
 
     @staticmethod
-    def _route_security(path: str) -> tuple[str, str]:
+    def _route_security(path: str) -> tuple[str, str] | None:
         if path == "/assets":
             return "assets:write", "/assets"
         if path == "/v1/responses":
             return "responses:invoke", "/v1/responses"
-        return "mcp:invoke", "/mcp"
+        if path == "/mcp":
+            return "mcp:invoke", "/mcp"
+        return None
 
 
 class RuntimeBoundMediaBridgeService(MediaBridgeService):
@@ -291,6 +329,7 @@ def build_gateway_app(
     event_sink: GatewayEventSink | None = None,
     request_id_factory: Callable[[], str] | None = None,
     monotonic: Callable[[], float] = time.monotonic,
+    snapshot_reloader: SnapshotFileReloader | None = None,
 ) -> ASGIApp:
     if min(max_upload_bytes, max_responses_body_bytes) < 1:
         raise ValueError("Gateway body limits must be positive")
@@ -342,17 +381,35 @@ def build_gateway_app(
             return _error("gateway_unavailable", "Gateway request context is unavailable.", 503)
         result = await generation.transaction.invoke(payload, subject=subject)
         current_event_status.set(
-            "completed" if result.status == "completed" else result.error.code
+            result.warning.code
+            if result.warning is not None
+            else "completed"
+            if result.status == "completed"
+            else result.error.code
             if result.error is not None
             else "gateway_failed"
         )
         if result.gate_result is not None:
             current_event_model.set(result.gate_result.target_model)
         if result.status == "completed" and result.response is not None:
+            response_headers = (
+                {"Media-Bridge-State": "unavailable"}
+                if result.warning is not None
+                and result.warning.code == "state_persistence_failed"
+                else None
+            )
+            if result.response.stream is not None:
+                return StreamingResponse(
+                    result.response.stream,
+                    status_code=result.response.status_code,
+                    media_type=result.response.content_type,
+                    headers=response_headers,
+                )
             return Response(
                 content=result.response.body,
                 status_code=result.response.status_code,
                 media_type=result.response.content_type,
+                headers=response_headers,
             )
         if result.error is None:
             return _error("gateway_failed", "Gateway failed safely.", 500)
@@ -380,6 +437,7 @@ def build_gateway_app(
         event_sink=event_sink or NullGatewayEventSink(),
         request_id_factory=request_id_factory or (lambda: uuid4().hex),
         monotonic=monotonic,
+        snapshot_reloader=snapshot_reloader,
     )
 
 

@@ -9,7 +9,7 @@ import secrets
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from typing import cast
 from urllib.parse import urlsplit
 
@@ -26,6 +26,7 @@ from media_bridge_gateway.contracts import (
 from media_bridge_gateway.normalizer import digest_gateway_payload
 
 _RESPONSE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_REQUEST_NONCE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 
 
 def _canonical_json(value: object) -> bytes:
@@ -217,50 +218,18 @@ class GuardedResponsesDownstream:
 
         self._replay_guard.consume(sealed.receipt)
 
+        request = self._client.build_request(
+            "POST",
+            self._endpoint,
+            headers={
+                "Authorization": f"Bearer {secret}",
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            },
+            content=body,
+        )
         try:
-            async with self._client.stream(
-                "POST",
-                self._endpoint,
-                headers={
-                    "Authorization": f"Bearer {secret}",
-                    "Content-Type": "application/json",
-                    "Accept": "application/json, text/event-stream",
-                },
-                content=body,
-            ) as response:
-                if 300 <= response.status_code < 400:
-                    raise DownstreamError(
-                        f"{self._error_prefix}_redirect",
-                        "Downstream redirects are not permitted.",
-                    )
-                if response.status_code >= 400:
-                    code = (
-                        f"{self._error_prefix}_authentication"
-                        if response.status_code in {401, 403}
-                        else f"{self._error_prefix}_rate_limit"
-                        if response.status_code == 429
-                        else f"{self._error_prefix}_upstream_http"
-                    )
-                    raise DownstreamError(code, "Downstream rejected the request.")
-                content_type = response.headers.get("content-type", "").partition(";")[0].strip()
-                if content_type not in {"application/json", "text/event-stream"}:
-                    raise DownstreamError(
-                        f"{self._error_prefix}_content_type",
-                        "Downstream returned an unsupported content type.",
-                    )
-                chunks: list[bytes] = []
-                total = 0
-                async for chunk in response.aiter_bytes():
-                    total += len(chunk)
-                    if total > self._max_response_bytes:
-                        raise DownstreamError(
-                            f"{self._error_prefix}_response_oversized",
-                            "Downstream response exceeded the configured limit.",
-                        )
-                    chunks.append(chunk)
-                response_body = b"".join(chunks)
-        except DownstreamError:
-            raise
+            response = await self._client.send(request, stream=True)
         except httpx.TimeoutException as error:
             raise DownstreamError(
                 f"{self._error_prefix}_timeout",
@@ -271,27 +240,141 @@ class GuardedResponsesDownstream:
                 f"{self._error_prefix}_transport",
                 "Downstream transport failed.",
             ) from error
-
-        response_id = (
-            _extract_json_response_id(response_body)
-            if content_type == "application/json"
-            else _extract_sse_response_id(response_body)
-        )
-        if response_id is None or not _RESPONSE_ID.fullmatch(response_id):
-            raise DownstreamError(
-                f"{self._error_prefix}_response_invalid",
-                "Downstream response did not contain a valid response identifier.",
+        try:
+            self._validate_response_metadata(response)
+            content_type = response.headers.get("content-type", "").partition(";")[0].strip()
+            if content_type == "text/event-stream":
+                return await self._streaming_response(response)
+            response_body = await self._read_bounded(response)
+            response_id = _extract_json_response_id(response_body)
+            if response_id is None or not _RESPONSE_ID.fullmatch(response_id):
+                raise self._invalid_response()
+            await response.aclose()
+            return GatewayResponse(
+                body=response_body,
+                content_type=content_type,
+                response_id=response_id,
+                status_code=response.status_code,
             )
+        except httpx.TimeoutException as error:
+            await response.aclose()
+            raise DownstreamError(
+                f"{self._error_prefix}_timeout",
+                "Downstream request timed out.",
+            ) from error
+        except httpx.RequestError as error:
+            await response.aclose()
+            raise DownstreamError(
+                f"{self._error_prefix}_transport",
+                "Downstream transport failed.",
+            ) from error
+        except BaseException:
+            await response.aclose()
+            raise
+
+    def _validate_response_metadata(self, response: httpx.Response) -> None:
+        if 300 <= response.status_code < 400:
+            raise DownstreamError(
+                f"{self._error_prefix}_redirect",
+                "Downstream redirects are not permitted.",
+            )
+        if response.status_code >= 400:
+            code = (
+                f"{self._error_prefix}_authentication"
+                if response.status_code in {401, 403}
+                else f"{self._error_prefix}_rate_limit"
+                if response.status_code == 429
+                else f"{self._error_prefix}_upstream_http"
+            )
+            raise DownstreamError(code, "Downstream rejected the request.")
+        content_type = response.headers.get("content-type", "").partition(";")[0].strip()
+        if content_type not in {"application/json", "text/event-stream"}:
+            raise DownstreamError(
+                f"{self._error_prefix}_content_type",
+                "Downstream returned an unsupported content type.",
+            )
+
+    async def _read_bounded(self, response: httpx.Response) -> bytes:
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in response.aiter_bytes():
+            total += len(chunk)
+            if total > self._max_response_bytes:
+                raise DownstreamError(
+                    f"{self._error_prefix}_response_oversized",
+                    "Downstream response exceeded the configured limit.",
+                )
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    async def _streaming_response(self, response: httpx.Response) -> GatewayResponse:
+        iterator = response.aiter_bytes()
+        buffered: list[bytes] = []
+        total = 0
+        response_id: str | None = None
+        try:
+            while response_id is None:
+                chunk = await anext(iterator)
+                total += len(chunk)
+                if total > min(self._max_response_bytes, 64 * 1024):
+                    raise self._invalid_response()
+                buffered.append(chunk)
+                response_id = _extract_sse_response_id(b"".join(buffered))
+        except StopAsyncIteration as error:
+            raise self._invalid_response() from error
+        if not _RESPONSE_ID.fullmatch(response_id):
+            raise self._invalid_response()
+
+        async def stream_body() -> AsyncIterator[bytes]:
+            nonlocal total
+            try:
+                for prefix in buffered:
+                    yield prefix
+                async for chunk in iterator:
+                    total += len(chunk)
+                    if total > self._max_response_bytes:
+                        raise DownstreamError(
+                            f"{self._error_prefix}_response_oversized",
+                            "Downstream response exceeded the configured limit.",
+                        )
+                    yield chunk
+            except httpx.TimeoutException as error:
+                raise DownstreamError(
+                    f"{self._error_prefix}_timeout",
+                    "Downstream request timed out.",
+                ) from error
+            except httpx.RequestError as error:
+                raise DownstreamError(
+                    f"{self._error_prefix}_transport",
+                    "Downstream transport failed.",
+                ) from error
+            finally:
+                await response.aclose()
+
         return GatewayResponse(
-            body=response_body,
-            content_type=content_type,
+            body=b"",
+            content_type="text/event-stream",
             response_id=response_id,
             status_code=response.status_code,
+            stream=stream_body(),
+        )
+
+    def _invalid_response(self) -> DownstreamError:
+        return DownstreamError(
+            f"{self._error_prefix}_response_invalid",
+            "Downstream response did not contain a valid response identifier.",
         )
 
     def _verify_seal(self, sealed: SealedGatewayRequest) -> None:
+        if _REQUEST_NONCE.fullmatch(sealed.request_nonce) is None:
+            raise DownstreamGuardError("downstream request nonce is invalid")
         try:
-            computed_digest = digest_responses_payload(sealed.payload)
+            computed_digest = digest_gateway_payload(
+                {
+                    "payload": sealed.payload,
+                    "request_nonce": sealed.request_nonce,
+                }
+            )
         except (TypeError, ValueError, OverflowError) as error:
             raise DownstreamGuardError("downstream payload digest could not be computed") from error
         if not secrets.compare_digest(computed_digest, sealed.output_digest):

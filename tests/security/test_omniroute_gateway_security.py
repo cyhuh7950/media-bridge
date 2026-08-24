@@ -22,11 +22,14 @@ def _sealed(
     capability: str = "non_vision",
     action: str = "passthrough",
 ) -> SealedResponsesRequest:
+    request_nonce = "omniroute-nonce-0001"
     binding = ReceiptBinding(
         target_id="text-model",
         capability=capability,
         input_digest="a" * 64,
-        output_digest=digest_responses_payload(payload),
+        output_digest=digest_responses_payload(
+            {"payload": payload, "request_nonce": request_nonce}
+        ),
         action=action,
     )
     return SealedResponsesRequest(
@@ -37,6 +40,7 @@ def _sealed(
         input_digest=binding.input_digest,
         output_digest=binding.output_digest,
         receipt=signer.sign(binding),
+        request_nonce=request_nonce,
     )
 
 
@@ -192,6 +196,8 @@ async def test_adapter_accepts_bounded_sse_and_extracts_response_id(
 
     assert response.response_id == "resp_sse"
     assert response.content_type == "text/event-stream"
-    event = json.loads(response.body.split(b"data: ")[1].splitlines()[0])
+    assert response.stream is not None
+    streamed = b"".join([chunk async for chunk in response.stream])
+    event = json.loads(streamed.split(b"data: ")[1].splitlines()[0])
     assert event["response"]["id"] == "resp_sse"
     await adapter.close()

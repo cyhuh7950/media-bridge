@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import secrets
 from typing import Any, cast
 
 from media_bridge.capabilities import CapabilityState
@@ -181,7 +182,13 @@ class GatewayTransaction:
             raw_payload = cast(dict[str, Any], payload)
             downstream_payload = _build_downstream_payload(raw_payload, normalized, prepared)
             input_digest = digest_gateway_payload(raw_payload)
-            output_digest = digest_gateway_payload(downstream_payload)
+            request_nonce = secrets.token_urlsafe(18)
+            output_digest = digest_gateway_payload(
+                {
+                    "payload": downstream_payload,
+                    "request_nonce": request_nonce,
+                }
+            )
             binding = ReceiptBinding(
                 target_id=prepared.target_id,
                 capability=prepared.capability,
@@ -197,6 +204,7 @@ class GatewayTransaction:
                 input_digest=binding.input_digest,
                 output_digest=binding.output_digest,
                 receipt=self._receipt_signer.sign(binding),
+                request_nonce=request_nonce,
                 snapshot_version=self._snapshot_version,
             )
         except (
@@ -243,14 +251,15 @@ class GatewayTransaction:
             )
         except ValueError:
             return GatewayResult(
-                status="upstream_error",
-                response=None,
+                status="completed",
+                response=response,
                 gate_result=outcome.public,
-                error=SafeError(
+                error=None,
+                warning=SafeError(
                     code="state_persistence_failed",
                     message="Sanitized response state could not be persisted.",
                 ),
-                http_status=500,
+                http_status=response.status_code,
             )
         return GatewayResult(
             status="completed",
@@ -300,7 +309,7 @@ class GatewayTransaction:
         sanitized_text = "\n".join(
             part.text for part in prepared.content if isinstance(part, TextPart)
         ).strip()
-        current_modalities = detect_media(normalized.request.content).modalities
+        current_modalities = detect_media(list(prepared.content)).modalities
         previous_modalities = (
             normalized.previous_state.media_modalities
             if normalized.previous_state is not None
@@ -310,9 +319,7 @@ class GatewayTransaction:
             frozenset[MediaModality],
             frozenset(current_modalities.union(previous_modalities)),
         )
-        media_tainted = normalized.input_had_media or bool(
-            normalized.previous_state and normalized.previous_state.media_tainted
-        )
+        media_tainted = bool(modalities)
         self._state_store.put(
             response_id=response.response_id,
             tenant_id=subject.tenant_id,

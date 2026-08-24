@@ -63,7 +63,7 @@ class GatewayTransactionFactory:
         self._gate_factory = gate_factory
         self._downstream_factory = downstream_factory
         self._receipt_signer = receipt_signer
-        self._state_store_factory = state_store_factory
+        self._state_store = state_store_factory()
         self._credential_pepper = credential_pepper
         self._analysis_backends_factory = analysis_backends_factory
 
@@ -80,7 +80,7 @@ class GatewayTransactionFactory:
             else {}
         )
         service = MediaBridgeService(gate=gate, analysis_backends=analysis_backends)
-        state_store = self._state_store_factory()
+        state_store = self._state_store
         transaction = GatewayTransaction(
             gate=gate,
             downstream=downstream,
@@ -142,3 +142,29 @@ class VerifiedSnapshotRuntime:
     async def invoke(self, payload: object, *, subject: DataPlaneSubject) -> GatewayResult:
         generation = self.current()
         return await generation.transaction.invoke(payload, subject=subject)
+
+
+class SnapshotFileReloader:
+    """Apply atomic signed-snapshot replacements while retaining the LKG."""
+
+    def __init__(self, *, path: Path, runtime: VerifiedSnapshotRuntime) -> None:
+        self._path = path
+        self._runtime = runtime
+        self._lock = threading.Lock()
+        self._seen: tuple[int, int, int, int] | None = None
+
+    def refresh_if_changed(self) -> bool:
+        with self._lock:
+            try:
+                stat = self._path.stat()
+            except OSError:
+                return False
+            fingerprint = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+            if fingerprint == self._seen:
+                return False
+            self._seen = fingerprint
+            try:
+                self._runtime.load(self._path)
+            except (SnapshotVerificationError, ValueError):
+                return False
+            return True

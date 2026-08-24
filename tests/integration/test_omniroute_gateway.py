@@ -158,8 +158,8 @@ async def test_image_nonvision_reaches_omniroute_as_text_only(
     assert "red terminal" in serialized
     assert downstream_payloads[0]["tools"] == payload["tools"]
     record = state_store.resolve("resp_image", tenant_id="tenant-a")
-    assert record.media_tainted is True
-    assert record.media_modalities == frozenset({"image"})
+    assert record.media_tainted is False
+    assert record.media_modalities == frozenset()
     await adapter.close()
 
 

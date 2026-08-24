@@ -41,6 +41,7 @@ def test_sealed_request_and_subject_are_immutable() -> None:
         input_digest="a" * 64,
         output_digest="b" * 64,
         receipt="receipt",
+        request_nonce="contract-nonce-0001",
         snapshot_version=7,
     )
 

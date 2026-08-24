@@ -79,7 +79,11 @@ class FakeDownstream:
         )
 
 
-def _transaction(tmp_path: Path) -> tuple[GatewayTransaction, FakeDownstream]:
+def _transaction(
+    tmp_path: Path,
+    *,
+    state_store: GatewayStateStore | None = None,
+) -> tuple[GatewayTransaction, FakeDownstream]:
     now = datetime(2026, 8, 24, tzinfo=UTC)
     signer = GateReceiptSigner(secret=b"r" * 32, clock=lambda: now.timestamp())
     registry = CapabilityRegistry(
@@ -101,7 +105,7 @@ def _transaction(tmp_path: Path) -> tuple[GatewayTransaction, FakeDownstream]:
             gate=gate,
             downstream=downstream,
             receipt_signer=signer,
-            state_store=GatewayStateStore(clock=lambda: now.timestamp()),
+            state_store=state_store or GatewayStateStore(clock=lambda: now.timestamp()),
             snapshot_version=7,
         ),
         downstream,
@@ -279,3 +283,95 @@ async def test_failed_media_request_leaves_no_state_and_new_text_continues(
     )
     assert continued.status == "completed"
     assert len(downstream.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_successful_nonvision_conversion_supports_text_only_followup(
+    tmp_path: Path,
+) -> None:
+    runtime, downstream, _asset_store = build_test_runtime(tmp_path)
+    subject = DataPlaneSubject(
+        credential_selector="gateway-client",
+        tenant_id="client-gateway-client",
+        scopes=frozenset({"responses:invoke"}),
+    )
+    converted = await runtime.invoke(
+        {
+            "model": "text-model",
+            "input": [
+                {
+                    "role": "user",
+                    "content": [{"type": "input_image", "image_url": image_uri()}],
+                }
+            ],
+        },
+        subject=subject,
+    )
+
+    followed = await runtime.invoke(
+        {
+            "model": "text-model",
+            "previous_response_id": "resp_gateway",
+            "input": "explain the next step",
+        },
+        subject=subject,
+    )
+
+    assert converted.status == "completed"
+    assert followed.status == "completed"
+    assert len(downstream.requests) == 2
+    serialized = json.dumps(downstream.requests[1].payload)
+    assert "ERROR 104" in serialized
+    assert "explain the next step" in serialized
+    assert "data:" not in serialized
+    assert "input_image" not in serialized
+    assert "image_url" not in serialized
+    record = runtime.current().state_store.resolve(
+        "resp_gateway",
+        tenant_id=subject.tenant_id,
+        credential_selector=subject.credential_selector,
+    )
+    assert record.media_tainted is False
+    assert record.media_modalities == frozenset()
+
+
+class FailingStateStore(GatewayStateStore):
+    def put(self, **_kwargs: Any) -> Any:
+        raise ValueError("simulated state failure")
+
+
+@pytest.mark.asyncio
+async def test_state_failure_after_downstream_success_preserves_model_response(
+    tmp_path: Path,
+) -> None:
+    transaction, downstream = _transaction(
+        tmp_path,
+        state_store=FailingStateStore(),
+    )
+
+    result = await transaction.invoke(
+        {"model": "text-model", "input": "safe"},
+        subject=_subject(),
+    )
+
+    assert result.status == "completed"
+    assert result.response is not None
+    assert result.response.response_id == "resp_gateway"
+    assert result.warning is not None
+    assert result.warning.code == "state_persistence_failed"
+    assert len(downstream.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_identical_transactions_get_unique_nonce_bound_receipts(tmp_path: Path) -> None:
+    transaction, downstream = _transaction(tmp_path)
+    payload = {"model": "text-model", "input": "same request in one second"}
+
+    first = await transaction.invoke(payload, subject=_subject())
+    second = await transaction.invoke(payload, subject=_subject())
+
+    assert first.status == "completed"
+    assert second.status == "completed"
+    assert len(downstream.requests) == 2
+    assert downstream.requests[0].request_nonce != downstream.requests[1].request_nonce
+    assert downstream.requests[0].receipt != downstream.requests[1].receipt
