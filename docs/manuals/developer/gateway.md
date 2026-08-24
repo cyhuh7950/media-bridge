@@ -21,8 +21,9 @@ provider, OpenCodex, OmniRoute, 운영 HTTPS 배포는 검증하지 않았다.
    봉인한다.
 7. generic Responses downstream이 socket write 직전에 receipt, digest, target,
    capability, action, media reference를 재검증한다.
-8. downstream 성공 뒤에만 후속 요청용 sanitized state를 기록한다. state 기록만 실패한
-   경우 이미 받은 provider 응답은 보존하고 `Media-Bridge-State: unavailable` 경고를 붙인다.
+8. JSON downstream 성공 또는 SSE 정상 EOF 뒤에만 후속 요청용 sanitized state를 기록한다.
+   stream 실패·초과·client 취소는 state를 만들지 않는다. JSON state 기록만 실패한 경우
+   이미 받은 provider 응답은 보존하고 `Media-Bridge-State: unavailable` 경고를 붙인다.
 
 unknown/stale capability, 인증, normalize, acquisition, OCR, Vision, sanitizer, cleanup,
 seal 검증 중 하나라도 실패하면 downstream 호출은 0회다. Non-Vision 요청에서는 원본
@@ -101,8 +102,11 @@ loopback HTTP의 정확한 `/v1/responses` 경로만 허용하고 redirect와 pr
 사용하지 않는다. 이번 P3에서는 process 실행·port 개방·reverse proxy·배포를 하지 않았다.
 
 downstream JSON은 bounded body로 검증하고, SSE는 첫 유효 response ID를 확인한 뒤 전체
-응답을 메모리에 모으지 않고 점진적으로 전달한다. timeout·transport·size 오류는 안전한
-bounded 오류로 변환하며 provider body를 반사하지 않는다.
+응답을 메모리에 모으지 않고 점진적으로 전달한다. HTTP header 전 오류는 bounded HTTP
+오류다. stream 시작 후 timeout·transport·size 오류는 안전한 `media_bridge.error` terminal
+SSE event로 전달하며, client 취소는 연결 종료로 처리한다. 어느 경우에도 provider body를
+반사하거나 follow-up state를 남기지 않는다. 정상 stream 완료 뒤 state 기록만 실패하면
+stream은 보존되고 state만 부재하며, 이미 전송한 header에는 경고를 추가할 수 없다.
 
 ## 검증된 범위
 
@@ -111,12 +115,14 @@ bounded 오류로 변환하며 provider body를 반사하지 않는다.
 - body limit과 no-redirect
 - 동일 payload의 요청별 nonce·receipt 분리, 동일 receipt replay 2회째 차단과 network call 1회
 - snapshot 원자 reload·credential revoke 즉시 반영·invalid snapshot LKG 유지
-- 실제 TCP SSE 첫 event의 완료 전 점진 전달
+- 실제 TCP SSE 첫 event의 완료 전 점진 전달과 stream 실패 terminal safe event
 - Non-Vision media/reference 0과 failure matrix downstream call 0
-- 변환된 후속 state의 media-taint 제거와 state persistence 실패 시 응답 보존
+- 변환된 후속 state의 media-taint 제거, stream 실패·초과·cancel state 0, JSON state
+  persistence 실패 시 응답·warning header 보존
 - Vision image/PDF exact capability 경계
 - credential/scope/rate-limit/snapshot generation/shared state isolation
-- unknown route 404와 duplicate Authorization/Cookie 차단
+- unknown route 404와 실제 duplicate Authorization/Cookie 차단
+- invalid backend endpoint·tampered snapshot·app-build 실패의 partial client cleanup
 - 기존 OmniRoute 명칭 wrapper 회귀
 
 실제 provider 비용 호출, 다른 PC HTTPS, OpenCodex·OmniRoute adapter E2E와 운영 다중
