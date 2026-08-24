@@ -1,6 +1,6 @@
 # Media Bridge Web Console 시작하기
 
-> 현재 제공 범위: `P2A_CODE_READY_REMOTE_BROWSER_NOT_VERIFIED`
+> 현재 제공 범위: `P2B_CODE_READY_LIVE_DOWNSTREAM_REMOTE_BROWSER_NOT_VERIFIED`
 
 이 문서는 현재 구현·검증된 Web Console 화면만 설명한다. 설치 패키지와 다른 PC의 운영 HTTPS 접속은 아직 제공·검증되지 않았다.
 
@@ -30,17 +30,25 @@ Web Console은 Media Bridge의 Provider 참조, 모델 capability, fail-closed �
 - `operator`: Provider·Model·Policy 조회와 허용된 변경을 수행할 수 있다. 사용자·credential·snapshot 관리 API는 허용되지 않는다.
 - `viewer`: Provider·Model·Policy·Audit·System을 읽기만 할 수 있다.
 
+Connections는 admin/operator/viewer가 조회할 수 있다. admin만 추가·폐기할 수 있고,
+admin/operator만 연결 시험을 실행할 수 있다. Test Lab은 admin/operator만 사용할 수 있다.
+
 화면에서 작업을 숨기는 것과 별개로 실제 허용·거부는 Admin API가 401/403으로 강제한다.
 
-## 현재 사용할 수 없는 화면
+## Connections와 Test Lab
 
-Connections와 Test Lab은 `DEPENDENCY_NOT_READY`를 표시한다.
+Connections에는 Gateway HTTPS URL과 credential의 외부 Secret 참조를 등록한다. credential 원문은
+입력하거나 저장하지 않는다. `연결 시험`은 Gateway 상태를 확인하며, 성공한 경우에만 마지막 정상
+시각을 갱신한다. client credential 발급과 Connection 정상 상태는 서로 다른 개념이다.
 
-- connection 저장, 연결 시험, 마지막 정상 시각, 연결 폐기는 아직 없다.
-- 미디어 업로드, preview, OCR 본문, downstream 시험 호출은 아직 없다.
-- client credential을 만들었다고 연결된 것으로 표시하지 않는다.
+Test Lab에서 Connection, 정확한 대상 model ID, 변환 profile, 요청과 이미지/PDF를 선택할 수 있다.
 
-이 기능들은 P3 Gateway의 API·보존·RBAC 계약이 검증된 뒤 P2b에서 활성화한다.
+- `Preview`: Gateway의 전처리만 수행하며 downstream Provider 호출은 0회다.
+- `실제 downstream 시험`: 비용 발생 안내 checkbox를 해당 요청에 새로 선택해야만 실행된다.
+- 입력 media·요청과 결과는 browser storage에 저장하지 않으며 실행 시작, 수동 삭제, 화면 이탈 또는
+  10분 TTL 뒤 제거된다.
+- 화면은 same-origin `/admin/v1`만 호출한다. Gateway `/assets`나 `/v1/*`를 브라우저에서 직접
+  호출하지 않는다.
 
 ## 안전 수칙
 
@@ -54,7 +62,7 @@ Connections와 Test Lab은 `DEPENDENCY_NOT_READY`를 표시한다.
 
 - 다른 PC에서의 실제 HTTPS 접속과 운영 reverse proxy·인증서.
 - 실제 OCR·Vision·Solar provider 호출과 비용.
-- Connections·Test Lab 및 실제 Gateway downstream.
+- 실제 OCR·Vision·Solar provider와 비용이 발생하는 live Gateway downstream.
 - Docker Compose 설치, backup/restore, upgrade/rollback.
 - OpenCodex·OmniRoute 실제 adapter 연결.
 

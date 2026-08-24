@@ -35,6 +35,8 @@ OpenAI Responses request
 - HMAC gate receipt, 임시 workspace 삭제 확인, asset TTL·종료 시 정리
 - 분리 Control Plane: PostgreSQL, Argon2id 계정, Admin API RBAC, 외부 Secret 참조,
   digest-only credential, Ed25519 signed snapshot
+- P2b Web Console: Gateway Connection 저장·시험·폐기와 provider 호출 없는 Preview,
+  매회 명시적 opt-in이 필요한 Test Lab downstream 시험
 
 ## 개발 환경 설치
 
@@ -83,11 +85,17 @@ HTTP는 기본적으로 `127.0.0.1:8000`에 바인딩합니다. `/mcp`, `/assets
 `/v1/responses` 모두 bearer 및 `X-Media-Bridge-Tenant`가 필요합니다. 운영 OAuth/mTLS,
 reverse proxy, 방화벽은 별도 배포 계층의 책임입니다.
 
-Control Plane은 실행 전에 Alembic revision `0001_control_plane`을 확인하고 다르면 fail-closed로
+Control Plane은 실행 전에 Alembic revision `0002_connections`를 확인하고 다르면 fail-closed로
 중단합니다. 필요한 변수명과 Secret file 경로는 `config/control-plane.example.env`에 있으며,
 Provider·DB credential·security pepper·Ed25519 개인키 원문을 설정 파일에 넣지 않습니다. P1에서는
 격리 PostgreSQL 시험만 수행했고 운영 migration, 서비스 등록, 포트·proxy 변경, 배포는 수행하지
 않았습니다.
+
+Connections에는 Gateway credential 원문이 아니라 `env`, Docker Secret 또는 외부 Secret Store
+참조만 등록합니다. Test Lab의 Preview는 OCR·Vision 변환까지만 수행하며 downstream Provider를
+호출하지 않습니다. 실제 downstream 시험은 화면에서 매 요청마다 opt-in해야 합니다. 입력 media,
+요청 본문과 일시 결과는 브라우저 저장소에 기록하지 않고 실행 시작·수동 삭제·route unmount 또는
+10분 TTL에 제거합니다.
 
 ## 강제 router 사용
 
