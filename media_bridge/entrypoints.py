@@ -51,3 +51,9 @@ def run_http() -> None:
         )
     finally:
         _close_runtime(runtime)
+
+
+def run_gateway() -> None:
+    from media_bridge_gateway.entrypoints import run_gateway as run_product_gateway
+
+    run_product_gateway()

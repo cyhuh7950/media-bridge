@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import contextvars
 import json
+import time
+from collections.abc import Callable
+from uuid import uuid4
 
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from media_bridge.assets import AssetAccessError, AssetStore
 from media_bridge.config_snapshot import SnapshotVerificationError
@@ -25,6 +28,14 @@ from media_bridge.mcp_server import build_mcp_server
 from media_bridge.service import MediaBridgeService
 from media_bridge_gateway.auth import CredentialAuthenticationError
 from media_bridge_gateway.contracts import DataPlaneSubject
+from media_bridge_gateway.events import (
+    GatewayEvent,
+    GatewayEventSink,
+    NullGatewayEventSink,
+    emit_safely,
+    latency_bucket,
+    size_bucket,
+)
 from media_bridge_gateway.rate_limit import CredentialRouteRateLimiter
 from media_bridge_gateway.runtime import GatewayGeneration, VerifiedSnapshotRuntime
 
@@ -34,6 +45,14 @@ current_generation: contextvars.ContextVar[GatewayGeneration | None] = contextva
 )
 current_subject: contextvars.ContextVar[DataPlaneSubject | None] = contextvars.ContextVar(
     "media_bridge_gateway_subject",
+    default=None,
+)
+current_event_status: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "media_bridge_gateway_event_status",
+    default=None,
+)
+current_event_model: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "media_bridge_gateway_event_model",
     default=None,
 )
 
@@ -58,10 +77,16 @@ class DataPlaneAuthMiddleware:
         *,
         runtime: VerifiedSnapshotRuntime,
         rate_limiter: CredentialRouteRateLimiter,
+        event_sink: GatewayEventSink,
+        request_id_factory: Callable[[], str],
+        monotonic: Callable[[], float],
     ) -> None:
         self._app = app
         self._runtime = runtime
         self._rate_limiter = rate_limiter
+        self._event_sink = event_sink
+        self._request_id_factory = request_id_factory
+        self._monotonic = monotonic
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -69,10 +94,13 @@ class DataPlaneAuthMiddleware:
             return
         path = str(scope.get("path", ""))
         required_scope, route_key = self._route_security(path)
+        request_id = self._request_id_factory()
+        started_at = self._monotonic()
         headers = {
             key.decode("latin-1").lower(): value.decode("latin-1")
             for key, value in scope.get("headers", [])
         }
+        request_size = self._request_size(headers.get("content-length"))
         try:
             generation = self._runtime.current()
             subject = generation.credential_verifier.authenticate(
@@ -86,13 +114,31 @@ class DataPlaneAuthMiddleware:
                 "No valid Gateway snapshot is available.",
                 503,
             )(scope, receive, send)
+            self._emit(
+                request_id=request_id,
+                route_key=route_key,
+                status_code="gateway_unavailable",
+                model_id=None,
+                policy_version=None,
+                started_at=started_at,
+                request_size=request_size,
+            )
             return
         except CredentialAuthenticationError as error:
-            status_code = 403 if error.code == "admin_session_not_allowed" else 401
-            await _error(error.code, "Data-plane credential was rejected.", status_code)(
+            auth_status = 403 if error.code == "admin_session_not_allowed" else 401
+            await _error(error.code, "Data-plane credential was rejected.", auth_status)(
                 scope,
                 receive,
                 send,
+            )
+            self._emit(
+                request_id=request_id,
+                route_key=route_key,
+                status_code=error.code,
+                model_id=None,
+                policy_version=generation.version,
+                started_at=started_at,
+                request_size=request_size,
             )
             return
         if not self._rate_limiter.allow(subject.credential_selector, route_key):
@@ -101,14 +147,88 @@ class DataPlaneAuthMiddleware:
                 receive,
                 send,
             )
+            self._emit(
+                request_id=request_id,
+                route_key=route_key,
+                status_code="rate_limited",
+                model_id=None,
+                policy_version=generation.version,
+                started_at=started_at,
+                request_size=request_size,
+            )
             return
         generation_token = current_generation.set(generation)
         subject_token = current_subject.set(subject)
+        event_status_token = current_event_status.set(None)
+        event_model_token = current_event_model.set(None)
+        response_status = 500
+
+        async def capture_status(message: Message) -> None:
+            nonlocal response_status
+            if message.get("type") == "http.response.start":
+                status = message.get("status")
+                if isinstance(status, int):
+                    response_status = status
+            await send(message)
+
         try:
-            await self._app(scope, receive, send)
+            await self._app(scope, receive, capture_status)
         finally:
+            status_code = current_event_status.get()
+            model_id = current_event_model.get()
+            self._emit(
+                request_id=request_id,
+                route_key=route_key,
+                status_code=(
+                    status_code
+                    if isinstance(status_code, str)
+                    else f"http_{response_status}"
+                ),
+                model_id=model_id if isinstance(model_id, str) else None,
+                policy_version=generation.version,
+                started_at=started_at,
+                request_size=request_size,
+            )
+            current_event_model.reset(event_model_token)
+            current_event_status.reset(event_status_token)
             current_subject.reset(subject_token)
             current_generation.reset(generation_token)
+
+    def _emit(
+        self,
+        *,
+        request_id: str,
+        route_key: str,
+        status_code: str,
+        model_id: str | None,
+        policy_version: int | None,
+        started_at: float,
+        request_size: int,
+    ) -> None:
+        event_type = {
+            "/assets": "gateway.assets",
+            "/v1/responses": "gateway.responses",
+            "/mcp": "gateway.mcp",
+        }[route_key]
+        emit_safely(
+            self._event_sink,
+            GatewayEvent(
+                request_id=request_id,
+                event_type=event_type,
+                model_id=model_id,
+                policy_version=policy_version,
+                status_code=status_code,
+                latency_bucket=latency_bucket(max(0.0, self._monotonic() - started_at)),
+                size_bucket=size_bucket(request_size),
+            ),
+        )
+
+    @staticmethod
+    def _request_size(content_length: str | None) -> int:
+        try:
+            return max(0, int(content_length or "0"))
+        except ValueError:
+            return 0
 
     @staticmethod
     def _route_security(path: str) -> tuple[str, str]:
@@ -168,6 +288,9 @@ def build_gateway_app(
     rate_limiter: CredentialRouteRateLimiter,
     max_upload_bytes: int = 2 * 1024 * 1024,
     max_responses_body_bytes: int = 4 * 1024 * 1024,
+    event_sink: GatewayEventSink | None = None,
+    request_id_factory: Callable[[], str] | None = None,
+    monotonic: Callable[[], float] = time.monotonic,
 ) -> ASGIApp:
     if min(max_upload_bytes, max_responses_body_bytes) < 1:
         raise ValueError("Gateway body limits must be positive")
@@ -218,6 +341,13 @@ def build_gateway_app(
         if generation is None or subject is None:
             return _error("gateway_unavailable", "Gateway request context is unavailable.", 503)
         result = await generation.transaction.invoke(payload, subject=subject)
+        current_event_status.set(
+            "completed" if result.status == "completed" else result.error.code
+            if result.error is not None
+            else "gateway_failed"
+        )
+        if result.gate_result is not None:
+            current_event_model.set(result.gate_result.target_model)
         if result.status == "completed" and result.response is not None:
             return Response(
                 content=result.response.body,
@@ -242,7 +372,15 @@ def build_gateway_app(
         Mount("/", app=mcp_app),
     ]
     app = Starlette(routes=routes, lifespan=mcp_app.router.lifespan_context)
-    return DataPlaneAuthMiddleware(app, runtime=runtime, rate_limiter=rate_limiter)
+    app.router.redirect_slashes = False
+    return DataPlaneAuthMiddleware(
+        app,
+        runtime=runtime,
+        rate_limiter=rate_limiter,
+        event_sink=event_sink or NullGatewayEventSink(),
+        request_id_factory=request_id_factory or (lambda: uuid4().hex),
+        monotonic=monotonic,
+    )
 
 
 __all__ = ["build_gateway_app", "current_generation", "current_subject"]

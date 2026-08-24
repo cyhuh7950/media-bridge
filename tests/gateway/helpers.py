@@ -68,6 +68,17 @@ class RecordingDownstream:
 
     async def invoke(self, request: SealedGatewayRequest) -> GatewayResponse:
         self.requests.append(request)
+        if request.payload.get("stream") is True:
+            return GatewayResponse(
+                body=(
+                    b"event: response.created\n"
+                    b'data: {"type":"response.created","response":{"id":"resp_gateway"}}\n\n'
+                    b"data: [DONE]\n\n"
+                ),
+                content_type="text/event-stream",
+                response_id="resp_gateway",
+                status_code=200,
+            )
         return GatewayResponse(
             body=b'{"id":"resp_gateway","output":[]}',
             content_type="application/json",
