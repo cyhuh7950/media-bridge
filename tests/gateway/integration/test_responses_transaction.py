@@ -18,12 +18,12 @@ from media_bridge.capabilities import CapabilityRegistry, ModelCapability
 from media_bridge.gate import PreRequestGate
 from media_bridge.pdf_pipeline import RenderedPdfPage
 from media_bridge.receipts import GateReceiptSigner
-from media_bridge.responses_state import ResponsesStateStore
 from media_bridge_gateway.contracts import (
     DataPlaneSubject,
     GatewayResponse,
     SealedGatewayRequest,
 )
+from media_bridge_gateway.state import GatewayStateStore
 from media_bridge_gateway.transaction import GatewayTransaction
 from tests.gateway.helpers import FakeOcr as RuntimeFakeOcr
 from tests.gateway.helpers import build_test_runtime, image_uri
@@ -101,7 +101,7 @@ def _transaction(tmp_path: Path) -> tuple[GatewayTransaction, FakeDownstream]:
             gate=gate,
             downstream=downstream,
             receipt_signer=signer,
-            state_store=ResponsesStateStore(clock=lambda: now.timestamp()),
+            state_store=GatewayStateStore(clock=lambda: now.timestamp()),
             snapshot_version=7,
         ),
         downstream,

@@ -16,11 +16,7 @@ from media_bridge.contracts import (
 from media_bridge.detector import detect_media
 from media_bridge.gate import DownstreamPayload, PreRequestGate
 from media_bridge.receipts import GateReceiptSigner, ReceiptBinding, ReceiptValidationError
-from media_bridge.responses_state import (
-    MediaModality,
-    ResponsesStateError,
-    ResponsesStateStore,
-)
+from media_bridge.responses_state import ResponsesStateRecord
 from media_bridge_gateway.contracts import (
     DataPlaneSubject,
     DownstreamError,
@@ -35,6 +31,11 @@ from media_bridge_gateway.normalizer import (
     ResponsesNormalizationError,
     digest_gateway_payload,
     normalize_responses_request,
+)
+from media_bridge_gateway.state import (
+    GatewayStateError,
+    GatewayStateStore,
+    MediaModality,
 )
 
 
@@ -113,7 +114,7 @@ class GatewayTransaction:
         gate: PreRequestGate,
         downstream: ResponsesDownstream,
         receipt_signer: GateReceiptSigner,
-        state_store: ResponsesStateStore,
+        state_store: GatewayStateStore,
         snapshot_version: int = 0,
     ) -> None:
         if snapshot_version < 0:
@@ -140,12 +141,19 @@ class GatewayTransaction:
             previous_id = payload.get("previous_response_id")
             if isinstance(previous_id, str):
                 try:
-                    state = self._state_store.resolve(previous_id, tenant_id=tenant_id)
-                except ResponsesStateError as error:
+                    state = self._state_store.resolve(
+                        previous_id,
+                        tenant_id=tenant_id,
+                        credential_selector=subject.credential_selector,
+                    )
+                except GatewayStateError as error:
                     return _blocked(error.code, error.safe_message)
 
         try:
-            normalized = normalize_responses_request(payload, state=state)
+            normalized = normalize_responses_request(
+                payload,
+                state=cast(ResponsesStateRecord | None, state),
+            )
         except ResponsesNormalizationError as error:
             return _blocked(error.code, error.safe_message)
 
@@ -229,7 +237,7 @@ class GatewayTransaction:
         try:
             self._record_state(
                 response=response,
-                tenant_id=tenant_id,
+                subject=subject,
                 normalized=normalized,
                 prepared=prepared,
             )
@@ -285,7 +293,7 @@ class GatewayTransaction:
         self,
         *,
         response: GatewayResponse,
-        tenant_id: str,
+        subject: DataPlaneSubject,
         normalized: NormalizedResponsesRequest,
         prepared: DownstreamPayload,
     ) -> None:
@@ -307,8 +315,11 @@ class GatewayTransaction:
         )
         self._state_store.put(
             response_id=response.response_id,
-            tenant_id=tenant_id,
+            tenant_id=subject.tenant_id,
+            credential_selector=subject.credential_selector,
             sanitized_text=sanitized_text,
             media_tainted=media_tainted,
             media_modalities=modalities if media_tainted else frozenset(),
+            target_id=prepared.target_id,
+            snapshot_version=self._snapshot_version,
         )

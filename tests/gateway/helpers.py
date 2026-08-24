@@ -17,11 +17,11 @@ from media_bridge.backends import BackendStatus, OcrResult, VisionResult
 from media_bridge.config_snapshot import SnapshotVerifier
 from media_bridge.gate import PreRequestGate
 from media_bridge.receipts import GateReceiptSigner
-from media_bridge.responses_state import ResponsesStateStore
 from media_bridge.runtime_snapshot import capability_registry_from_snapshot
 from media_bridge_control.snapshots import SnapshotSigner
 from media_bridge_gateway.contracts import GatewayResponse, SealedGatewayRequest
 from media_bridge_gateway.runtime import GatewayTransactionFactory, VerifiedSnapshotRuntime
+from media_bridge_gateway.state import GatewayStateStore
 from tests.control.snapshot_helpers import private_key_pem
 
 TEST_PEPPER = b"p" * 32
@@ -158,7 +158,7 @@ def build_test_runtime(
         gate_factory=gate_factory,
         downstream_factory=lambda _snapshot: downstream,
         receipt_signer=receipt_signer,
-        state_store_factory=ResponsesStateStore,
+        state_store_factory=GatewayStateStore,
         credential_pepper=TEST_PEPPER,
     )
     runtime = VerifiedSnapshotRuntime(verifier=verifier, generation_factory=factory)

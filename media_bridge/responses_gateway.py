@@ -7,6 +7,7 @@ from media_bridge.omniroute_adapter import GuardedOmniRouteAdapter
 from media_bridge.receipts import GateReceiptSigner
 from media_bridge.responses_state import ResponsesStateStore
 from media_bridge_gateway.contracts import DataPlaneSubject, GatewayResult
+from media_bridge_gateway.state import LegacyResponsesStateAdapter
 from media_bridge_gateway.transaction import GatewayTransaction
 
 ResponsesGatewayResult = GatewayResult
@@ -27,7 +28,7 @@ class ResponsesIngressGateway:
             gate=gate,
             downstream=adapter,
             receipt_signer=receipt_signer,
-            state_store=state_store,
+            state_store=LegacyResponsesStateAdapter(state_store),
         )
 
     def clear_state(self) -> None:

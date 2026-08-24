@@ -18,7 +18,6 @@ from media_bridge.config_snapshot import (
 )
 from media_bridge.gate import PreRequestGate
 from media_bridge.receipts import GateReceiptSigner
-from media_bridge.responses_state import ResponsesStateStore
 from media_bridge.runtime_snapshot import capability_registry_from_snapshot
 from media_bridge_control.snapshots import SnapshotSigner
 from media_bridge_gateway.contracts import (
@@ -30,6 +29,7 @@ from media_bridge_gateway.runtime import (
     GatewayTransactionFactory,
     VerifiedSnapshotRuntime,
 )
+from media_bridge_gateway.state import GatewayStateStore
 from tests.control.snapshot_helpers import private_key_pem, snapshot_body
 
 
@@ -110,7 +110,7 @@ async def test_request_is_bound_to_generation_while_new_snapshot_is_published(
         gate_factory=gate_factory,
         downstream_factory=downstream_factory,
         receipt_signer=receipt_signer,
-        state_store_factory=ResponsesStateStore,
+        state_store_factory=GatewayStateStore,
         credential_pepper=b"p" * 32,
     )
     runtime = VerifiedSnapshotRuntime(verifier=verifier, generation_factory=factory)
@@ -166,7 +166,7 @@ def test_invalid_or_rollback_snapshot_keeps_last_known_generation(tmp_path: Path
         gate_factory=gate_factory,
         downstream_factory=lambda _snapshot: BlockingDownstream("resp_unused"),
         receipt_signer=receipt_signer,
-        state_store_factory=ResponsesStateStore,
+        state_store_factory=GatewayStateStore,
         credential_pepper=b"p" * 32,
     )
     runtime = VerifiedSnapshotRuntime(verifier=verifier, generation_factory=factory)

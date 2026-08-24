@@ -17,7 +17,6 @@ from media_bridge.config_snapshot import (
 )
 from media_bridge.gate import PreRequestGate
 from media_bridge.receipts import GateReceiptSigner
-from media_bridge.responses_state import ResponsesStateStore
 from media_bridge.service import MediaBridgeService
 from media_bridge_gateway.auth import SnapshotCredentialVerifier
 from media_bridge_gateway.contracts import (
@@ -25,6 +24,7 @@ from media_bridge_gateway.contracts import (
     GatewayResult,
     ResponsesDownstream,
 )
+from media_bridge_gateway.state import GatewayStateStore
 from media_bridge_gateway.transaction import GatewayTransaction
 
 
@@ -37,6 +37,7 @@ class GatewayGeneration:
     downstream: ResponsesDownstream
     credential_verifier: SnapshotCredentialVerifier
     service: MediaBridgeService
+    state_store: GatewayStateStore
     transaction: GatewayTransaction
 
 
@@ -53,7 +54,7 @@ class GatewayTransactionFactory:
         gate_factory: Callable[[SignedSnapshot], PreRequestGate],
         downstream_factory: Callable[[SignedSnapshot], ResponsesDownstream],
         receipt_signer: GateReceiptSigner,
-        state_store_factory: Callable[[], ResponsesStateStore],
+        state_store_factory: Callable[[], GatewayStateStore],
         credential_pepper: bytes,
         analysis_backends_factory: (
             Callable[[SignedSnapshot], dict[str, AnalysisBackend]] | None
@@ -79,11 +80,12 @@ class GatewayTransactionFactory:
             else {}
         )
         service = MediaBridgeService(gate=gate, analysis_backends=analysis_backends)
+        state_store = self._state_store_factory()
         transaction = GatewayTransaction(
             gate=gate,
             downstream=downstream,
             receipt_signer=self._receipt_signer,
-            state_store=self._state_store_factory(),
+            state_store=state_store,
             snapshot_version=snapshot.version,
         )
         return GatewayGeneration(
@@ -94,6 +96,7 @@ class GatewayTransactionFactory:
             downstream=downstream,
             credential_verifier=credential_verifier,
             service=service,
+            state_store=state_store,
             transaction=transaction,
         )
 
