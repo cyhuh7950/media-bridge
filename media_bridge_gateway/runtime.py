@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from media_bridge.backends import AnalysisBackend
 from media_bridge.config_snapshot import (
     MAX_SNAPSHOT_BYTES,
     SignedSnapshot,
@@ -17,6 +18,7 @@ from media_bridge.config_snapshot import (
 from media_bridge.gate import PreRequestGate
 from media_bridge.receipts import GateReceiptSigner
 from media_bridge.responses_state import ResponsesStateStore
+from media_bridge.service import MediaBridgeService
 from media_bridge_gateway.auth import SnapshotCredentialVerifier
 from media_bridge_gateway.contracts import (
     DataPlaneSubject,
@@ -34,6 +36,7 @@ class GatewayGeneration:
     gate: PreRequestGate
     downstream: ResponsesDownstream
     credential_verifier: SnapshotCredentialVerifier
+    service: MediaBridgeService
     transaction: GatewayTransaction
 
 
@@ -52,12 +55,16 @@ class GatewayTransactionFactory:
         receipt_signer: GateReceiptSigner,
         state_store_factory: Callable[[], ResponsesStateStore],
         credential_pepper: bytes,
+        analysis_backends_factory: (
+            Callable[[SignedSnapshot], dict[str, AnalysisBackend]] | None
+        ) = None,
     ) -> None:
         self._gate_factory = gate_factory
         self._downstream_factory = downstream_factory
         self._receipt_signer = receipt_signer
         self._state_store_factory = state_store_factory
         self._credential_pepper = credential_pepper
+        self._analysis_backends_factory = analysis_backends_factory
 
     def build(self, snapshot: SignedSnapshot) -> GatewayGeneration:
         gate = self._gate_factory(snapshot)
@@ -66,6 +73,12 @@ class GatewayTransactionFactory:
             snapshot=snapshot,
             pepper=self._credential_pepper,
         )
+        analysis_backends = (
+            self._analysis_backends_factory(snapshot)
+            if self._analysis_backends_factory is not None
+            else {}
+        )
+        service = MediaBridgeService(gate=gate, analysis_backends=analysis_backends)
         transaction = GatewayTransaction(
             gate=gate,
             downstream=downstream,
@@ -80,6 +93,7 @@ class GatewayTransactionFactory:
             gate=gate,
             downstream=downstream,
             credential_verifier=credential_verifier,
+            service=service,
             transaction=transaction,
         )
 

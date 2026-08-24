@@ -14,7 +14,6 @@ from PIL import Image
 from media_bridge.acquisition import MediaAcquirer
 from media_bridge.assets import AssetStore
 from media_bridge.backends import BackendStatus, OcrResult, VisionResult
-from media_bridge.capabilities import ModelCapability
 from media_bridge.config_snapshot import SnapshotVerifier
 from media_bridge.gate import PreRequestGate
 from media_bridge.receipts import GateReceiptSigner
@@ -125,7 +124,7 @@ def build_test_runtime(
                     "selector": "gateway-client",
                     "digest": digest,
                     "scopes": ["assets:write", "mcp:invoke", "responses:invoke"],
-                    "expires_at": (now + timedelta(hours=1)).isoformat(),
+                    "expires_at": (now + timedelta(days=30)).isoformat(),
                     "revoked": False,
                 }
             ]
