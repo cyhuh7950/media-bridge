@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import stat
+import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
@@ -22,12 +23,81 @@ from cryptography.x509.oid import NameOID
 from sqlalchemy import create_engine, text
 
 from media_bridge_control.runtime import build_control_runtime
+from media_bridge_control.secrets import GatewaySecretResolver
 from media_bridge_control.settings import ControlSettings
 
 TEST_DATABASE = (
     "postgresql+psycopg://media_bridge_test:media_bridge_test_only@127.0.0.1:55432/"
     "media_bridge_test"
 )
+E2E_GATEWAY_REFERENCE = "MEDIA_BRIDGE_E2E_GATEWAY_CREDENTIAL"
+E2E_GATEWAY_VALUE = "mbc_e2e_only_browser_gateway_credential"
+
+
+class _NoCostGatewayClient:
+    """Exercise the real Admin BFF without network or provider cost."""
+
+    async def status(self, *, base_url: str, credential: str) -> dict[str, object]:
+        self._validate(base_url, credential)
+        return {"status": "ready", "snapshot_version": 1}
+
+    async def upload(
+        self,
+        *,
+        base_url: str,
+        credential: str,
+        data: bytes,
+        filename: str | None,
+        declared_mime: str,
+    ) -> str:
+        self._validate(base_url, credential)
+        if not data or declared_mime not in {"image/png", "application/pdf"}:
+            raise RuntimeError("e2e_media_invalid")
+        return "ast_0123456789ABCDEFGHJKMNPQRS"
+
+    async def prepare(
+        self,
+        *,
+        base_url: str,
+        credential: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        self._validate(base_url, credential)
+        return {
+            "action": "converted",
+            "target_model": "vendor/text-model",
+            "contains_image": True,
+            "target_supports_vision": False,
+            "sanitized_text": "E2E SAFE OCR",
+            "original_image_removed": True,
+            "error": None,
+        }
+
+    async def responses(
+        self,
+        *,
+        base_url: str,
+        credential: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        self._validate(base_url, credential)
+        return {"id": "resp_e2e_no_provider_cost", "output": []}
+
+    async def delete(
+        self,
+        *,
+        base_url: str,
+        credential: str,
+        asset_id: str,
+    ) -> None:
+        self._validate(base_url, credential)
+        if not asset_id.startswith("ast_"):
+            raise RuntimeError("e2e_asset_invalid")
+
+    @staticmethod
+    def _validate(base_url: str, credential: str) -> None:
+        if base_url != "https://gateway.invalid" or credential != E2E_GATEWAY_VALUE:
+            raise RuntimeError("e2e_gateway_boundary_invalid")
 
 
 def _reset_isolated_database(database_url: str) -> None:
@@ -110,12 +180,19 @@ def _write_state_once(path: Path, bootstrap_token: str) -> None:
 
 
 def _prepare_runtime_directory(path: Path, state_file: Path) -> None:
+    parent = state_file.parent
     if (
         not path.is_absolute()
-        or path.parent != state_file.parent
+        or path.parent != parent
         or path.name != "e2e-runtime"
         or path.is_symlink()
+        or parent != Path(tempfile.gettempdir()) / "media_bridge_p2a_tools_01a02e88"
+        or parent.is_symlink()
     ):
+        raise RuntimeError("e2e_runtime_path_unsafe")
+    parent.mkdir(mode=0o700, exist_ok=True)
+    parent_status = parent.stat()
+    if not stat.S_ISDIR(parent_status.st_mode) or parent_status.st_uid != os.getuid():
         raise RuntimeError("e2e_runtime_path_unsafe")
     if path.exists():
         status = path.lstat()
@@ -154,7 +231,12 @@ def main() -> None:
             allowed_host="127.0.0.1",
             console_static_root=static_root,
         )
-        runtime = build_control_runtime(settings)
+        os.environ[E2E_GATEWAY_REFERENCE] = E2E_GATEWAY_VALUE
+        runtime = build_control_runtime(
+            settings,
+            gateway_client=_NoCostGatewayClient(),
+            secret_resolver=GatewaySecretResolver(),
+        )
         _write_state_once(state_file, runtime.service.issue_bootstrap_token())
         uvicorn.run(
             runtime.app,
@@ -173,6 +255,7 @@ def main() -> None:
             state_file.unlink()
         if temp_root.is_dir() and not temp_root.is_symlink():
             shutil.rmtree(temp_root)
+        os.environ.pop(E2E_GATEWAY_REFERENCE, None)
 
 
 if __name__ == "__main__":

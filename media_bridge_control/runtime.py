@@ -10,6 +10,8 @@ from starlette.types import ASGIApp
 from media_bridge_control.api import build_control_app
 from media_bridge_control.bootstrap import ControlPlaneService
 from media_bridge_control.db import Database
+from media_bridge_control.gateway_client import GatewayClient
+from media_bridge_control.secrets import GatewaySecretResolver
 from media_bridge_control.security import SecurityContext
 from media_bridge_control.settings import ControlSettings
 from media_bridge_control.snapshots import SnapshotPublisher, SnapshotSigner
@@ -27,7 +29,12 @@ class ControlRuntime:
         self.database.close()
 
 
-def build_control_runtime(settings: ControlSettings) -> ControlRuntime:
+def build_control_runtime(
+    settings: ControlSettings,
+    *,
+    gateway_client: GatewayClient | None = None,
+    secret_resolver: GatewaySecretResolver | None = None,
+) -> ControlRuntime:
     database = Database(settings.database_url)
     security = SecurityContext(pepper=settings.security_pepper)
     service = ControlPlaneService(
@@ -50,6 +57,8 @@ def build_control_runtime(settings: ControlSettings) -> ControlRuntime:
         allowed_origin=settings.allowed_origin,
         allowed_host=settings.allowed_host,
         snapshot_publisher=publisher,
+        gateway_client=gateway_client,
+        secret_resolver=secret_resolver,
     )
     app = (
         build_console_app(admin_app=admin_app, static_root=settings.console_static_root)

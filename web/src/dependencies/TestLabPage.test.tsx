@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TestLabPage } from "./TestLabPage";
@@ -44,7 +44,10 @@ it("previews through same-origin Admin API and keeps downstream off by default",
   );
   const runButton = screen.getByRole("button", { name: "실제 downstream 시험" });
   expect(runButton).toBeDisabled();
-  await user.click(screen.getByRole("button", { name: "Preview" }));
+  const previewButton = screen.getByRole("button", { name: "Preview" });
+  const form = previewButton.closest("form");
+  if (form === null) throw new Error("preview form is unavailable");
+  fireEvent.submit(form);
 
   expect(await screen.findByText(/OCR SAFE RESULT/)).toBeInTheDocument();
   expect(fetchMock.mock.calls.some(([input]) => requestUrl(input) === "/admin/v1/test-lab/preview")).toBe(true);
@@ -85,6 +88,38 @@ it("requires a fresh explicit opt-in for each downstream run", async () => {
   });
   expect(screen.getByLabelText(/실제 downstream Provider 호출/)).not.toBeChecked();
   expect(screen.getByRole("button", { name: "실제 downstream 시험" })).toBeDisabled();
+});
+
+
+it("removes the transient result and request state when its TTL expires", async () => {
+  const user = userEvent.setup();
+  const fetchMock = vi.fn<typeof fetch>((input) => {
+    if (requestUrl(input) === "/admin/v1/connections") {
+      return Promise.resolve(jsonResponse([{ id: "connection-1", name: "primary", status: "ready" }]));
+    }
+    return Promise.resolve(jsonResponse({ sanitized_text: "TTL SAFE RESULT" }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<TestLabPage role="operator" csrfToken="csrf-value" resultTtlMs={100} />);
+
+  await user.selectOptions(await screen.findByLabelText("Connection"), "connection-1");
+  await user.type(screen.getByLabelText("대상 모델"), "text-model");
+  await user.type(screen.getByLabelText("사용자 요청"), "expire me");
+  await user.upload(
+    screen.getByLabelText(/이미지 또는 PDF/),
+    new File([new Uint8Array([137, 80, 78, 71])], "error.png", { type: "image/png" }),
+  );
+  const form = screen.getByRole("button", { name: "Preview" }).closest("form");
+  if (form === null) throw new Error("preview form is unavailable");
+  fireEvent.submit(form);
+
+  expect(await screen.findByText(/TTL SAFE RESULT/)).toBeInTheDocument();
+  await waitFor(
+    () => { expect(screen.queryByText(/TTL SAFE RESULT/)).not.toBeInTheDocument(); },
+    { timeout: 1_000 },
+  );
+  expect(screen.getByLabelText("사용자 요청")).toHaveValue("");
+  expect(screen.getByLabelText(/이미지 또는 PDF/)).toHaveValue("");
 });
 
 

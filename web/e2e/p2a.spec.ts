@@ -8,6 +8,8 @@ const stateFile = "/tmp/media_bridge_p2a_tools_01a02e88/e2e-state.json";
 const adminPassword = "P2a-local-browser-password-2026!";
 const operatorPassword = "P2a-local-operator-password-2026!";
 const viewerPassword = "P2a-local-viewer-password-2026!";
+const gatewaySecretReference = "MEDIA_BRIDGE_E2E_GATEWAY_CREDENTIAL";
+const rawGatewayCredential = "mbc_e2e_only_browser_gateway_credential";
 
 interface E2eState {
   bootstrap_token: string;
@@ -52,7 +54,7 @@ async function expectNoSeriousAccessibilityViolations(page: Page) {
   expect(serious.map((violation) => violation.id)).toEqual([]);
 }
 
-test.describe.serial("P2a actual P1 browser boundary", () => {
+test.describe.serial("P2a and P2b actual Admin API browser boundary", () => {
   let adminContext: BrowserContext;
   let adminPage: Page;
   const sensitiveValues: string[] = [adminPassword];
@@ -65,7 +67,9 @@ test.describe.serial("P2a actual P1 browser boundary", () => {
   });
 
   test.afterAll(async () => {
-    await adminContext.close();
+    // Browser launch can fail before the beforeAll assignment completes.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (adminContext !== undefined) await adminContext.close();
   });
 
   test("completes bootstrap through first signed snapshot against P1 APIs", async () => {
@@ -171,48 +175,101 @@ test.describe.serial("P2a actual P1 browser boundary", () => {
     }
   });
 
-  test("keeps deferred routes network inert and passes local accessibility viewports", async () => {
+  test("activates Connections and Test Lab only through same-origin Admin BFF", async ({ browser }) => {
+    const p2bContext = await browser.newContext({ ignoreHTTPSErrors: true });
+    const page = await p2bContext.newPage();
     const requestedPaths: string[] = [];
-    adminPage.on("request", (request) => {
+    const p2bConsoleMessages: string[] = [];
+    page.on("request", (request) => {
       requestedPaths.push(new URL(request.url()).pathname);
     });
-    await adminPage.goto("/connections");
-    await expect(adminPage.getByText("DEPENDENCY_NOT_READY")).toBeVisible();
-    await adminPage.evaluate(() => {
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    });
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      await adminPage.keyboard.press("Tab");
-      const focused = await adminPage.evaluate(() => (
-        document.activeElement instanceof HTMLElement
-          ? document.activeElement.textContent.trim()
-          : null
-      ));
-      if (focused === "Test Lab") break;
+    page.on("console", (message) => { p2bConsoleMessages.push(message.text()); });
+    try {
+      await page.goto("/login");
+      await page.getByLabel("사용자 이름").fill("admin");
+      await page.getByLabel("비밀번호").fill(adminPassword);
+      await page.getByRole("button", { name: "로그인" }).click();
+      await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+      await page.getByRole("link", { name: "Connections" }).click();
+      await page.getByLabel("이름", { exact: true }).fill("gateway-local");
+      await page.getByLabel("Gateway HTTPS URL").fill("https://gateway.invalid");
+      await page.getByLabel("Credential 환경변수 이름").fill(gatewaySecretReference);
+      await page.getByRole("button", { name: "Connection 추가" }).click();
+      await expect(page.getByText("gateway-local")).toBeVisible();
+      await expect(page.getByText(/MED.*IAL/)).toBeVisible();
+      await expect(page.getByLabel("Credential 환경변수 이름")).toHaveValue("");
+      await page.getByRole("button", { name: "연결 시험" }).click();
+      await expect(page.getByText("ready")).toBeVisible();
+
+      await page.getByRole("link", { name: "Test Lab" }).click();
+      await expect(page.getByRole("heading", { name: "Test Lab" })).toBeVisible();
+      await page.getByLabel("Connection").selectOption({ label: "gateway-local" });
+      await page.getByLabel("대상 모델").fill("vendor/text-model");
+      await page.getByLabel("사용자 요청").fill("이미지 오류를 설명해줘");
+      await page.getByLabel(/이미지 또는 PDF/).setInputFiles({
+        name: "error.png",
+        mimeType: "image/png",
+        buffer: Buffer.from([137, 80, 78, 71]),
+      });
+      await expect(page.getByRole("button", { name: "실제 downstream 시험" })).toBeDisabled();
+      await page.getByRole("button", { name: "Preview" }).click();
+      await expect(page.getByText(/E2E SAFE OCR/)).toBeVisible();
+      expect(requestedPaths.filter((path) => path === "/admin/v1/test-lab/run")).toEqual([]);
+      await page.getByRole("button", { name: "결과 지우기" }).click();
+
+      await page.getByLabel("사용자 요청").fill("명시적 downstream 시험");
+      await page.getByLabel(/이미지 또는 PDF/).setInputFiles({
+        name: "error.png",
+        mimeType: "image/png",
+        buffer: Buffer.from([137, 80, 78, 71]),
+      });
+      await page.getByLabel(/실제 downstream Provider 호출/).check();
+      await page.getByRole("button", { name: "실제 downstream 시험" }).click();
+      await expect(page.getByText(/resp_e2e_no_provider_cost/)).toBeVisible();
+      await expect(page.getByLabel(/실제 downstream Provider 호출/)).not.toBeChecked();
+      await expect(page.getByRole("button", { name: "실제 downstream 시험" })).toBeDisabled();
+
+      const forbidden = requestedPaths.filter(
+        (path) => path === "/assets" || path.startsWith("/assets/") || path.startsWith("/v1/"),
+      );
+      expect(forbidden).toEqual([]);
+      expect(requestedPaths.some((path) => path === "/admin/v1/test-lab/preview")).toBe(true);
+      expect(requestedPaths.some((path) => path === "/admin/v1/test-lab/run")).toBe(true);
+      const browserState = await page.evaluate(() => ({
+        html: document.documentElement.outerHTML,
+        href: window.location.href,
+        local: JSON.stringify(window.localStorage),
+        session: JSON.stringify(window.sessionStorage),
+      }));
+      const retained = `${browserState.html}\n${browserState.href}\n${browserState.local}\n${browserState.session}\n${p2bConsoleMessages.join("\n")}`;
+      expect(retained.includes(rawGatewayCredential)).toBe(false);
+      await expectNoSeriousAccessibilityViolations(page);
+    } finally {
+      await p2bContext.close();
     }
-    expect(await adminPage.evaluate(() => (
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement.textContent.trim()
-        : null
-    ))).toBe("Test Lab");
-    await adminPage.keyboard.press("Enter");
-    await expect(adminPage.getByRole("heading", { name: "Test Lab" })).toBeVisible();
-    const forbidden = requestedPaths.filter(
-      (path) => path === "/assets" || path.startsWith("/assets/") || path === "/v1/responses",
-    );
-    expect(forbidden).toEqual([]);
-    const allowedAdminRequests = new Set(["/admin/v1/me", "/admin/v1/snapshots"]);
-    expect(
-      requestedPaths.filter(
-        (path) => path.startsWith("/admin/v1/") && !allowedAdminRequests.has(path),
-      ),
-    ).toEqual([]);
-    await expectNoSeriousAccessibilityViolations(adminPage);
+  });
+
+  test("keeps P2b viewer UI read-only and passes local accessibility viewports", async ({ browser }) => {
+    const viewerContext = await browser.newContext({ ignoreHTTPSErrors: true });
+    try {
+      await loginApi(viewerContext, "viewer", viewerPassword);
+      const viewerPage = await viewerContext.newPage();
+      await viewerPage.goto(`${baseURL}/connections`);
+      await expect(viewerPage.getByRole("heading", { name: "Connections" })).toBeVisible();
+      await expect(viewerPage.getByRole("button", { name: "Connection 추가" })).toHaveCount(0);
+      await expect(viewerPage.getByRole("button", { name: "연결 시험" })).toHaveCount(0);
+      await viewerPage.goto(`${baseURL}/test-lab`);
+      await expect(viewerPage.getByText(/viewer는 시험 본문/)).toBeVisible();
+      await expect(viewerPage.getByLabel(/이미지 또는 PDF/)).toHaveCount(0);
+      await expectNoSeriousAccessibilityViolations(viewerPage);
+    } finally {
+      await viewerContext.close();
+    }
 
     for (const width of [320, 768, 1440]) {
       await adminPage.setViewportSize({ width, height: 900 });
-      await adminPage.goto("/providers");
-      await expect(adminPage.getByRole("heading", { name: "Providers" })).toBeVisible();
+      await adminPage.goto("/test-lab");
+      await expect(adminPage.getByRole("heading", { name: "Test Lab" })).toBeVisible();
       const overflows = await adminPage.evaluate(
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
       );

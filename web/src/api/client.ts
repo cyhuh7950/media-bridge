@@ -4,6 +4,7 @@ const ADMIN_ROOTS = new Set([
   "audit",
   "auth",
   "bootstrap",
+  "connections",
   "credentials",
   "drafts",
   "events",
@@ -13,6 +14,7 @@ const ADMIN_ROOTS = new Set([
   "policies",
   "providers",
   "snapshots",
+  "test-lab",
   "users",
 ]);
 

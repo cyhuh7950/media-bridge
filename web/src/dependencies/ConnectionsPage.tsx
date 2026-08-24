@@ -1,14 +1,122 @@
-export function ConnectionsPage() {
+import { useState, type SyntheticEvent } from "react";
+
+import { adminRequest } from "../api/client";
+import type { OperationsProps } from "../operations/operationTypes";
+import { safeItemPath, textField } from "../operations/operationTypes";
+import { useAdminList } from "../operations/useAdminList";
+
+function secretReference(item: Record<string, unknown>): string {
+  const value = item.credential_secret_ref;
+  if (typeof value !== "object" || value === null) return "—";
+  const reference = value as Record<string, unknown>;
+  return `${textField(reference, "kind")}: ${textField(reference, "identifier")}`;
+}
+
+export function ConnectionsPage({ role, csrfToken }: OperationsProps) {
+  const { items, failed, reload } = useAdminList("/connections");
+  const [name, setName] = useState("");
+  const [gatewayUrl, setGatewayUrl] = useState("");
+  const [secretReferenceName, setSecretReferenceName] = useState("");
+  const [actionError, setActionError] = useState(false);
+  const adminWritable = role === "admin" && csrfToken !== null;
+  const canTest = role !== "viewer" && csrfToken !== null;
+
+  async function createConnection(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!adminWritable) return;
+    const currentReference = secretReferenceName;
+    setSecretReferenceName("");
+    setActionError(false);
+    try {
+      await adminRequest("/connections", {
+        method: "POST",
+        csrfToken,
+        body: {
+          name,
+          gateway_url: gatewayUrl,
+          credential_secret_ref: { kind: "env", identifier: currentReference },
+          enabled: true,
+        },
+      });
+      setName("");
+      setGatewayUrl("");
+      await reload();
+    } catch {
+      setActionError(true);
+    }
+  }
+
+  async function testConnection(identifier: string) {
+    if (!canTest) return;
+    setActionError(false);
+    try {
+      await adminRequest(safeItemPath("connections", identifier, "/test"), {
+        method: "POST",
+        csrfToken,
+      });
+      await reload();
+    } catch {
+      setActionError(true);
+    }
+  }
+
+  async function revokeConnection(identifier: string) {
+    if (!adminWritable) return;
+    setActionError(false);
+    try {
+      await adminRequest(safeItemPath("connections", identifier), {
+        method: "DELETE",
+        csrfToken,
+      });
+      await reload();
+    } catch {
+      setActionError(true);
+    }
+  }
+
   return (
-    <section aria-labelledby="connections-title" className="dependency-page">
-      <p className="dependency-badge">DEPENDENCY_NOT_READY</p>
+    <section aria-labelledby="connections-title">
       <h1 id="connections-title">Connections</h1>
-      <p>P3 Gateway의 connection API와 저장·시험 계약이 검증된 뒤 P2b에서 활성화됩니다.</p>
-      <p>현재 발급되는 client credential은 접근 수단일 뿐 접속 상태를 증명하지 않습니다.</p>
-      <div className="dependency-placeholder" aria-label="비활성 기능">
-        <strong>현재 사용할 수 없음</strong>
-        <span>연결 저장, 시험, 마지막 정상 시각, 폐기는 아직 제공되지 않습니다.</span>
-      </div>
+      <p>Gateway credential 원문이 아니라 외부 Secret 참조와 검증 상태만 관리합니다.</p>
+      {failed ? <p role="alert">Connection 목록을 불러올 수 없습니다.</p> : null}
+      {actionError ? <p role="alert">Connection 작업을 안전하게 완료하지 못했습니다.</p> : null}
+      {items === null && !failed ? <p role="status">Connection 목록을 불러오고 있습니다.</p> : null}
+      {items ? (
+        <table>
+          <thead><tr><th>이름</th><th>Gateway</th><th>Secret 참조</th><th>상태</th><th>마지막 성공</th><th>작업</th></tr></thead>
+          <tbody>
+            {items.map((item) => {
+              const identifier = textField(item, "id");
+              const revoked = textField(item, "status") === "revoked";
+              return (
+                <tr key={identifier}>
+                  <td>{textField(item, "name")}</td>
+                  <td>{textField(item, "gateway_url")}</td>
+                  <td>{secretReference(item)}</td>
+                  <td>{textField(item, "status")}</td>
+                  <td>{textField(item, "last_success_at")}</td>
+                  <td><div className="inline-actions">
+                    {canTest ? <button className="secondary-button" type="button" disabled={revoked} onClick={() => { void testConnection(identifier); }}>연결 시험</button> : null}
+                    {adminWritable ? <button type="button" disabled={revoked} onClick={() => { void revokeConnection(identifier); }}>폐기</button> : null}
+                  </div></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : null}
+      {adminWritable ? (
+        <form className="form-grid compact-form" onSubmit={(event) => { void createConnection(event); }}>
+          <h2>Connection 추가</h2>
+          <label htmlFor="connection-name">이름</label>
+          <input id="connection-name" value={name} onChange={(event) => { setName(event.target.value); }} required />
+          <label htmlFor="connection-url">Gateway HTTPS URL</label>
+          <input id="connection-url" type="url" value={gatewayUrl} onChange={(event) => { setGatewayUrl(event.target.value); }} pattern="https://.*" required />
+          <label htmlFor="connection-secret-reference">Credential 환경변수 이름</label>
+          <input id="connection-secret-reference" value={secretReferenceName} onChange={(event) => { setSecretReferenceName(event.target.value); }} pattern="[A-Z][A-Z0-9_]*" autoComplete="off" required />
+          <button type="submit">Connection 추가</button>
+        </form>
+      ) : <p>{role === "operator" ? "operator는 연결 시험만 수행할 수 있습니다." : "viewer는 Connection을 읽기만 할 수 있습니다."}</p>}
     </section>
   );
 }

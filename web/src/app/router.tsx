@@ -100,8 +100,8 @@ function ConsoleLayout() {
             <Route path="/snapshots" element={<SnapshotsPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
             <Route path="/audit" element={<AuditEventsPage />} />
             <Route path="/system" element={<SystemPage />} />
-            <Route path="/connections" element={<ConnectionsPage />} />
-            <Route path="/test-lab" element={<TestLabPage />} />
+            <Route path="/connections" element={<ConnectionsPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
+            <Route path="/test-lab" element={<TestLabPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
