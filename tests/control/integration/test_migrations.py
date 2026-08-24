@@ -14,6 +14,7 @@ EXPECTED_TABLES = {
     "audit_events",
     "bootstrap_tokens",
     "client_credentials",
+    "connections",
     "config_drafts",
     "model_capabilities",
     "operational_events",
@@ -41,7 +42,7 @@ def test_fresh_upgrade_creates_control_plane_schema(clean_postgres: str) -> None
     with engine.connect() as connection:
         revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
     engine.dispose()
-    assert revision == "0001_control_plane"
+    assert revision == "0002_connections"
 
 
 def test_migration_round_trip_is_reversible(clean_postgres: str) -> None:
