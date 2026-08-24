@@ -25,6 +25,8 @@ from media_bridge_gateway.contracts import (
     SealedGatewayRequest,
 )
 from media_bridge_gateway.transaction import GatewayTransaction
+from tests.gateway.helpers import FakeOcr as RuntimeFakeOcr
+from tests.gateway.helpers import build_test_runtime, image_uri
 
 
 def _png() -> bytes:
@@ -173,3 +175,107 @@ async def test_product_neutral_transaction_handles_text_image_and_pdf(
         assert "red terminal" in serialized
     else:
         assert sealed.payload == payload
+
+
+@pytest.mark.asyncio
+async def test_prior_state_is_subject_scoped_and_drops_response_items(tmp_path: Path) -> None:
+    runtime, downstream, _asset_store = build_test_runtime(tmp_path)
+    subject = DataPlaneSubject(
+        credential_selector="gateway-client",
+        tenant_id="client-gateway-client",
+        scopes=frozenset({"responses:invoke"}),
+    )
+    first = await runtime.invoke(
+        {"model": "text-model", "input": "safe first"},
+        subject=subject,
+    )
+    assert first.status == "completed"
+
+    other_subject = DataPlaneSubject(
+        credential_selector="other-client",
+        tenant_id="client-gateway-client",
+        scopes=frozenset({"responses:invoke"}),
+    )
+    denied = await runtime.invoke(
+        {
+            "model": "text-model",
+            "previous_response_id": "resp_gateway",
+            "input": "not authorized",
+        },
+        subject=other_subject,
+    )
+    assert denied.status == "blocked"
+    assert len(downstream.requests) == 1
+
+    followed = await runtime.invoke(
+        {
+            "model": "text-model",
+            "previous_response_id": "resp_gateway",
+            "input": [
+                {
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "assistant-marker"}],
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call-1",
+                    "output": "tool-result-marker",
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "next user"}],
+                },
+            ],
+        },
+        subject=subject,
+    )
+
+    assert followed.status == "completed"
+    serialized = json.dumps(downstream.requests[1].payload)
+    assert "safe first" in serialized
+    assert "next user" in serialized
+    assert "assistant-marker" not in serialized
+    assert "tool-result-marker" not in serialized
+    record = runtime.current().state_store.resolve(
+        "resp_gateway",
+        tenant_id=subject.tenant_id,
+        credential_selector=subject.credential_selector,
+    )
+    assert record.target_id == "text-model"
+    assert record.snapshot_version == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_media_request_leaves_no_state_and_new_text_continues(
+    tmp_path: Path,
+) -> None:
+    runtime, downstream, _asset_store = build_test_runtime(
+        tmp_path,
+        ocr=RuntimeFakeOcr(fail=True),
+    )
+    subject = DataPlaneSubject(
+        credential_selector="gateway-client",
+        tenant_id="client-gateway-client",
+        scopes=frozenset({"responses:invoke"}),
+    )
+    failed = await runtime.invoke(
+        {
+            "model": "text-model",
+            "input": [
+                {
+                    "role": "user",
+                    "content": [{"type": "input_image", "image_url": image_uri()}],
+                }
+            ],
+        },
+        subject=subject,
+    )
+    assert failed.status == "blocked"
+    assert downstream.requests == []
+
+    continued = await runtime.invoke(
+        {"model": "text-model", "input": "text after blocked media"},
+        subject=subject,
+    )
+    assert continued.status == "completed"
+    assert len(downstream.requests) == 1
