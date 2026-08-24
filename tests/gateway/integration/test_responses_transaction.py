@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -20,10 +21,11 @@ from media_bridge.pdf_pipeline import RenderedPdfPage
 from media_bridge.receipts import GateReceiptSigner
 from media_bridge_gateway.contracts import (
     DataPlaneSubject,
+    DownstreamError,
     GatewayResponse,
     SealedGatewayRequest,
 )
-from media_bridge_gateway.state import GatewayStateStore
+from media_bridge_gateway.state import GatewayStateError, GatewayStateStore
 from media_bridge_gateway.transaction import GatewayTransaction
 from tests.gateway.helpers import FakeOcr as RuntimeFakeOcr
 from tests.gateway.helpers import build_test_runtime, image_uri
@@ -83,6 +85,7 @@ def _transaction(
     tmp_path: Path,
     *,
     state_store: GatewayStateStore | None = None,
+    downstream: FakeDownstream | None = None,
 ) -> tuple[GatewayTransaction, FakeDownstream]:
     now = datetime(2026, 8, 24, tzinfo=UTC)
     signer = GateReceiptSigner(secret=b"r" * 32, clock=lambda: now.timestamp())
@@ -99,16 +102,16 @@ def _transaction(
         pdf_renderer=FakePdfRenderer(),
         now=lambda: now,
     )
-    downstream = FakeDownstream()
+    selected_downstream = downstream or FakeDownstream()
     return (
         GatewayTransaction(
             gate=gate,
-            downstream=downstream,
+            downstream=selected_downstream,
             receipt_signer=signer,
             state_store=state_store or GatewayStateStore(clock=lambda: now.timestamp()),
             snapshot_version=7,
         ),
-        downstream,
+        selected_downstream,
     )
 
 
@@ -360,6 +363,105 @@ async def test_state_failure_after_downstream_success_preserves_model_response(
     assert result.warning is not None
     assert result.warning.code == "state_persistence_failed"
     assert len(downstream.requests) == 1
+
+
+class StreamingDownstream(FakeDownstream):
+    def __init__(self, mode: str) -> None:
+        super().__init__()
+        self.mode = mode
+
+    async def invoke(self, request: SealedGatewayRequest) -> GatewayResponse:
+        self.requests.append(request)
+
+        async def stream_body() -> AsyncIterator[bytes]:
+            yield (
+                b"event: response.created\n"
+                b'data: {"type":"response.created","response":{"id":"resp_stream"}}\n\n'
+            )
+            if self.mode in {"failure", "oversize"}:
+                raise DownstreamError(
+                    "downstream_response_oversized"
+                    if self.mode == "oversize"
+                    else "downstream_transport",
+                    "Downstream stream failed safely.",
+                )
+            yield b"data: [DONE]\n\n"
+
+        return GatewayResponse(
+            body=b"",
+            content_type="text/event-stream",
+            response_id="resp_stream",
+            status_code=200,
+            stream=stream_body(),
+        )
+
+
+def _assert_stream_state_absent(store: GatewayStateStore) -> None:
+    with pytest.raises(GatewayStateError):
+        store.resolve(
+            "resp_stream",
+            tenant_id=_subject().tenant_id,
+            credential_selector=_subject().credential_selector,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["failure", "oversize", "cancel"])
+async def test_stream_failure_or_cancel_never_commits_followup_state(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    store = GatewayStateStore()
+    transaction, _downstream = _transaction(
+        tmp_path,
+        state_store=store,
+        downstream=StreamingDownstream(mode),
+    )
+
+    result = await transaction.invoke(
+        {"model": "text-model", "input": "stream", "stream": True},
+        subject=_subject(),
+    )
+
+    assert result.response is not None
+    assert result.response.stream is not None
+    _assert_stream_state_absent(store)
+    stream = result.response.stream
+    assert b"response.created" in await anext(stream)
+    if mode == "cancel":
+        await stream.aclose()
+    else:
+        with pytest.raises(DownstreamError):
+            _ = [chunk async for chunk in stream]
+    _assert_stream_state_absent(store)
+
+
+@pytest.mark.asyncio
+async def test_successful_stream_commits_followup_state_only_after_done(
+    tmp_path: Path,
+) -> None:
+    store = GatewayStateStore()
+    transaction, _downstream = _transaction(
+        tmp_path,
+        state_store=store,
+        downstream=StreamingDownstream("success"),
+    )
+
+    result = await transaction.invoke(
+        {"model": "text-model", "input": "stream", "stream": True},
+        subject=_subject(),
+    )
+
+    assert result.response is not None
+    assert result.response.stream is not None
+    _assert_stream_state_absent(store)
+    assert b"[DONE]" in b"".join([chunk async for chunk in result.response.stream])
+    record = store.resolve(
+        "resp_stream",
+        tenant_id=_subject().tenant_id,
+        credential_selector=_subject().credential_selector,
+    )
+    assert record.sanitized_text == "stream"
 
 
 @pytest.mark.asyncio

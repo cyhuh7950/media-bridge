@@ -6,6 +6,7 @@ import asyncio
 import base64
 import binascii
 import os
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -99,6 +100,40 @@ class GatewayProcess:
                 await self.http_client.aclose()
 
 
+async def _close_partial_http_resources(
+    *,
+    downstream: GuardedResponsesDownstream | None,
+    client: httpx.AsyncClient | None,
+) -> None:
+    if downstream is not None:
+        with suppress(Exception):
+            await downstream.close()
+    if client is not None:
+        with suppress(Exception):
+            await client.aclose()
+
+
+def _cleanup_partial_build(
+    *,
+    downstream: GuardedResponsesDownstream | None,
+    client: httpx.AsyncClient | None,
+    runtime: VerifiedSnapshotRuntime | None,
+    asset_store: AssetStore,
+) -> None:
+    if runtime is not None:
+        with suppress(Exception):
+            runtime.current().state_store.clear()
+    with suppress(Exception):
+        asset_store.clear()
+    close = _close_partial_http_resources(downstream=downstream, client=client)
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(close)
+    else:
+        loop.create_task(close)
+
+
 def build_gateway_process_from_environment() -> GatewayProcess:
     key_id = _required("MEDIA_BRIDGE_SNAPSHOT_KEY_ID")
     verifier = SnapshotVerifier({key_id: _public_key()})
@@ -114,85 +149,108 @@ def build_gateway_process_from_environment() -> GatewayProcess:
             "MEDIA_BRIDGE_RECEIPT_SECRET_FILE",
         ).encode()
     )
-    client = httpx.AsyncClient(
-        timeout=httpx.Timeout(30),
-        follow_redirects=False,
-        trust_env=False,
-        limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-    )
-    ocr = UpstageOcrBackend(
-        endpoint=_required("MEDIA_BRIDGE_OCR_ENDPOINT"),
-        api_key_env="MEDIA_BRIDGE_OCR_API_KEY",
-        api_key_file_env="MEDIA_BRIDGE_OCR_API_KEY_FILE",
-        client=client,
-    )
-    vision = OpenAICompatibleVisionBackend(
-        endpoint=_required("MEDIA_BRIDGE_VISION_ENDPOINT"),
-        model=_required("MEDIA_BRIDGE_VISION_MODEL"),
-        api_key_env="MEDIA_BRIDGE_VISION_API_KEY",
-        api_key_file_env="MEDIA_BRIDGE_VISION_API_KEY_FILE",
-        client=client,
-    )
-    solar = SolarAnalysisBackend(
-        endpoint=os.environ.get(
-            "MEDIA_BRIDGE_SOLAR_ENDPOINT",
-            "https://api.upstage.ai/v1/chat/completions",
-        ),
-        model=os.environ.get("MEDIA_BRIDGE_SOLAR_MODEL", "solar-pro4"),
-        api_key_env="MEDIA_BRIDGE_SOLAR_API_KEY",
-        api_key_file_env="MEDIA_BRIDGE_SOLAR_API_KEY_FILE",
-        client=client,
-    )
-    downstream = GuardedResponsesDownstream(
-        endpoint=_required("MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL"),
-        receipt_signer=receipt_signer,
-    )
-
-    def gate_factory(snapshot: SignedSnapshot) -> PreRequestGate:
-        return PreRequestGate(
-            registry=capability_registry_from_snapshot(snapshot),
-            acquirer=MediaAcquirer(asset_store=asset_store),
-            ocr_backend=ocr,
-            vision_backend=vision,
-            receipt_signer=receipt_signer,
-            pdf_renderer=PdfiumPageRenderer(),
+    client: httpx.AsyncClient | None = None
+    downstream: GuardedResponsesDownstream | None = None
+    runtime: VerifiedSnapshotRuntime | None = None
+    try:
+        client = httpx.AsyncClient(
+            timeout=httpx.Timeout(30),
+            follow_redirects=False,
+            trust_env=False,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
+        ocr = UpstageOcrBackend(
+            endpoint=_required("MEDIA_BRIDGE_OCR_ENDPOINT"),
+            api_key_env="MEDIA_BRIDGE_OCR_API_KEY",
+            api_key_file_env="MEDIA_BRIDGE_OCR_API_KEY_FILE",
+            client=client,
+        )
+        vision = OpenAICompatibleVisionBackend(
+            endpoint=_required("MEDIA_BRIDGE_VISION_ENDPOINT"),
+            model=_required("MEDIA_BRIDGE_VISION_MODEL"),
+            api_key_env="MEDIA_BRIDGE_VISION_API_KEY",
+            api_key_file_env="MEDIA_BRIDGE_VISION_API_KEY_FILE",
+            client=client,
+        )
+        solar = SolarAnalysisBackend(
+            endpoint=os.environ.get(
+                "MEDIA_BRIDGE_SOLAR_ENDPOINT",
+                "https://api.upstage.ai/v1/chat/completions",
+            ),
+            model=os.environ.get("MEDIA_BRIDGE_SOLAR_MODEL", "solar-pro4"),
+            api_key_env="MEDIA_BRIDGE_SOLAR_API_KEY",
+            api_key_file_env="MEDIA_BRIDGE_SOLAR_API_KEY_FILE",
+            client=client,
+        )
+        configured_downstream = GuardedResponsesDownstream(
+            endpoint=_required("MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL"),
+            receipt_signer=receipt_signer,
+        )
+        downstream = configured_downstream
 
-    factory = GatewayTransactionFactory(
-        gate_factory=gate_factory,
-        downstream_factory=lambda _snapshot: downstream,
-        receipt_signer=receipt_signer,
-        state_store_factory=GatewayStateStore,
-        credential_pepper=credential_pepper,
-        analysis_backends_factory=lambda _snapshot: {"solar": solar},
-    )
-    runtime = VerifiedSnapshotRuntime(verifier=verifier, generation_factory=factory)
-    runtime.load(snapshot_path)
-    app = build_gateway_app(
-        runtime=runtime,
-        asset_store=asset_store,
-        snapshot_reloader=SnapshotFileReloader(path=snapshot_path, runtime=runtime),
-        rate_limiter=CredentialRouteRateLimiter(
-            capacity=_integer("MEDIA_BRIDGE_GATEWAY_RATE_CAPACITY", 60, minimum=1, maximum=10_000),
-            refill_per_second=float(
-                _integer("MEDIA_BRIDGE_GATEWAY_RATE_PER_SECOND", 10, minimum=1, maximum=1_000)
+        def gate_factory(snapshot: SignedSnapshot) -> PreRequestGate:
+            return PreRequestGate(
+                registry=capability_registry_from_snapshot(snapshot),
+                acquirer=MediaAcquirer(asset_store=asset_store),
+                ocr_backend=ocr,
+                vision_backend=vision,
+                receipt_signer=receipt_signer,
+                pdf_renderer=PdfiumPageRenderer(),
+            )
+
+        factory = GatewayTransactionFactory(
+            gate_factory=gate_factory,
+            downstream_factory=lambda _snapshot: configured_downstream,
+            receipt_signer=receipt_signer,
+            state_store_factory=GatewayStateStore,
+            credential_pepper=credential_pepper,
+            analysis_backends_factory=lambda _snapshot: {"solar": solar},
+        )
+        runtime = VerifiedSnapshotRuntime(verifier=verifier, generation_factory=factory)
+        runtime.load(snapshot_path)
+        app = build_gateway_app(
+            runtime=runtime,
+            asset_store=asset_store,
+            snapshot_reloader=SnapshotFileReloader(path=snapshot_path, runtime=runtime),
+            rate_limiter=CredentialRouteRateLimiter(
+                capacity=_integer(
+                    "MEDIA_BRIDGE_GATEWAY_RATE_CAPACITY",
+                    60,
+                    minimum=1,
+                    maximum=10_000,
+                ),
+                refill_per_second=float(
+                    _integer(
+                        "MEDIA_BRIDGE_GATEWAY_RATE_PER_SECOND",
+                        10,
+                        minimum=1,
+                        maximum=1_000,
+                    )
+                ),
+                max_keys=_integer(
+                    "MEDIA_BRIDGE_GATEWAY_RATE_MAX_KEYS",
+                    100_000,
+                    minimum=1,
+                    maximum=1_000_000,
+                ),
+                idle_ttl_seconds=600,
             ),
-            max_keys=_integer(
-                "MEDIA_BRIDGE_GATEWAY_RATE_MAX_KEYS",
-                100_000,
-                minimum=1,
-                maximum=1_000_000,
-            ),
-            idle_ttl_seconds=600,
-        ),
-    )
-    return GatewayProcess(
-        app=app,
-        runtime=runtime,
-        asset_store=asset_store,
-        downstream=downstream,
-        http_client=client,
-    )
+        )
+        return GatewayProcess(
+            app=app,
+            runtime=runtime,
+            asset_store=asset_store,
+            downstream=configured_downstream,
+            http_client=client,
+        )
+    except BaseException:
+        _cleanup_partial_build(
+            downstream=downstream,
+            client=client,
+            runtime=runtime,
+            asset_store=asset_store,
+        )
+        raise
 
 
 def run_gateway() -> None:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import secrets
+from collections.abc import AsyncIterator
+from contextlib import suppress
 from typing import Any, cast
 
 from media_bridge.capabilities import CapabilityState
@@ -242,6 +244,20 @@ class GatewayTransaction:
                 http_status=downstream_error.http_status,
             )
 
+        if response.stream is not None:
+            return GatewayResult(
+                status="completed",
+                response=self._defer_state_until_stream_complete(
+                    response=response,
+                    subject=subject,
+                    normalized=normalized,
+                    prepared=prepared,
+                ),
+                gate_result=outcome.public,
+                error=None,
+                http_status=response.status_code,
+            )
+
         try:
             self._record_state(
                 response=response,
@@ -267,6 +283,51 @@ class GatewayTransaction:
             gate_result=outcome.public,
             error=None,
             http_status=response.status_code,
+        )
+
+    def _defer_state_until_stream_complete(
+        self,
+        *,
+        response: GatewayResponse,
+        subject: DataPlaneSubject,
+        normalized: NormalizedResponsesRequest,
+        prepared: DownstreamPayload,
+    ) -> GatewayResponse:
+        source = response.stream
+        if source is None:
+            raise ValueError("streaming response has no stream")
+
+        async def state_committing_stream() -> AsyncIterator[bytes]:
+            completed = False
+            try:
+                async for chunk in source:
+                    yield chunk
+                completed = True
+            finally:
+                if not completed:
+                    close = getattr(source, "aclose", None)
+                    if callable(close):
+                        with suppress(Exception):
+                            await close()
+            if completed:
+                try:
+                    self._record_state(
+                        response=response,
+                        subject=subject,
+                        normalized=normalized,
+                        prepared=prepared,
+                    )
+                except ValueError:
+                    # HTTP headers are already committed for a completed stream.
+                    # Preserve the provider result and leave follow-up state absent.
+                    return
+
+        return GatewayResponse(
+            body=response.body,
+            content_type=response.content_type,
+            response_id=response.response_id,
+            status_code=response.status_code,
+            stream=state_committing_stream(),
         )
 
     def _check_state_capability(

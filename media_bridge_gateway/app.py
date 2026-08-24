@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextvars
 import json
 import time
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from uuid import uuid4
 
 from starlette.applications import Starlette
@@ -27,7 +27,7 @@ from media_bridge.contracts import (
 from media_bridge.mcp_server import build_mcp_server
 from media_bridge.service import MediaBridgeService
 from media_bridge_gateway.auth import CredentialAuthenticationError
-from media_bridge_gateway.contracts import DataPlaneSubject
+from media_bridge_gateway.contracts import DataPlaneSubject, DownstreamError
 from media_bridge_gateway.events import (
     GatewayEvent,
     GatewayEventSink,
@@ -392,23 +392,44 @@ def build_gateway_app(
         if result.gate_result is not None:
             current_event_model.set(result.gate_result.target_model)
         if result.status == "completed" and result.response is not None:
+            gateway_response = result.response
             response_headers = (
                 {"Media-Bridge-State": "unavailable"}
                 if result.warning is not None
                 and result.warning.code == "state_persistence_failed"
                 else None
             )
-            if result.response.stream is not None:
+            if gateway_response.stream is not None:
+                source_stream = gateway_response.stream
+
+                async def safe_stream() -> AsyncIterator[bytes]:
+                    try:
+                        async for chunk in source_stream:
+                            yield chunk
+                    except DownstreamError as stream_error:
+                        current_event_status.set(stream_error.code)
+                        event = json.dumps(
+                            {
+                                "type": "media_bridge.error",
+                                "error": {
+                                    "code": stream_error.code,
+                                    "message": stream_error.safe_message,
+                                },
+                            },
+                            separators=(",", ":"),
+                        )
+                        yield f"event: media_bridge.error\ndata: {event}\n\n".encode()
+
                 return StreamingResponse(
-                    result.response.stream,
-                    status_code=result.response.status_code,
-                    media_type=result.response.content_type,
+                    safe_stream(),
+                    status_code=gateway_response.status_code,
+                    media_type=gateway_response.content_type,
                     headers=response_headers,
                 )
             return Response(
-                content=result.response.body,
-                status_code=result.response.status_code,
-                media_type=result.response.content_type,
+                content=gateway_response.body,
+                status_code=gateway_response.status_code,
+                media_type=gateway_response.content_type,
                 headers=response_headers,
             )
         if result.error is None:

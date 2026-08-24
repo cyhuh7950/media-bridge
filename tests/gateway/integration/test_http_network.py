@@ -11,7 +11,9 @@ from mcp import ClientSession
 from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
 from media_bridge_gateway.app import build_gateway_app
+from media_bridge_gateway.contracts import DownstreamError
 from media_bridge_gateway.rate_limit import CredentialRouteRateLimiter
+from media_bridge_gateway.state import GatewayStateError, GatewayStateStore
 from tests.gateway.helpers import TEST_RAW_CREDENTIAL, build_test_runtime
 
 
@@ -76,6 +78,32 @@ async def test_actual_tcp_responses_json_sse_mcp_limits_and_no_redirect(
                 assert b"response.created" in first_event
                 downstream.stream_release.set()
                 remaining_events = b"".join([chunk async for chunk in stream_iterator])
+            downstream.stream_started.clear()
+            downstream.stream_release.clear()
+            downstream.stream_response_id = "resp_failed_stream"
+            downstream.stream_error = DownstreamError(
+                "downstream_transport",
+                "Downstream stream failed safely.",
+            )
+            async with client.stream(
+                "POST",
+                "/v1/responses",
+                headers=authorization,
+                json={"model": "text-model", "input": "stream fails", "stream": True},
+            ) as failed_sse_response:
+                failed_sse_status = failed_sse_response.status_code
+                failed_iterator = failed_sse_response.aiter_bytes()
+                failed_first = await asyncio.wait_for(anext(failed_iterator), timeout=1)
+                with pytest.raises(GatewayStateError):
+                    runtime.current().state_store.resolve(
+                        "resp_failed_stream",
+                        tenant_id="client-gateway-client",
+                        credential_selector="gateway-client",
+                    )
+                downstream.stream_release.set()
+                failed_remaining = b"".join(
+                    [chunk async for chunk in failed_iterator]
+                )
             oversized = await client.post(
                 "/v1/responses",
                 headers={**authorization, "Content-Type": "application/json"},
@@ -98,17 +126,37 @@ async def test_actual_tcp_responses_json_sse_mcp_limits_and_no_redirect(
                 ],
                 json={"model": "text-model", "input": "must fail closed"},
             )
+            duplicate_cookie = await client.post(
+                "/v1/responses",
+                headers=[
+                    ("Authorization", f"Bearer {TEST_RAW_CREDENTIAL}"),
+                    ("Cookie", "session=first"),
+                    ("Cookie", "session=second"),
+                ],
+                json={"model": "text-model", "input": "must fail closed"},
+            )
 
         assert json_response.status_code == 200
         assert json_response.json()["id"] == "resp_gateway"
         assert sse_status == 200
         assert sse_content_type.startswith("text/event-stream")
         assert b"[DONE]" in remaining_events
+        assert failed_sse_status == 200
+        assert b"response.created" in failed_first
+        assert b"media_bridge.error" in failed_remaining
+        assert b"downstream_transport" in failed_remaining
+        with pytest.raises(GatewayStateError):
+            runtime.current().state_store.resolve(
+                "resp_failed_stream",
+                tenant_id="client-gateway-client",
+                credential_selector="gateway-client",
+            )
         assert oversized.status_code == 413
         assert slash.status_code == 404
         assert unknown.status_code == 404
         assert duplicate_auth.status_code == 401
-        assert len(downstream.requests) == 2
+        assert duplicate_cookie.status_code == 401
+        assert len(downstream.requests) == 3
 
         http_client = create_mcp_http_client(headers=authorization)
         async with (
@@ -140,3 +188,43 @@ async def test_actual_tcp_responses_json_sse_mcp_limits_and_no_redirect(
     finally:
         server.should_exit = True
         await asyncio.wait_for(serve_task, timeout=5)
+
+
+class FailingStateStore(GatewayStateStore):
+    def put(self, **_kwargs: object) -> object:
+        raise ValueError("simulated state failure")
+
+
+@pytest.mark.asyncio
+async def test_json_state_failure_preserves_http_response_and_warning_header(
+    tmp_path: Path,
+) -> None:
+    runtime, downstream, asset_store = build_test_runtime(
+        tmp_path,
+        state_store_factory=FailingStateStore,
+    )
+    app = build_gateway_app(
+        runtime=runtime,
+        asset_store=asset_store,
+        rate_limiter=CredentialRouteRateLimiter(
+            capacity=10,
+            refill_per_second=10,
+            max_keys=10,
+            idle_ttl_seconds=60,
+        ),
+    )
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="https://gateway.test",
+    ) as client:
+        response = await client.post(
+            "/v1/responses",
+            headers={"Authorization": f"Bearer {TEST_RAW_CREDENTIAL}"},
+            json={"model": "text-model", "input": "safe"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "resp_gateway"
+    assert response.headers["Media-Bridge-State"] == "unavailable"
+    assert len(downstream.requests) == 1

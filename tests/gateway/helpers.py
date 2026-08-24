@@ -4,7 +4,7 @@ import asyncio
 import base64
 import hashlib
 import hmac
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -21,7 +21,11 @@ from media_bridge.gate import PreRequestGate
 from media_bridge.receipts import GateReceiptSigner
 from media_bridge.runtime_snapshot import capability_registry_from_snapshot
 from media_bridge_control.snapshots import SnapshotSigner
-from media_bridge_gateway.contracts import GatewayResponse, SealedGatewayRequest
+from media_bridge_gateway.contracts import (
+    DownstreamError,
+    GatewayResponse,
+    SealedGatewayRequest,
+)
 from media_bridge_gateway.runtime import GatewayTransactionFactory, VerifiedSnapshotRuntime
 from media_bridge_gateway.state import GatewayStateStore
 from tests.control.snapshot_helpers import private_key_pem
@@ -69,6 +73,8 @@ class RecordingDownstream:
         self.requests: list[SealedGatewayRequest] = []
         self.stream_started = asyncio.Event()
         self.stream_release = asyncio.Event()
+        self.stream_error: DownstreamError | None = None
+        self.stream_response_id = "resp_gateway"
 
     async def invoke(self, request: SealedGatewayRequest) -> GatewayResponse:
         self.requests.append(request)
@@ -77,15 +83,22 @@ class RecordingDownstream:
                 self.stream_started.set()
                 yield (
                     b"event: response.created\n"
-                    b'data: {"type":"response.created","response":{"id":"resp_gateway"}}\n\n'
+                    + (
+                        '{"type":"response.created","response":{"id":"'
+                        + self.stream_response_id
+                        + '"}}'
+                    ).encode()
+                    + b"\n\n"
                 )
                 await self.stream_release.wait()
+                if self.stream_error is not None:
+                    raise self.stream_error
                 yield b"data: [DONE]\n\n"
 
             return GatewayResponse(
                 body=b"",
                 content_type="text/event-stream",
-                response_id="resp_gateway",
+                response_id=self.stream_response_id,
                 status_code=200,
                 stream=stream_body(),
             )
@@ -104,6 +117,7 @@ def build_test_runtime(
     vision: FakeVision | None = None,
     sanitizer: Any = None,
     workspace_factory: Any = None,
+    state_store_factory: Callable[[], GatewayStateStore] = GatewayStateStore,
 ) -> tuple[VerifiedSnapshotRuntime, RecordingDownstream, AssetStore]:
     now = datetime(2026, 8, 24, tzinfo=UTC)
     signer = SnapshotSigner(key_id="gateway-key", private_key_pem=private_key_pem())
@@ -179,7 +193,7 @@ def build_test_runtime(
         gate_factory=gate_factory,
         downstream_factory=lambda _snapshot: downstream,
         receipt_signer=receipt_signer,
-        state_store_factory=GatewayStateStore,
+        state_store_factory=state_store_factory,
         credential_pepper=TEST_PEPPER,
     )
     runtime = VerifiedSnapshotRuntime(verifier=verifier, generation_factory=factory)
