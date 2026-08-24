@@ -3,6 +3,7 @@
 import re
 from datetime import datetime
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import ConfigDict, Field, StringConstraints, field_validator, model_validator
@@ -105,6 +106,49 @@ class ProviderUpdate(NonEmptyUpdate):
     ] | None = None
     secret_ref: SecretReference | None = None
     enabled: bool | None = None
+
+
+class ConnectionCreate(AdminStrictModel):
+    name: Annotated[
+        str,
+        StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"),
+    ]
+    gateway_url: Annotated[str, StringConstraints(max_length=2_048)]
+    credential_secret_ref: SecretReference
+    enabled: bool = True
+
+    @field_validator("gateway_url")
+    @classmethod
+    def validate_gateway_url(cls, value: str) -> str:
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname is None
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or ".." in parsed.path.split("/")
+        ):
+            raise ValueError("Gateway URL must be credential-free HTTPS")
+        return value.rstrip("/")
+
+
+class ConnectionUpdate(NonEmptyUpdate):
+    name: Annotated[
+        str,
+        StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"),
+    ] | None = None
+    gateway_url: Annotated[str, StringConstraints(max_length=2_048)] | None = None
+    credential_secret_ref: SecretReference | None = None
+    enabled: bool | None = None
+
+    @field_validator("gateway_url")
+    @classmethod
+    def validate_optional_gateway_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return ConnectionCreate.validate_gateway_url(value)
 
 
 class ModelCapabilityCreate(AdminStrictModel):

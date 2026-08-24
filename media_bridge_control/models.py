@@ -104,6 +104,34 @@ class ClientCredential(Base):
     )
 
 
+class Connection(Base):
+    __tablename__ = "connections"
+    __table_args__ = (
+        CheckConstraint(
+            "credential_secret_ref_kind IN ('env', 'docker_secret', 'external')"
+        ),
+        CheckConstraint("status IN ('untested', 'ready', 'failed', 'revoked')"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(128), unique=True)
+    gateway_url: Mapped[str] = mapped_column(String(2_048))
+    credential_secret_ref_kind: Mapped[str] = mapped_column(String(32))
+    credential_secret_ref_identifier: Mapped[str] = mapped_column(String(255))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(16), default="untested")
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
+    created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Provider(Base):
     __tablename__ = "providers"
     __table_args__ = (
