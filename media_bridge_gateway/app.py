@@ -8,6 +8,7 @@ import time
 from collections.abc import AsyncIterator, Callable
 from uuid import uuid4
 
+from pydantic import ValidationError
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
@@ -243,6 +244,8 @@ class DataPlaneAuthMiddleware:
     ) -> None:
         event_type = {
             "/assets": "gateway.assets",
+            "/status": "gateway.status",
+            "/v1/prepare": "gateway.prepare",
             "/v1/responses": "gateway.responses",
             "/mcp": "gateway.mcp",
         }[route_key]
@@ -268,8 +271,12 @@ class DataPlaneAuthMiddleware:
 
     @staticmethod
     def _route_security(path: str) -> tuple[str, str] | None:
-        if path == "/assets":
+        if path == "/assets" or path.startswith("/assets/"):
             return "assets:write", "/assets"
+        if path == "/status":
+            return "mcp:invoke", "/status"
+        if path == "/v1/prepare":
+            return "mcp:invoke", "/v1/prepare"
         if path == "/v1/responses":
             return "responses:invoke", "/v1/responses"
         if path == "/mcp":
@@ -325,14 +332,21 @@ def build_gateway_app(
     asset_store: AssetStore,
     rate_limiter: CredentialRouteRateLimiter,
     max_upload_bytes: int = 2 * 1024 * 1024,
+    max_prepare_body_bytes: int = 4 * 1024 * 1024,
     max_responses_body_bytes: int = 4 * 1024 * 1024,
     event_sink: GatewayEventSink | None = None,
     request_id_factory: Callable[[], str] | None = None,
     monotonic: Callable[[], float] = time.monotonic,
     snapshot_reloader: SnapshotFileReloader | None = None,
 ) -> ASGIApp:
-    if min(max_upload_bytes, max_responses_body_bytes) < 1:
+    if min(max_upload_bytes, max_prepare_body_bytes, max_responses_body_bytes) < 1:
         raise ValueError("Gateway body limits must be positive")
+
+    async def status(_: Request) -> JSONResponse:
+        generation = current_generation.get()
+        if generation is None:
+            return _error("gateway_unavailable", "Gateway is unavailable.", 503)
+        return JSONResponse({"status": "ready", "snapshot_version": generation.version})
 
     async def upload_asset(request: Request) -> JSONResponse:
         body = bytearray()
@@ -353,6 +367,58 @@ def build_gateway_app(
         except AssetAccessError:
             return _error("upload_rejected", "Asset upload was rejected.", 400)
         return JSONResponse({"asset_id": asset_id}, status_code=201)
+
+    async def delete_asset(request: Request) -> Response:
+        subject = current_subject.get()
+        if subject is None:
+            return _error("gateway_unavailable", "Gateway is unavailable.", 503)
+        try:
+            asset_store.delete(
+                asset_id=str(request.path_params["asset_id"]),
+                tenant_id=subject.tenant_id,
+            )
+        except AssetAccessError:
+            return _error(
+                "asset_cleanup_failed",
+                "Asset cleanup could not be verified.",
+                500,
+            )
+        return Response(status_code=204)
+
+    async def prepare(request: Request) -> Response:
+        content_type = request.headers.get("content-type", "").partition(";")[0].lower()
+        if content_type != "application/json":
+            return _error(
+                "unsupported_content_type",
+                "Prepare request must use application/json.",
+                415,
+            )
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > max_prepare_body_bytes:
+                return _error(
+                    "request_too_large",
+                    "Prepare request exceeded the configured limit.",
+                    413,
+                )
+        try:
+            payload = PrepareForModelRequest.model_validate_json(bytes(body))
+        except (ValidationError, ValueError):
+            return _error("invalid_request", "Prepare request is invalid.", 400)
+        generation = current_generation.get()
+        subject = current_subject.get()
+        if generation is None or subject is None:
+            return _error("gateway_unavailable", "Gateway is unavailable.", 503)
+        result = await generation.service.prepare_for_model(
+            payload,
+            tenant_id=subject.tenant_id,
+        )
+        current_event_status.set(
+            result.error.code if result.error is not None else result.action
+        )
+        current_event_model.set(result.target_model)
+        return JSONResponse(result.model_dump(mode="json"))
 
     async def responses(request: Request) -> Response:
         content_type = request.headers.get("content-type", "").partition(";")[0].lower()
@@ -445,7 +511,10 @@ def build_gateway_app(
         max_request_body_size=4 * 1024 * 1024,
     )
     routes: list[Route | Mount] = [
+        Route("/status", status, methods=["GET"]),
         Route("/assets", upload_asset, methods=["POST"]),
+        Route("/assets/{asset_id:str}", delete_asset, methods=["DELETE"]),
+        Route("/v1/prepare", prepare, methods=["POST"]),
         Route("/v1/responses", responses, methods=["POST"]),
         Mount("/", app=mcp_app),
     ]

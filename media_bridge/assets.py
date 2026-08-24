@@ -126,6 +126,24 @@ class AssetStore:
             declared_mime=record.declared_mime,
         )
 
+    def delete(self, *, asset_id: str, tenant_id: str) -> bool:
+        """Delete a tenant-owned asset, returning false when it is unavailable."""
+
+        self.purge_expired()
+        validate_tenant_id(tenant_id)
+        with self._lock:
+            record = self._records.get(asset_id)
+            if record is None or not secrets.compare_digest(record.tenant_id, tenant_id):
+                return False
+            try:
+                record.path.unlink(missing_ok=True)
+            except OSError as error:
+                raise AssetAccessError("asset could not be deleted safely") from error
+            if record.path.exists():
+                raise AssetAccessError("asset deletion could not be verified")
+            del self._records[asset_id]
+        return True
+
     def purge_expired(self) -> None:
         """Delete expired, unconsumed assets and verify every deletion."""
 
