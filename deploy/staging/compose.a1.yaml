@@ -1,0 +1,75 @@
+services:
+  media-bridge-db:
+    container_name: media-bridge-staging-db
+
+  media-bridge-control:
+    container_name: media-bridge-staging-control
+    networks: [edge]
+
+  media-bridge-data:
+    container_name: media-bridge-staging-data
+    environment:
+      MEDIA_BRIDGE_OCR_ENDPOINT: ${MEDIA_BRIDGE_OCR_ENDPOINT:-https://media-bridge-staging-mock:8443/v1/document-digitization}
+      MEDIA_BRIDGE_VISION_ENDPOINT: ${MEDIA_BRIDGE_VISION_ENDPOINT:-https://media-bridge-staging-mock:8443/v1/chat/completions}
+      MEDIA_BRIDGE_SOLAR_ENDPOINT: ${MEDIA_BRIDGE_SOLAR_ENDPOINT:-https://media-bridge-staging-mock:8443/v1/chat/completions}
+      MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL: ${MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL:-https://media-bridge-staging-mock:8443/v1/responses}
+      MEDIA_BRIDGE_DOWNSTREAM_API_KEY_FILE: /run/secrets/downstream_api_key
+      SSL_CERT_FILE: /run/secrets/mock_ca_certificate
+    secrets: [downstream_api_key, mock_ca_certificate]
+    networks: [mock, edge]
+    depends_on:
+      media-bridge-staging-mock:
+        condition: service_healthy
+
+  media-bridge-staging-mock:
+    image: media-bridge-data:0.1.0
+    pull_policy: never
+    container_name: media-bridge-staging-mock
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    restart: unless-stopped
+    command: [python, /opt/media-bridge-staging/mock_provider.py]
+    environment:
+      MOCK_BIND_HOST: 0.0.0.0
+      MOCK_BIND_PORT: "8443"
+      MOCK_TLS_CERTIFICATE_FILE: /run/secrets/mock_tls_certificate
+      MOCK_TLS_PRIVATE_KEY_FILE: /run/secrets/mock_tls_private_key
+      MOCK_OCR_KEY_FILE: /run/secrets/ocr_api_key
+      MOCK_VISION_KEY_FILE: /run/secrets/vision_api_key
+      MOCK_DOWNSTREAM_KEY_FILE: /run/secrets/downstream_api_key
+    secrets:
+      - mock_tls_certificate
+      - mock_tls_private_key
+      - ocr_api_key
+      - vision_api_key
+      - downstream_api_key
+    networks: [mock]
+    volumes:
+      - ./staging/mock_provider.py:/opt/media-bridge-staging/mock_provider.py:ro
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m,uid=10001,gid=10001"]
+    healthcheck:
+      test: [CMD, python, /opt/media-bridge-staging/mock_provider.py, --health]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+networks:
+  edge:
+    external: true
+    name: proxy-network
+  mock:
+    internal: true
+
+secrets:
+  downstream_api_key:
+    file: ${MEDIA_BRIDGE_DOWNSTREAM_API_KEY_FILE:-${MEDIA_BRIDGE_STAGING_ROOT:?Set MEDIA_BRIDGE_STAGING_ROOT}/secrets/downstream-api-key.secret}
+  mock_ca_certificate:
+    file: ${MEDIA_BRIDGE_MOCK_CA_CERTIFICATE_FILE:-${MEDIA_BRIDGE_STAGING_ROOT:?Set MEDIA_BRIDGE_STAGING_ROOT}/secrets/mock-ca-certificate.pem}
+  mock_tls_certificate:
+    file: ${MEDIA_BRIDGE_MOCK_TLS_CERTIFICATE_FILE:-${MEDIA_BRIDGE_STAGING_ROOT:?Set MEDIA_BRIDGE_STAGING_ROOT}/secrets/mock-tls-certificate.pem}
+  mock_tls_private_key:
+    file: ${MEDIA_BRIDGE_MOCK_TLS_PRIVATE_KEY_FILE:-${MEDIA_BRIDGE_STAGING_ROOT:?Set MEDIA_BRIDGE_STAGING_ROOT}/secrets/mock-tls-private-key.pem}
