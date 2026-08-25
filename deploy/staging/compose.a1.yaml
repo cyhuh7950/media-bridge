@@ -6,7 +6,19 @@ services:
     container_name: media-bridge-staging-control
     environment:
       FORWARDED_ALLOW_IPS: ${NPM_PROXY_IP:-172.20.0.2}
+      MEDIA_BRIDGE_CONTROL_PORT: "8381"
     networks: [edge]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json, urllib.request;
+          response = urllib.request.urlopen(
+          'http://127.0.0.1:8381/admin/v1/health', timeout=2);
+          value = json.load(response);
+          raise SystemExit(0 if value.get('status') == 'ok' else 1)
 
   media-bridge-data:
     container_name: media-bridge-staging-data

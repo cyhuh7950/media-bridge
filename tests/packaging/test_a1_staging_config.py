@@ -60,6 +60,10 @@ def test_a1_overlay_isolates_db_edge_and_mock_networks() -> None:
     assert services["media-bridge-control"]["environment"]["FORWARDED_ALLOW_IPS"] == (
         "172.20.0.2"
     )
+    assert services["media-bridge-control"]["environment"][
+        "MEDIA_BRIDGE_CONTROL_PORT"
+    ] == "8381"
+    assert "8381" in " ".join(services["media-bridge-control"]["healthcheck"]["test"])
     assert "edge" in services["media-bridge-data"]["networks"]
     assert "mock" not in services["media-bridge-control"]["networks"]
     assert "mock" in services["media-bridge-data"]["networks"]
