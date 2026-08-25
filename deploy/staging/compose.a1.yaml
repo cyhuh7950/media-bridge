@@ -30,6 +30,7 @@ services:
       MEDIA_BRIDGE_SOLAR_ENDPOINT: ${MEDIA_BRIDGE_SOLAR_ENDPOINT:-https://media-bridge-staging-mock:8443/v1/chat/completions}
       MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL: ${MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL:-https://media-bridge-staging-mock:8443/v1/responses}
       MEDIA_BRIDGE_DOWNSTREAM_API_KEY_FILE: /run/secrets/downstream_api_key
+      MEDIA_BRIDGE_BACKEND_CA_FILE: /run/secrets/mock_ca_certificate
       SSL_CERT_FILE: /run/secrets/mock_ca_certificate
     secrets: [downstream_api_key, mock_ca_certificate]
     networks: [mock, edge]

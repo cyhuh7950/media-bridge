@@ -166,6 +166,7 @@ class GuardedResponsesDownstream:
         api_key_env: str = "MEDIA_BRIDGE_DOWNSTREAM_API_KEY",
         api_key_file_env: str | None = "MEDIA_BRIDGE_DOWNSTREAM_API_KEY_FILE",
         transport: httpx.AsyncBaseTransport | None = None,
+        verify: bool | str = True,
         timeout_seconds: float = 60.0,
         max_request_bytes: int = 4 * 1024 * 1024,
         max_response_bytes: int = 8 * 1024 * 1024,
@@ -194,6 +195,7 @@ class GuardedResponsesDownstream:
             timeout=httpx.Timeout(timeout_seconds),
             follow_redirects=False,
             trust_env=False,
+            verify=verify,
         )
 
     async def close(self) -> None:

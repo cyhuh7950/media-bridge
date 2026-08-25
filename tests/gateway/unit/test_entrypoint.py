@@ -59,8 +59,9 @@ def _track_async_clients(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     clients: list[Any] = []
 
     class TrackingAsyncClient:
-        def __init__(self, **_kwargs: object) -> None:
+        def __init__(self, **kwargs: object) -> None:
             self.closed = False
+            self.kwargs = kwargs
             clients.append(self)
 
         async def aclose(self) -> None:
@@ -71,6 +72,27 @@ def _track_async_clients(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
         TrackingAsyncClient,
     )
     return clients
+
+
+def test_gateway_backend_client_uses_explicit_ca_without_trusting_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_valid_gateway_environment(tmp_path, monkeypatch)
+    ca_file = tmp_path / "staging-ca.pem"
+    ca_file.write_text("test-ca")
+    monkeypatch.setenv("MEDIA_BRIDGE_BACKEND_CA_FILE", str(ca_file))
+    clients = _track_async_clients(monkeypatch)
+
+    process = build_gateway_process_from_environment()
+
+    assert len(clients) == 2
+    assert [client.kwargs["verify"] for client in clients] == [
+        str(ca_file),
+        str(ca_file),
+    ]
+    assert all(client.kwargs["trust_env"] is False for client in clients)
+    asyncio.run(process.close())
 
 
 def test_gateway_console_entrypoint_is_callable() -> None:

@@ -56,6 +56,19 @@ def _absolute_path(name: str) -> Path:
     return path
 
 
+def _backend_tls_verify() -> bool | str:
+    name = "MEDIA_BRIDGE_BACKEND_CA_FILE"
+    if not os.environ.get(name, "").strip():
+        return True
+    path = _absolute_path(name)
+    try:
+        if not path.is_file():
+            raise GatewayConfigurationError(f"{name} must reference a regular file")
+    except OSError as error:
+        raise GatewayConfigurationError(f"{name} is unavailable") from error
+    return str(path)
+
+
 def _integer(name: str, default: int, *, minimum: int, maximum: int) -> int:
     raw = os.environ.get(name, str(default))
     try:
@@ -157,6 +170,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
             timeout=httpx.Timeout(30),
             follow_redirects=False,
             trust_env=False,
+            verify=_backend_tls_verify(),
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
         ocr = UpstageOcrBackend(
@@ -185,6 +199,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
         configured_downstream = GuardedResponsesDownstream(
             endpoint=_required("MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL"),
             receipt_signer=receipt_signer,
+            verify=_backend_tls_verify(),
         )
         downstream = configured_downstream
 

@@ -119,5 +119,8 @@ def test_a1_data_uses_file_secrets_and_internal_tls_mock_only() -> None:
         "/run/secrets/downstream_api_key"
     )
     assert environment["SSL_CERT_FILE"] == "/run/secrets/mock_ca_certificate"
+    assert environment["MEDIA_BRIDGE_BACKEND_CA_FILE"] == (
+        "/run/secrets/mock_ca_certificate"
+    )
     serialized = yaml.safe_dump(rendered)
     assert "MEDIA_BRIDGE_DOWNSTREAM_API_KEY=" not in serialized
