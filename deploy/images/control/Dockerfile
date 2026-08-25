@@ -17,12 +17,15 @@ RUN python -m venv /opt/media-bridge \
 FROM python:3.12-slim@sha256:646fb0bca3dd3ea1bcc6feb72c17ed16eed6e10cffc732fcc1478bd3e7f02d7b
 
 ENV PATH=/opt/media-bridge/bin:$PATH \
+    PYTHONPATH=/opt/media-bridge \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 RUN groupadd --gid 10002 media-bridge \
     && useradd --uid 10002 --gid 10002 --no-create-home --shell /usr/sbin/nologin media-bridge
 COPY --from=build --chown=10002:10002 /opt/media-bridge /opt/media-bridge
 COPY --chown=10002:10002 deploy/health /opt/media-bridge/health
+COPY --chown=10002:10002 deploy /opt/media-bridge/deploy
+COPY --chown=10002:10002 migrations /opt/media-bridge/migrations
 WORKDIR /srv/media-bridge
 USER 10002:10002
 EXPOSE 8081

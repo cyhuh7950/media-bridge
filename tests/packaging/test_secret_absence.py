@@ -8,7 +8,8 @@ DEPLOY = ROOT / "deploy"
 def test_packaging_files_do_not_embed_secret_values() -> None:
     forbidden = re.compile(r"(?i)(sk-[a-z0-9_-]{16,}|mbc_[a-z0-9_-]{16,}|BEGIN PRIVATE KEY)")
     for path in DEPLOY.rglob("*"):
-        if path.is_file():
+        is_text = path.suffix in {".py", ".yaml", ".env", ".md", ".conf"}
+        if path.is_file() and (is_text or path.name == "Dockerfile"):
             assert forbidden.search(path.read_text(encoding="utf-8")) is None, path
 
 

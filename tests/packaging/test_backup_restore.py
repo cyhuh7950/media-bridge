@@ -8,7 +8,6 @@ import pytest
 
 from deploy.scripts import backup, restore, verify_backup
 
-
 SAFE_SQL = b"CREATE TABLE policies (id uuid);\nINSERT INTO policies VALUES ('safe');\n"
 
 
@@ -84,9 +83,13 @@ def test_restore_requires_empty_database_and_explicit_confirmation(tmp_path: Pat
     calls: list[bytes] = []
 
     with pytest.raises(restore.RestoreError, match="confirmation_required"):
-        restore.restore_archive(output, database_is_empty=True, confirmed=False, apply_sql=calls.append)
+        restore.restore_archive(
+            output, database_is_empty=True, confirmed=False, apply_sql=calls.append
+        )
     with pytest.raises(restore.RestoreError, match="target_database_not_empty"):
-        restore.restore_archive(output, database_is_empty=False, confirmed=True, apply_sql=calls.append)
+        restore.restore_archive(
+            output, database_is_empty=False, confirmed=True, apply_sql=calls.append
+        )
     assert calls == []
 
     restore.restore_archive(output, database_is_empty=True, confirmed=True, apply_sql=calls.append)
@@ -96,4 +99,3 @@ def test_restore_requires_empty_database_and_explicit_confirmation(tmp_path: Pat
 def test_restore_readiness_requires_external_secret_reconnection() -> None:
     assert restore.readiness_after_restore(secret_refs_connected=False) == "limited"
     assert restore.readiness_after_restore(secret_refs_connected=True) == "ready"
-

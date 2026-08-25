@@ -53,6 +53,20 @@ def test_compose_uses_secret_files_not_literal_values() -> None:
     assert ":latest" not in serialized
 
 
+def test_control_migrates_from_secret_file_before_start() -> None:
+    control = _compose()["services"]["media-bridge-control"]
+    assert control["command"] == [
+        "python",
+        "/opt/media-bridge/deploy/scripts/migrate.py",
+        "--database-url-file",
+        "/run/secrets/control_database_url",
+        "--alembic-ini",
+        "/opt/media-bridge/migrations/alembic.ini",
+        "--apply",
+        "--start-control",
+    ]
+
+
 def test_test_override_only_publishes_loopback_ports() -> None:
     source = (DEPLOY / "compose.test.yaml").read_text(encoding="utf-8")
     assert "127.0.0.1:${MEDIA_BRIDGE_TEST_CONTROL_PORT:-18081}:8081" in source

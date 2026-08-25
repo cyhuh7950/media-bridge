@@ -39,12 +39,12 @@ def test_unknown_or_newer_schema_fails_closed() -> None:
         )
 
 
-def test_upgrade_requires_verified_backup_and_exact_version() -> None:
+def test_upgrade_requires_verified_backup_and_exact_version(tmp_path: Path) -> None:
     with pytest.raises(upgrade_check.UpgradeCheckError, match="verified_backup_required"):
         upgrade_check.check(
             current="0.1.0", target="0.2.0", verified_backup=None, supported_from={"0.1.0"}
         )
-    marker = Path("/tmp/verified-backup")
+    marker = tmp_path / "verified-backup"
     assert upgrade_check.check(
         current="0.1.0", target="0.2.0", verified_backup=marker, supported_from={"0.1.0"}
     ) == "upgrade_allowed"
@@ -62,4 +62,3 @@ def test_rollback_rejects_schema_downgrade_without_explicit_support() -> None:
         target_revision="0002_connections",
         supported_pairs=set(),
     ) == "application_rollback_allowed"
-

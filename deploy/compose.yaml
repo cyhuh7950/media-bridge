@@ -46,6 +46,15 @@ services:
       MEDIA_BRIDGE_CONTROL_HOST: ${MEDIA_BRIDGE_CONTROL_HOST:-localhost}
       MEDIA_BRIDGE_CONTROL_BIND_HOST: 0.0.0.0
       MEDIA_BRIDGE_CONTROL_PORT: "8081"
+    command:
+      - python
+      - /opt/media-bridge/deploy/scripts/migrate.py
+      - --database-url-file
+      - /run/secrets/control_database_url
+      - --alembic-ini
+      - /opt/media-bridge/migrations/alembic.ini
+      - --apply
+      - --start-control
     secrets: [control_database_url, control_security_pepper, snapshot_private_key]
     networks: [database, product]
     volumes: [snapshots:/var/lib/media-bridge/snapshots]
@@ -134,4 +143,3 @@ secrets:
     file: ${MEDIA_BRIDGE_VISION_API_KEY_FILE:-./secrets/vision-api-key.secret}
   solar_api_key:
     file: ${MEDIA_BRIDGE_SOLAR_API_KEY_FILE:-./secrets/solar-api-key.secret}
-
