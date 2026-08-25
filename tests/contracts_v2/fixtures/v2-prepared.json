@@ -1,0 +1,21 @@
+{
+  "contract_version": "media-bridge-interop/v2",
+  "status": "PREPARED",
+  "request_id": "req_fixture",
+  "trace_id": "trace_fixture",
+  "idempotency_key": "idem_fixture",
+  "sanitized_messages": [{"role": "user", "content": "safe text"}],
+  "original_media_removed": true,
+  "asset_digests": ["sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+  "media_types": ["image"],
+  "transformations": [{"kind": "ocr", "backend": "tesseract", "version": "1", "input_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "output_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
+  "backend": {"id": "ocr", "version": "1"},
+  "provenance": [{"source": "asset_digest", "stage": "ocr", "evidence_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
+  "confidence": {"overall": 0.9, "by_stage": {"ocr": 0.9}},
+  "warnings": [],
+  "information_loss": {"present": true, "categories": ["layout"], "summary": "layout normalized"},
+  "required_capabilities_after": {"input_modalities": ["text"]},
+  "token_estimate": {"input": 8, "method": "declared"},
+  "error": null,
+  "prepared_marker": {"schema_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "expires_at": "2099-08-26T00:00:00Z"}
+}

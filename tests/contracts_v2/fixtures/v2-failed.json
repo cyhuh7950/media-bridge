@@ -1,0 +1,10 @@
+{
+  "contract_version": "media-bridge-interop/v2",
+  "status": "FAILED",
+  "request_id": "req_failed",
+  "trace_id": "trace_failed",
+  "idempotency_key": "idem_failed",
+  "sanitized_messages": [],
+  "original_media_removed": false,
+  "error": {"code": "OCR_FAILED", "message": "transformation failed", "retryable": true}
+}

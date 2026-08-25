@@ -1,0 +1,10 @@
+{
+  "contract_version": "media-bridge-interop/v2",
+  "status": "BLOCKED",
+  "request_id": "req_blocked",
+  "trace_id": "trace_blocked",
+  "idempotency_key": "idem_blocked",
+  "sanitized_messages": [],
+  "original_media_removed": false,
+  "error": {"code": "CAPABILITY_STALE", "message": "target capability is stale", "retryable": false}
+}
