@@ -33,3 +33,14 @@ OmniRoute preview에는 bundled plugin asset 경로와 실제 source SHA-256 int
 
 OpenCodex extension과 OmniRoute extension은 격리 source에서만 검증됐다. 설치 binary나 실제
 provider를 사용하지 않은 결과를 live E2E로 표시하면 안 된다.
+
+## V2 책임 경계
+
+`media-bridge-interop/v2`에서 Media Bridge는 asset 취득·변환·sanitizer·cleanup·provenance를
+담당한다. Standalone은 자체 registry/downstream을 사용할 수 있지만 Eoul 연동에서는 Eoul이
+capability·routing·Provider 실행을 소유한다. `V2_4_MEDIA_BRIDGE_CODE_READY`는 Eoul consumer
+구현 완료를 뜻하지 않으며, Eoul 원본 변경과 consumer conformance는 별도 승인 범위다.
+
+지원 명칭은 `Standard MCP/Gateway Integration`, `Deep Fail-closed Host Extension`,
+`Standalone Downstream Adapter`로 분리한다. isolated OpenCodex·OmniRoute source extension은
+일반 무수정 Adapter 또는 live 설치 지원으로 표시하지 않는다.

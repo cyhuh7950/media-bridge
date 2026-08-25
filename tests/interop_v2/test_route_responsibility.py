@@ -6,8 +6,8 @@ from media_bridge.contracts_v2 import (
     InteropV2Request,
     TargetCapabilitySnapshot,
 )
-from media_bridge_adapters.contracts import ResponsibilityMode
 from media_bridge.router import V2ResponsibilityRouter
+from media_bridge_adapters.contracts import ResponsibilityMode
 
 
 def make_request(vision: object) -> InteropV2Request:
