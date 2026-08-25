@@ -2,7 +2,6 @@ from pathlib import Path
 
 import yaml
 
-
 ROOT = Path(__file__).resolve().parents[2]
 DEPLOY = ROOT / "deploy"
 
@@ -35,7 +34,8 @@ def test_compose_applies_runtime_confinement() -> None:
 
 def test_snapshot_is_rw_for_control_and_ro_for_data() -> None:
     services = _compose()["services"]
-    assert "snapshots:/var/lib/media-bridge/snapshots" in services["media-bridge-control"]["volumes"]
+    control_volumes = services["media-bridge-control"]["volumes"]
+    assert "snapshots:/var/lib/media-bridge/snapshots" in control_volumes
     assert (
         "snapshots:/var/lib/media-bridge/snapshots:ro"
         in services["media-bridge-data"]["volumes"]
@@ -58,4 +58,3 @@ def test_test_override_only_publishes_loopback_ports() -> None:
     assert "127.0.0.1:${MEDIA_BRIDGE_TEST_CONTROL_PORT:-18081}:8081" in source
     assert "127.0.0.1:${MEDIA_BRIDGE_TEST_DATA_PORT:-18001}:8001" in source
     assert "0.0.0.0:" not in source
-

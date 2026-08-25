@@ -22,10 +22,10 @@ ENV PATH=/opt/media-bridge/bin:$PATH \
 RUN groupadd --gid 10001 media-bridge \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin media-bridge
 COPY --from=build --chown=10001:10001 /opt/media-bridge /opt/media-bridge
+COPY --chown=10001:10001 deploy/health /opt/media-bridge/health
 WORKDIR /srv/media-bridge
 USER 10001:10001
 EXPOSE 8001
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=4 \
-  CMD ["python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8001), 2).close()"]
+  CMD ["python", "/opt/media-bridge/health/data_plane.py"]
 CMD ["media-bridge-gateway"]
-

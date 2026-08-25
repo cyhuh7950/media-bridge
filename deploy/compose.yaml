@@ -1,0 +1,137 @@
+name: media-bridge
+
+x-runtime-security: &runtime-security
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 256
+  restart: unless-stopped
+
+services:
+  media-bridge-db:
+    <<: *runtime-security
+    image: postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
+    user: "999:999"
+    environment:
+      POSTGRES_DB: media_bridge
+      POSTGRES_USER: media_bridge
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      PGDATA: /var/lib/postgresql/data
+    secrets: [db_password]
+    networks: [database]
+    volumes: [database:/var/lib/postgresql/data]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,uid=999,gid=999
+      - /var/run/postgresql:rw,noexec,nosuid,size=8m,uid=999,gid=999
+    healthcheck:
+      test: [CMD, pg_isready, -U, media_bridge, -d, media_bridge]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  media-bridge-control:
+    <<: *runtime-security
+    image: ${MEDIA_BRIDGE_CONTROL_IMAGE:-media-bridge-control:0.1.0}
+    build:
+      context: ..
+      dockerfile: deploy/images/control/Dockerfile
+    environment:
+      MEDIA_BRIDGE_CONTROL_DATABASE_URL_FILE: /run/secrets/control_database_url
+      MEDIA_BRIDGE_CONTROL_SECURITY_PEPPER_FILE: /run/secrets/control_security_pepper
+      MEDIA_BRIDGE_SNAPSHOT_PRIVATE_KEY_FILE: /run/secrets/snapshot_private_key
+      MEDIA_BRIDGE_SNAPSHOT_KEY_ID: ${MEDIA_BRIDGE_SNAPSHOT_KEY_ID:-media-bridge-0-1}
+      MEDIA_BRIDGE_SNAPSHOT_PATH: /var/lib/media-bridge/snapshots/active.json
+      MEDIA_BRIDGE_CONTROL_ORIGIN: ${MEDIA_BRIDGE_CONTROL_ORIGIN:-https://localhost}
+      MEDIA_BRIDGE_CONTROL_HOST: ${MEDIA_BRIDGE_CONTROL_HOST:-localhost}
+      MEDIA_BRIDGE_CONTROL_BIND_HOST: 0.0.0.0
+      MEDIA_BRIDGE_CONTROL_PORT: "8081"
+    secrets: [control_database_url, control_security_pepper, snapshot_private_key]
+    networks: [database, product]
+    volumes: [snapshots:/var/lib/media-bridge/snapshots]
+    tmpfs: [/tmp:rw,noexec,nosuid,size=64m,uid=10002,gid=10002]
+    depends_on:
+      media-bridge-db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, /opt/media-bridge/health/control_plane.py]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  media-bridge-data:
+    <<: *runtime-security
+    image: ${MEDIA_BRIDGE_DATA_IMAGE:-media-bridge-data:0.1.0}
+    build:
+      context: ..
+      dockerfile: deploy/images/data/Dockerfile
+    environment:
+      MEDIA_BRIDGE_GATEWAY_HOST: 0.0.0.0
+      MEDIA_BRIDGE_GATEWAY_PORT: "8001"
+      MEDIA_BRIDGE_SNAPSHOT_PATH: /var/lib/media-bridge/snapshots/active.json
+      MEDIA_BRIDGE_SNAPSHOT_KEY_ID: ${MEDIA_BRIDGE_SNAPSHOT_KEY_ID:-media-bridge-0-1}
+      MEDIA_BRIDGE_SNAPSHOT_PUBLIC_KEY_FILE: /run/secrets/snapshot_public_key
+      MEDIA_BRIDGE_GATEWAY_AUTH_PEPPER_FILE: /run/secrets/gateway_auth_pepper
+      MEDIA_BRIDGE_RECEIPT_SECRET_FILE: /run/secrets/receipt_secret
+      MEDIA_BRIDGE_ASSET_ROOT: /var/lib/media-bridge/assets
+      MEDIA_BRIDGE_OCR_ENDPOINT: ${MEDIA_BRIDGE_OCR_ENDPOINT:-https://api.upstage.ai/v1/document-digitization}
+      MEDIA_BRIDGE_OCR_API_KEY_FILE: /run/secrets/ocr_api_key
+      MEDIA_BRIDGE_VISION_ENDPOINT: ${MEDIA_BRIDGE_VISION_ENDPOINT:-https://api.openai.com/v1/chat/completions}
+      MEDIA_BRIDGE_VISION_MODEL: ${MEDIA_BRIDGE_VISION_MODEL:-gpt-4.1-mini}
+      MEDIA_BRIDGE_VISION_API_KEY_FILE: /run/secrets/vision_api_key
+      MEDIA_BRIDGE_SOLAR_API_KEY_FILE: /run/secrets/solar_api_key
+      MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL: ${MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL:-http://host.docker.internal:9000/v1/responses}
+    secrets:
+      - snapshot_public_key
+      - gateway_auth_pepper
+      - receipt_secret
+      - ocr_api_key
+      - vision_api_key
+      - solar_api_key
+    networks: [product, egress]
+    volumes:
+      - snapshots:/var/lib/media-bridge/snapshots:ro
+      - assets:/var/lib/media-bridge/assets
+    tmpfs: [/tmp:rw,noexec,nosuid,size=128m,uid=10001,gid=10001]
+    healthcheck:
+      test: [CMD, python, /opt/media-bridge/health/data_plane.py]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+networks:
+  database:
+    internal: true
+  product:
+    internal: true
+  egress: {}
+
+volumes:
+  database: {}
+  snapshots: {}
+  assets: {}
+
+secrets:
+  db_password:
+    file: ${MEDIA_BRIDGE_DB_PASSWORD_FILE:-./secrets/db-password.secret}
+  control_database_url:
+    file: ${MEDIA_BRIDGE_CONTROL_DATABASE_URL_FILE:-./secrets/control-database-url.secret}
+  control_security_pepper:
+    file: ${MEDIA_BRIDGE_CONTROL_SECURITY_PEPPER_FILE:-./secrets/control-security-pepper.secret}
+  snapshot_private_key:
+    file: ${MEDIA_BRIDGE_SNAPSHOT_PRIVATE_KEY_FILE:-./secrets/snapshot-private-key.pem}
+  snapshot_public_key:
+    file: ${MEDIA_BRIDGE_SNAPSHOT_PUBLIC_KEY_FILE:-./secrets/snapshot-public-key.secret}
+  gateway_auth_pepper:
+    file: ${MEDIA_BRIDGE_GATEWAY_AUTH_PEPPER_FILE:-./secrets/gateway-auth-pepper.secret}
+  receipt_secret:
+    file: ${MEDIA_BRIDGE_RECEIPT_SECRET_FILE:-./secrets/receipt-secret.secret}
+  ocr_api_key:
+    file: ${MEDIA_BRIDGE_OCR_API_KEY_FILE:-./secrets/ocr-api-key.secret}
+  vision_api_key:
+    file: ${MEDIA_BRIDGE_VISION_API_KEY_FILE:-./secrets/vision-api-key.secret}
+  solar_api_key:
+    file: ${MEDIA_BRIDGE_SOLAR_API_KEY_FILE:-./secrets/solar-api-key.secret}
+
