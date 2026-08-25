@@ -73,26 +73,36 @@ it("renders persisted provider references but no write controls for a viewer", a
 
 it("shows an issued credential once and clears it on close", async () => {
   const credential = "mbc_selector.operation-secret-marker";
+  const fetchMock = vi.fn<typeof fetch>((input, init) => {
+    const path = requestPath(input);
+    if (path === "/admin/v1/credentials" && (init?.method ?? "GET") === "GET") {
+      return Promise.resolve(jsonResponse([]));
+    }
+    if (path === "/admin/v1/credentials" && init?.method === "POST") {
+      return Promise.resolve(jsonResponse({ credential, selector: "selector", name: "agent", scopes: ["assets:write", "mcp:invoke", "responses:invoke"] }, 201));
+    }
+    return Promise.reject(new Error("unexpected"));
+  });
   vi.stubGlobal(
     "fetch",
-    vi.fn<typeof fetch>((input, init) => {
-      const path = requestPath(input);
-      if (path === "/admin/v1/credentials" && (init?.method ?? "GET") === "GET") {
-        return Promise.resolve(jsonResponse([]));
-      }
-      if (path === "/admin/v1/credentials" && init?.method === "POST") {
-        return Promise.resolve(jsonResponse({ credential, selector: "selector", name: "agent", scopes: ["mcp:invoke"] }, 201));
-      }
-      return Promise.reject(new Error("unexpected"));
-    }),
+    fetchMock,
   );
   const user = userEvent.setup();
 
   render(<CredentialsPage role="admin" csrfToken="csrf-memory-only" />);
   await user.type(await screen.findByLabelText("credential 이름"), "agent");
+  await user.click(screen.getByLabelText("Asset 업로드 (assets:write)"));
+  await user.click(screen.getByLabelText("Responses downstream 실행 (responses:invoke)"));
   await user.click(screen.getByRole("button", { name: "접근 credential 생성" }));
 
   expect(await screen.findByText(credential)).toBeInTheDocument();
+  const createCall = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
+  const createBody = createCall?.[1]?.body;
+  expect(typeof createBody).toBe("string");
+  if (typeof createBody !== "string") throw new Error("expected JSON request body");
+  expect(JSON.parse(createBody)).toMatchObject({
+    scopes: ["assets:write", "mcp:invoke", "responses:invoke"],
+  });
   await user.click(screen.getByRole("button", { name: "확인하고 닫기" }));
   expect(document.documentElement.outerHTML).not.toContain(credential);
   expect(window.localStorage).toHaveLength(0);
