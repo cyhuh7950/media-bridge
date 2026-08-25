@@ -14,7 +14,7 @@ def test_release_and_roadmap_distinguish_v2_and_product_status() -> None:
         ROOT / "docs/manuals/developer/adapters.md",
     ]
     text = "\n".join(path.read_text(encoding="utf-8") for path in documents)
-    assert "V2_CODE_READY_EOUL_CONSUMER_PENDING_APPROVAL" in text
+    assert "V2_CODE_READY_EOUL_CONSUMER_REMOTE_BRANCH_PUBLISHED" in text
     assert "PRODUCT_NOT_COMPLETE" in text
     assert "0.3.0" in text
     assert "P4_CODE_READY_ISOLATED_LIVE_NOT_VERIFIED" in text
