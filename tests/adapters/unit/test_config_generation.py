@@ -9,8 +9,8 @@ import pytest
 from pydantic import ValidationError
 
 from media_bridge_adapters.contracts import AdapterConfigRequest
-from media_bridge_adapters.omniroute.config import render_config as render_omniroute_config
 from media_bridge_adapters.omniroute.config import bundled_plugin_source
+from media_bridge_adapters.omniroute.config import render_config as render_omniroute_config
 from media_bridge_adapters.opencodex.config import render_config as render_opencodex_config
 from media_bridge_adapters.validation import write_rendered_config
 
