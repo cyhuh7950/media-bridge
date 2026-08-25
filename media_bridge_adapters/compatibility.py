@@ -20,7 +20,7 @@ _MANIFESTS = (
         product_contract="media-bridge-pre-upstream/v1",
         supported_external_versions=("3.8.50",),
         external_base_commit="f95b03d70929a6a850d4b986a7bbad6740dd02e0",
-        extension_commit="7b189099fc6974d9164c9af3c36178e1c97c0b33",
+        extension_commit="eaa5ba08579f93db2d3e5b0046792ce8f70fb208",
         required_gateway_scopes=("responses:prepare",),
     ),
 )

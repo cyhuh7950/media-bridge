@@ -17,7 +17,7 @@ media-bridge-adapter render-config \
   --adapter omniroute \
   --external-version 3.8.50 \
   --external-base-commit f95b03d70929a6a850d4b986a7bbad6740dd02e0 \
-  --extension-commit 7b189099fc6974d9164c9af3c36178e1c97c0b33 \
+  --extension-commit eaa5ba08579f93db2d3e5b0046792ce8f70fb208 \
   --endpoint https://media-bridge.example/adapter/v1/pre-upstream \
   --credential-env MEDIA_BRIDGE_ADAPTER_CREDENTIAL \
   --decision-hmac-env MEDIA_BRIDGE_ADAPTER_DECISION_HMAC \
