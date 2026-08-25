@@ -25,6 +25,7 @@ from media_bridge.contracts import (
     PrepareForModelRequest,
     PrepareForModelResult,
 )
+from media_bridge.contracts_v2 import InteropV2Result, provider_call_allowed
 from media_bridge.mcp_server import build_mcp_server
 from media_bridge.service import MediaBridgeService
 from media_bridge_gateway.auth import CredentialAuthenticationError
@@ -73,6 +74,13 @@ def _error(code: str, message: str, status_code: int) -> JSONResponse:
         },
         status_code=status_code,
     )
+
+
+def enforce_v2_provider_boundary(result: InteropV2Result) -> None:
+    """Raise before a provider call unless v2 has removed original media."""
+
+    if not provider_call_allowed(result):
+        raise ValueError("v2 result is not authorized for provider execution")
 
 
 class DataPlaneAuthMiddleware:

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Protocol
 
 from media_bridge.contracts import (
@@ -13,6 +15,13 @@ from media_bridge.contracts import (
     TargetModel,
     TextPart,
 )
+from media_bridge.contracts_v2 import (
+    InteropV2Request,
+    InteropV2Result,
+    MediaBridgeV2ErrorCode,
+    V2Error,
+)
+from media_bridge.contracts_v2 import provider_call_allowed as v2_provider_call_allowed
 from media_bridge.detector import detect_media
 from media_bridge.gate import DownstreamPayload, PreRequestGate, digest_content
 from media_bridge.receipts import GateReceiptSigner, ReceiptValidationError
@@ -138,3 +147,70 @@ class RouterAdapter:
             return None
         text = "\n".join(part.text for part in content if isinstance(part, TextPart)).strip()
         return SafeConversationState(text=text) if text else None
+
+
+@dataclass(frozen=True, slots=True)
+class V2RouteDecision:
+    result: InteropV2Result
+    provider_call_allowed: bool
+    bridge_called: bool
+
+
+class V2ResponsibilityRouter:
+    """Enforce Standalone/Eoul ownership without selecting a provider."""
+
+    def __init__(self, *, now: Callable[[], datetime] | None = None) -> None:
+        self._now = now or (lambda: datetime.now(UTC))
+
+    def prepare(
+        self,
+        request: InteropV2Request,
+        *,
+        transform: Callable[[InteropV2Request], InteropV2Result],
+    ) -> V2RouteDecision:
+        vision = request.target.capabilities.get("vision")
+        if not isinstance(vision, bool):
+            return self._blocked(request, MediaBridgeV2ErrorCode.CAPABILITY_UNKNOWN)
+        if request.mode == "eoul" and not request.target.is_fresh(self._now()):
+            return self._blocked(request, MediaBridgeV2ErrorCode.CAPABILITY_STALE)
+        if not request.assets:
+            result = InteropV2Result(
+                contract_version=request.contract_version,
+                status="UNCHANGED",
+                request_id=request.request_id,
+                trace_id=request.trace_id,
+                idempotency_key=request.idempotency_key,
+                sanitized_messages=request.canonical_messages,
+                original_media_removed=True,
+            )
+            return V2RouteDecision(result, True, False)
+        if vision:
+            result = InteropV2Result(
+                contract_version=request.contract_version,
+                status="UNCHANGED",
+                request_id=request.request_id,
+                trace_id=request.trace_id,
+                idempotency_key=request.idempotency_key,
+                sanitized_messages=request.canonical_messages,
+                original_media_removed=True,
+                media_types=[asset.media_type_hint for asset in request.assets],
+            )
+            return V2RouteDecision(result, True, False)
+        result = transform(request)
+        return V2RouteDecision(result, v2_provider_call_allowed(result), True)
+
+    def _blocked(
+        self,
+        request: InteropV2Request,
+        code: MediaBridgeV2ErrorCode,
+    ) -> V2RouteDecision:
+        result = InteropV2Result(
+            contract_version=request.contract_version,
+            status="BLOCKED",
+            request_id=request.request_id,
+            trace_id=request.trace_id,
+            idempotency_key=request.idempotency_key,
+            original_media_removed=False,
+            error=V2Error(code=code, message=code.value),
+        )
+        return V2RouteDecision(result, False, False)

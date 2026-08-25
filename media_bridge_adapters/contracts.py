@@ -31,6 +31,25 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ResponsibilityMode(StrictModel):
+    """Declare which side owns capability, routing, and provider execution."""
+
+    mode: Literal["standalone", "eoul"]
+    capability_owner: Literal["media_bridge", "eoul"]
+    routing_owner: Literal["media_bridge", "eoul"]
+    provider_execution_owner: Literal["media_bridge", "eoul"]
+
+    @model_validator(mode="after")
+    def validate_ownership(self) -> Self:
+        if self.mode == "eoul" and (
+            self.capability_owner,
+            self.routing_owner,
+            self.provider_execution_owner,
+        ) != ("eoul", "eoul", "eoul"):
+            raise ValueError("Eoul mode delegates capability, routing, and execution to Eoul")
+        return self
+
+
 class AdapterManifest(StrictModel):
     adapter_id: Literal["opencodex", "omniroute"]
     adapter_version: _SEMVER
