@@ -5,6 +5,14 @@ import type { OperationsProps } from "../operations/operationTypes";
 import { safeItemPath, textField } from "../operations/operationTypes";
 import { useAdminList } from "../operations/useAdminList";
 
+type SecretReferenceKind = "env" | "docker_secret" | "external";
+
+const SECRET_REFERENCE_PATTERNS: Record<SecretReferenceKind, string> = {
+  env: "[A-Z][A-Z0-9_]*",
+  docker_secret: "[A-Za-z0-9][A-Za-z0-9_.-]*",
+  external: "(vault|aws-sm|gcp-sm|azure-kv)://[A-Za-z0-9][A-Za-z0-9._/@:-]*",
+};
+
 function secretReference(item: Record<string, unknown>): string {
   const value = item.credential_secret_ref;
   if (typeof value !== "object" || value === null) return "—";
@@ -16,6 +24,7 @@ export function ConnectionsPage({ role, csrfToken }: OperationsProps) {
   const { items, failed, reload } = useAdminList("/connections");
   const [name, setName] = useState("");
   const [gatewayUrl, setGatewayUrl] = useState("");
+  const [secretReferenceKind, setSecretReferenceKind] = useState<SecretReferenceKind>("env");
   const [secretReferenceName, setSecretReferenceName] = useState("");
   const [actionError, setActionError] = useState(false);
   const adminWritable = role === "admin" && csrfToken !== null;
@@ -34,7 +43,10 @@ export function ConnectionsPage({ role, csrfToken }: OperationsProps) {
         body: {
           name,
           gateway_url: gatewayUrl,
-          credential_secret_ref: { kind: "env", identifier: currentReference },
+          credential_secret_ref: {
+            kind: secretReferenceKind,
+            identifier: currentReference,
+          },
           enabled: true,
         },
       });
@@ -112,8 +124,27 @@ export function ConnectionsPage({ role, csrfToken }: OperationsProps) {
           <input id="connection-name" value={name} onChange={(event) => { setName(event.target.value); }} required />
           <label htmlFor="connection-url">Gateway HTTPS URL</label>
           <input id="connection-url" type="url" value={gatewayUrl} onChange={(event) => { setGatewayUrl(event.target.value); }} pattern="https://.*" required />
-          <label htmlFor="connection-secret-reference">Credential 환경변수 이름</label>
-          <input id="connection-secret-reference" value={secretReferenceName} onChange={(event) => { setSecretReferenceName(event.target.value); }} pattern="[A-Z][A-Z0-9_]*" autoComplete="off" required />
+          <label htmlFor="connection-secret-kind">Secret 참조 종류</label>
+          <select
+            id="connection-secret-kind"
+            value={secretReferenceKind}
+            onChange={(event) => { setSecretReferenceKind(event.target.value as SecretReferenceKind); }}
+          >
+            <option value="env">환경변수 참조</option>
+            <option value="docker_secret">Docker Secret</option>
+            <option value="external">외부 Secret Store</option>
+          </select>
+          <label htmlFor="connection-secret-reference">Secret 식별자</label>
+          <input
+            id="connection-secret-reference"
+            value={secretReferenceName}
+            onChange={(event) => { setSecretReferenceName(event.target.value); }}
+            pattern={SECRET_REFERENCE_PATTERNS[secretReferenceKind]}
+            autoComplete="off"
+            aria-describedby="connection-secret-help"
+            required
+          />
+          <p id="connection-secret-help">credential 원문이 아니라 외부 Secret의 이름이나 URI만 입력하세요.</p>
           <button type="submit">Connection 추가</button>
         </form>
       ) : <p>{role === "operator" ? "operator는 연결 시험만 수행할 수 있습니다." : "viewer는 Connection을 읽기만 할 수 있습니다."}</p>}

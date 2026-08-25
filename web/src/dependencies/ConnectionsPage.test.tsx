@@ -40,14 +40,24 @@ it("uses only same-origin Admin API, clears the Secret reference, and exposes ro
   expect(await screen.findByText("primary")).toBeInTheDocument();
   await user.type(screen.getByLabelText("이름"), "secondary");
   await user.type(screen.getByLabelText("Gateway HTTPS URL"), "https://gateway.example.test");
-  const secretInput = screen.getByLabelText("Credential 환경변수 이름");
-  await user.type(secretInput, "MEDIA_BRIDGE_GATEWAY_CREDENTIAL");
+  await user.selectOptions(screen.getByLabelText("Secret 참조 종류"), "docker_secret");
+  const secretInput = screen.getByLabelText("Secret 식별자");
+  await user.type(secretInput, "gateway_client_credential");
   await user.click(screen.getByRole("button", { name: "Connection 추가" }));
 
   await waitFor(() => { expect(secretInput).toHaveValue(""); });
   const createCall = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
   expect(createCall?.[0]).toBe("/admin/v1/connections");
-  expect(document.body.textContent).not.toContain("MEDIA_BRIDGE_GATEWAY_CREDENTIAL");
+  const createBody = createCall?.[1]?.body;
+  expect(typeof createBody).toBe("string");
+  if (typeof createBody !== "string") throw new Error("expected JSON request body");
+  expect(JSON.parse(createBody)).toMatchObject({
+    credential_secret_ref: {
+      kind: "docker_secret",
+      identifier: "gateway_client_credential",
+    },
+  });
+  expect(document.body.textContent).not.toContain("gateway_client_credential");
   expect(screen.getByRole("button", { name: "연결 시험" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "폐기" })).toBeInTheDocument();
 });

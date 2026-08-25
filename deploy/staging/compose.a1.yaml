@@ -8,6 +8,7 @@ services:
       FORWARDED_ALLOW_IPS: ${NPM_PROXY_IP:-172.20.0.2}
       MEDIA_BRIDGE_CONTROL_PORT: "8381"
     networks: [edge]
+    secrets: [gateway_client_credential]
     healthcheck:
       test:
         - CMD
@@ -92,6 +93,8 @@ networks:
     internal: true
 
 secrets:
+  gateway_client_credential:
+    file: ${MEDIA_BRIDGE_STAGING_ROOT:?Set MEDIA_BRIDGE_STAGING_ROOT}/secrets/client-credential.secret
   downstream_api_key:
     file: ${MEDIA_BRIDGE_DOWNSTREAM_API_KEY_FILE:-${MEDIA_BRIDGE_STAGING_ROOT:?Set MEDIA_BRIDGE_STAGING_ROOT}/secrets/downstream-api-key.secret}
   mock_ca_certificate:

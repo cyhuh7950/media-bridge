@@ -57,6 +57,13 @@ def test_a1_overlay_isolates_db_edge_and_mock_networks() -> None:
     assert services["media-bridge-db"].get("ports", []) == []
     assert set(services["media-bridge-db"]["networks"]) == {"database"}
     assert "edge" in services["media-bridge-control"]["networks"]
+    control_secret_sources = {
+        secret["source"] for secret in services["media-bridge-control"]["secrets"]
+    }
+    assert "gateway_client_credential" in control_secret_sources
+    assert rendered["secrets"]["gateway_client_credential"]["file"] == (
+        "/run/media-bridge-staging-test/secrets/client-credential.secret"
+    )
     assert services["media-bridge-control"]["environment"]["FORWARDED_ALLOW_IPS"] == (
         "172.20.0.2"
     )
