@@ -4,6 +4,8 @@ services:
 
   media-bridge-control:
     container_name: media-bridge-staging-control
+    environment:
+      FORWARDED_ALLOW_IPS: ${NPM_PROXY_IP:-172.20.0.2}
     networks: [edge]
 
   media-bridge-data:
