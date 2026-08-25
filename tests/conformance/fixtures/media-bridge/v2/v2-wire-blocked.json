@@ -1,0 +1,6 @@
+{
+  "contract_version": "media-bridge-interop/v2",
+  "status": "BLOCKED",
+  "original_media_removed": false,
+  "error_code": "ORIGINAL_MEDIA_REMAINS"
+}

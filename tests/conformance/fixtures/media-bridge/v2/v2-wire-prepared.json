@@ -1,0 +1,6 @@
+{
+  "contract_version": "media-bridge-interop/v2",
+  "status": "PREPARED",
+  "original_media_removed": true,
+  "messages": [{"role": "user", "content": "sanitized text only"}]
+}
