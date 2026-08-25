@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from media_bridge_control.connections import ConnectionService
-
 from media_bridge_control.bootstrap import ControlPlaneService
+from media_bridge_control.connections import ConnectionService
 from media_bridge_control.db import Database
 from media_bridge_control.schemas import ConnectionCreate, ConnectionUpdate
 from media_bridge_control.security import SecurityContext

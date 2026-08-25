@@ -1,9 +1,9 @@
 from pathlib import Path
 
 import pytest
-from media_bridge_control.secrets import GatewaySecretResolver, SecretResolutionError
 
 from media_bridge_control.schemas import SecretReference
+from media_bridge_control.secrets import GatewaySecretResolver, SecretResolutionError
 
 
 def test_gateway_secret_resolver_reads_exact_env_and_bounded_secret_file(

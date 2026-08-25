@@ -4,13 +4,13 @@ import logging
 from datetime import UTC, datetime
 
 import pytest
-from media_bridge_control.connections import ConnectionService
-from media_bridge_control.secrets import GatewaySecretResolver
 from sqlalchemy import text
 
 from media_bridge_control.bootstrap import ControlPlaneService
+from media_bridge_control.connections import ConnectionService
 from media_bridge_control.db import Database
 from media_bridge_control.schemas import ConnectionCreate, SecretReference
+from media_bridge_control.secrets import GatewaySecretResolver
 from media_bridge_control.security import SecurityContext
 
 
