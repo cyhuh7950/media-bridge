@@ -57,7 +57,12 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-source = ["media_bridge", "media_bridge_control", "media_bridge_gateway"]
+source = [
+  "media_bridge",
+  "media_bridge_adapters",
+  "media_bridge_control",
+  "media_bridge_gateway",
+]
 
 [tool.coverage.report]
 fail_under = 80
@@ -76,4 +81,9 @@ ignore = ["S101"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["media_bridge", "media_bridge_control", "media_bridge_gateway"]
+packages = [
+  "media_bridge",
+  "media_bridge_adapters",
+  "media_bridge_control",
+  "media_bridge_gateway",
+]
