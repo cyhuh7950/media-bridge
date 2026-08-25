@@ -2,13 +2,16 @@ services:
   media-bridge-db:
     restart: "no"
   media-bridge-control:
-    image: media-bridge-control:test
+    image: ${MEDIA_BRIDGE_TEST_CONTROL_IMAGE:-media-bridge-control:test}
     restart: "no"
+    environment:
+      # Test-only: the loopback TLS fixture is the sole forwarded-header source.
+      FORWARDED_ALLOW_IPS: "*"
     ports:
       - 127.0.0.1:${MEDIA_BRIDGE_TEST_CONTROL_PORT:-18081}:8081
+    networks: [database, product, egress]
   media-bridge-data:
-    image: media-bridge-data:test
+    image: ${MEDIA_BRIDGE_TEST_DATA_IMAGE:-media-bridge-data:test}
     restart: "no"
     ports:
       - 127.0.0.1:${MEDIA_BRIDGE_TEST_DATA_PORT:-18001}:8001
-

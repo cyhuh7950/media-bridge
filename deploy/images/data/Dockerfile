@@ -20,7 +20,8 @@ ENV PATH=/opt/media-bridge/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 RUN groupadd --gid 10001 media-bridge \
-    && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin media-bridge
+    && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin media-bridge \
+    && install -d -o 10001 -g 10001 -m 0700 /var/lib/media-bridge/assets
 COPY --from=build --chown=10001:10001 /opt/media-bridge /opt/media-bridge
 COPY --chown=10001:10001 deploy/health /opt/media-bridge/health
 WORKDIR /srv/media-bridge

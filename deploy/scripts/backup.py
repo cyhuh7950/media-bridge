@@ -37,8 +37,17 @@ def _docker() -> str:
     return executable
 
 
-def dump_from_compose(*, compose_files: tuple[Path, ...]) -> bytes:
+def dump_from_compose(
+    *,
+    compose_files: tuple[Path, ...],
+    project_name: str | None = None,
+    env_file: Path | None = None,
+) -> bytes:
     command = [_docker(), "compose"]
+    if project_name is not None:
+        command.extend(("--project-name", project_name))
+    if env_file is not None:
+        command.extend(("--env-file", str(env_file.resolve(strict=True))))
     for compose_file in compose_files:
         command.extend(("-f", str(compose_file.resolve(strict=True))))
     command.extend(
@@ -132,6 +141,8 @@ def create_archive(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Create a Secret-screened Media Bridge backup")
     parser.add_argument("--compose-file", action="append", type=Path, required=True)
+    parser.add_argument("--project-name")
+    parser.add_argument("--env-file", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--product-version", required=True)
     parser.add_argument("--migration-revision", required=True)
@@ -142,7 +153,11 @@ def main() -> int:
     arguments = _parser().parse_args()
     create_archive(
         output=arguments.output,
-        sql_dump=dump_from_compose(compose_files=tuple(arguments.compose_file)),
+        sql_dump=dump_from_compose(
+            compose_files=tuple(arguments.compose_file),
+            project_name=arguments.project_name,
+            env_file=arguments.env_file,
+        ),
         product_version=arguments.product_version,
         migration_revision=arguments.migration_revision,
         created_at=datetime.now().astimezone(),

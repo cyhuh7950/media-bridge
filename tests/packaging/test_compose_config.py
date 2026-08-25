@@ -29,7 +29,17 @@ def test_compose_applies_runtime_confinement() -> None:
         assert service["cap_drop"] == ["ALL"], name
         assert service["pids_limit"] <= 256, name
         assert service["tmpfs"], name
+        assert all(item.startswith("/") for item in service["tmpfs"]), name
         assert service["healthcheck"]["test"][0] == "CMD", name
+    assert services["media-bridge-db"]["cap_add"] == [
+        "CHOWN",
+        "DAC_OVERRIDE",
+        "FOWNER",
+        "SETGID",
+        "SETUID",
+    ]
+    assert "cap_add" not in services["media-bridge-control"]
+    assert "cap_add" not in services["media-bridge-data"]
 
 
 def test_snapshot_is_rw_for_control_and_ro_for_data() -> None:
@@ -51,6 +61,25 @@ def test_compose_uses_secret_files_not_literal_values() -> None:
     assert "PASSWORD=" not in serialized
     assert "PRIVATE_KEY=" not in serialized
     assert ":latest" not in serialized
+
+
+def test_default_downstream_endpoint_satisfies_gateway_transport_policy() -> None:
+    data = _compose()["services"]["media-bridge-data"]
+    endpoint = data["environment"]["MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL"]
+
+    assert "http://host.docker.internal" not in endpoint
+    assert "https://localhost/v1/responses" in endpoint
+
+
+def test_control_and_gateway_credential_digest_use_the_same_pepper_source() -> None:
+    secrets = _compose()["secrets"]
+
+    assert secrets["control_security_pepper"]["file"].endswith(
+        "./secrets/control-security-pepper.secret}"
+    )
+    assert secrets["gateway_auth_pepper"]["file"].endswith(
+        "./secrets/control-security-pepper.secret}"
+    )
 
 
 def test_control_migrates_from_secret_file_before_start() -> None:

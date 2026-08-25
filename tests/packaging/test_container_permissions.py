@@ -24,3 +24,19 @@ def test_runtime_commands_are_service_specific() -> None:
     )
     assert '"media-bridge-gateway"' in data
     assert '"media-bridge-control"' in control
+
+
+def test_named_volume_mountpoints_are_owned_by_the_runtime_user() -> None:
+    data = (ROOT / "deploy/images/data/Dockerfile").read_text(encoding="utf-8")
+    control = (ROOT / "deploy/images/control/Dockerfile").read_text(encoding="utf-8")
+
+    assert "install -d -o 10001 -g 10001 -m 0700 /var/lib/media-bridge/assets" in data
+    assert "install -d -o 10001 -g 10001 -m 0700 /var/lib/media-bridge/snapshots" in control
+
+
+def test_control_and_data_share_only_the_non_root_snapshot_volume_uid() -> None:
+    data = (ROOT / "deploy/images/data/Dockerfile").read_text(encoding="utf-8")
+    control = (ROOT / "deploy/images/control/Dockerfile").read_text(encoding="utf-8")
+
+    assert "USER 10001:10001" in data
+    assert "USER 10001:10001" in control

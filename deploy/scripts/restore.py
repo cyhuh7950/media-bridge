@@ -23,15 +23,33 @@ def _docker() -> str:
     return executable
 
 
-def _compose_command(compose_files: tuple[Path, ...]) -> list[str]:
+def _compose_command(
+    compose_files: tuple[Path, ...],
+    *,
+    project_name: str | None = None,
+    env_file: Path | None = None,
+) -> list[str]:
     command = [_docker(), "compose"]
+    if project_name is not None:
+        command.extend(("--project-name", project_name))
+    if env_file is not None:
+        command.extend(("--env-file", str(env_file.resolve(strict=True))))
     for compose_file in compose_files:
         command.extend(("-f", str(compose_file.resolve(strict=True))))
     return command
 
 
-def compose_database_is_empty(*, compose_files: tuple[Path, ...]) -> bool:
-    command = _compose_command(compose_files)
+def compose_database_is_empty(
+    *,
+    compose_files: tuple[Path, ...],
+    project_name: str | None = None,
+    env_file: Path | None = None,
+) -> bool:
+    command = _compose_command(
+        compose_files,
+        project_name=project_name,
+        env_file=env_file,
+    )
     command.extend(
         (
             "exec",
@@ -53,8 +71,18 @@ def compose_database_is_empty(*, compose_files: tuple[Path, ...]) -> bool:
     return result.stdout.strip() == "0"
 
 
-def apply_to_compose(sql_dump: bytes, *, compose_files: tuple[Path, ...]) -> None:
-    command = _compose_command(compose_files)
+def apply_to_compose(
+    sql_dump: bytes,
+    *,
+    compose_files: tuple[Path, ...],
+    project_name: str | None = None,
+    env_file: Path | None = None,
+) -> None:
+    command = _compose_command(
+        compose_files,
+        project_name=project_name,
+        env_file=env_file,
+    )
     command.extend(
         (
             "exec",
@@ -108,14 +136,25 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Restore a verified Media Bridge backup")
     parser.add_argument("backup", type=Path)
     parser.add_argument("--compose-file", action="append", type=Path, required=True)
+    parser.add_argument("--project-name")
+    parser.add_argument("--env-file", type=Path)
     parser.add_argument("--confirm-empty-database", action="store_true")
     arguments = parser.parse_args()
     compose_files = tuple(arguments.compose_file)
     restore_archive(
         arguments.backup,
-        database_is_empty=compose_database_is_empty(compose_files=compose_files),
+        database_is_empty=compose_database_is_empty(
+            compose_files=compose_files,
+            project_name=arguments.project_name,
+            env_file=arguments.env_file,
+        ),
         confirmed=arguments.confirm_empty_database,
-        apply_sql=lambda sql: apply_to_compose(sql, compose_files=compose_files),
+        apply_sql=lambda sql: apply_to_compose(
+            sql,
+            compose_files=compose_files,
+            project_name=arguments.project_name,
+            env_file=arguments.env_file,
+        ),
     )
     return 0
 

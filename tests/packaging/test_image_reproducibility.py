@@ -13,6 +13,7 @@ def test_images_use_exact_digest_and_locked_install() -> None:
     versions = (DEPLOY / "versions.env").read_text(encoding="utf-8")
     assert "PRODUCT_VERSION=0.1.0" in versions
     assert re.search(r"PYTHON_IMAGE=python:3\.12-slim@sha256:[0-9a-f]{64}", versions)
+    assert re.search(r"NODE_IMAGE=node:24\.18\.0-bookworm-slim@sha256:[0-9a-f]{64}", versions)
 
     for service in ("data", "control"):
         source = _dockerfile(service)
@@ -22,6 +23,11 @@ def test_images_use_exact_digest_and_locked_install() -> None:
         assert "--no-cache-dir" in source
         assert "nonvision_media_bridge-0.1.0-py3-none-any.whl" in source
         assert ":latest" not in source
+
+    control = _dockerfile("control")
+    node_stage = r"^FROM node:24\.18\.0-bookworm-slim@sha256:[0-9a-f]{64} AS web-build$"
+    assert re.search(node_stage, control, re.M)
+    assert "npm ci --ignore-scripts --no-audit --no-fund" in control
 
 
 def test_build_context_is_explicitly_bounded() -> None:

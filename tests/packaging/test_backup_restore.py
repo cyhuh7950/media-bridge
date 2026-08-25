@@ -99,3 +99,29 @@ def test_restore_requires_empty_database_and_explicit_confirmation(tmp_path: Pat
 def test_restore_readiness_requires_external_secret_reconnection() -> None:
     assert restore.readiness_after_restore(secret_refs_connected=False) == "limited"
     assert restore.readiness_after_restore(secret_refs_connected=True) == "ready"
+
+
+def test_isolated_compose_lifecycle_accepts_project_and_env_boundaries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compose_file = tmp_path / "compose.yaml"
+    env_file = tmp_path / "fixture.env"
+    compose_file.write_text("services: {}", encoding="utf-8")
+    env_file.write_text("FIXTURE=1", encoding="utf-8")
+    monkeypatch.setattr(restore, "_docker", lambda: "/usr/bin/docker")
+
+    command = restore._compose_command(
+        (compose_file,),
+        project_name="media-bridge-p5-restore",
+        env_file=env_file,
+    )
+
+    assert command[:6] == [
+        "/usr/bin/docker",
+        "compose",
+        "--project-name",
+        "media-bridge-p5-restore",
+        "--env-file",
+        str(env_file),
+    ]

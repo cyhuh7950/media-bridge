@@ -11,7 +11,7 @@ services:
   media-bridge-db:
     <<: *runtime-security
     image: postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
-    user: "999:999"
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     environment:
       POSTGRES_DB: media_bridge
       POSTGRES_USER: media_bridge
@@ -46,6 +46,7 @@ services:
       MEDIA_BRIDGE_CONTROL_HOST: ${MEDIA_BRIDGE_CONTROL_HOST:-localhost}
       MEDIA_BRIDGE_CONTROL_BIND_HOST: 0.0.0.0
       MEDIA_BRIDGE_CONTROL_PORT: "8081"
+      MEDIA_BRIDGE_CONSOLE_STATIC_ROOT: /opt/media-bridge/web
     command:
       - python
       - /opt/media-bridge/deploy/scripts/migrate.py
@@ -58,7 +59,7 @@ services:
     secrets: [control_database_url, control_security_pepper, snapshot_private_key]
     networks: [database, product]
     volumes: [snapshots:/var/lib/media-bridge/snapshots]
-    tmpfs: [/tmp:rw,noexec,nosuid,size=64m,uid=10002,gid=10002]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001"]
     depends_on:
       media-bridge-db:
         condition: service_healthy
@@ -90,7 +91,7 @@ services:
       MEDIA_BRIDGE_VISION_MODEL: ${MEDIA_BRIDGE_VISION_MODEL:-gpt-4.1-mini}
       MEDIA_BRIDGE_VISION_API_KEY_FILE: /run/secrets/vision_api_key
       MEDIA_BRIDGE_SOLAR_API_KEY_FILE: /run/secrets/solar_api_key
-      MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL: ${MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL:-http://host.docker.internal:9000/v1/responses}
+      MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL: ${MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL:-https://localhost/v1/responses}
     secrets:
       - snapshot_public_key
       - gateway_auth_pepper
@@ -102,7 +103,7 @@ services:
     volumes:
       - snapshots:/var/lib/media-bridge/snapshots:ro
       - assets:/var/lib/media-bridge/assets
-    tmpfs: [/tmp:rw,noexec,nosuid,size=128m,uid=10001,gid=10001]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=128m,uid=10001,gid=10001"]
     healthcheck:
       test: [CMD, python, /opt/media-bridge/health/data_plane.py]
       interval: 5s
@@ -134,7 +135,7 @@ secrets:
   snapshot_public_key:
     file: ${MEDIA_BRIDGE_SNAPSHOT_PUBLIC_KEY_FILE:-./secrets/snapshot-public-key.secret}
   gateway_auth_pepper:
-    file: ${MEDIA_BRIDGE_GATEWAY_AUTH_PEPPER_FILE:-./secrets/gateway-auth-pepper.secret}
+    file: ${MEDIA_BRIDGE_GATEWAY_AUTH_PEPPER_FILE:-./secrets/control-security-pepper.secret}
   receipt_secret:
     file: ${MEDIA_BRIDGE_RECEIPT_SECRET_FILE:-./secrets/receipt-secret.secret}
   ocr_api_key:

@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
 
-MAX_HEALTH_BYTES = 4_096
 MAX_SNAPSHOT_BYTES = 1_048_576
 
 
@@ -17,25 +15,20 @@ class HealthCheckError(RuntimeError):
     pass
 
 
-def fetch_json(url: str) -> dict[str, Any]:
+def gateway_listening(url: str) -> bool:
     parsed = urlsplit(url)
-    if parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or parsed.username is not None:
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname != "127.0.0.1"
+        or parsed.username is not None
+        or parsed.path != "/status"
+    ):
         raise HealthCheckError("gateway_not_ready")
-    request = Request(url, headers={"accept": "application/json"})  # noqa: S310
     try:
-        with urlopen(request, timeout=2) as response:  # noqa: S310
-            body = response.read(MAX_HEALTH_BYTES + 1)
+        with socket.create_connection(("127.0.0.1", parsed.port or 80), timeout=2):
+            return True
     except OSError as error:
         raise HealthCheckError("gateway_not_ready") from error
-    if len(body) > MAX_HEALTH_BYTES:
-        raise HealthCheckError("gateway_not_ready")
-    try:
-        value = json.loads(body)
-    except (UnicodeError, json.JSONDecodeError) as error:
-        raise HealthCheckError("gateway_not_ready") from error
-    if not isinstance(value, dict):
-        raise HealthCheckError("gateway_not_ready")
-    return value
 
 
 def check(*, snapshot_path: Path, url: str) -> None:
@@ -54,7 +47,7 @@ def check(*, snapshot_path: Path, url: str) -> None:
         raise HealthCheckError("snapshot_not_ready") from error
     if not isinstance(snapshot, dict) or not isinstance(snapshot.get("version"), int):
         raise HealthCheckError("snapshot_not_ready")
-    if fetch_json(url).get("status") != "ready":
+    if not gateway_listening(url):
         raise HealthCheckError("gateway_not_ready")
 
 
