@@ -42,9 +42,13 @@ media-bridge-stdio = "media_bridge.entrypoints:run_stdio"
 media-bridge-http = "media_bridge.entrypoints:run_http"
 media-bridge-gateway = "media_bridge.entrypoints:run_gateway"
 media-bridge-control = "media_bridge_control.entrypoints:run_control"
+media-bridge-adapter = "media_bridge_adapters.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["media_bridge*"]
+
+[tool.setuptools.package-data]
+media_bridge_adapters = ["omniroute/plugin/*.mjs"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
+
+from media_bridge_adapters.validation import validate_adapter_endpoint
 
 _IDENTIFIER = Annotated[
     str,
@@ -12,10 +22,76 @@ _IDENTIFIER = Annotated[
 ]
 _DIGEST = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
 _TOKEN = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{43}$")]
+_COMMIT = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{40}$")]
+_ENV_NAME = Annotated[str, StringConstraints(pattern=r"^[A-Z_][A-Z0-9_]{0,127}$")]
+_SEMVER = Annotated[str, StringConstraints(pattern=r"^\d+\.\d+\.\d+$")]
 
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class AdapterManifest(StrictModel):
+    adapter_id: Literal["opencodex", "omniroute"]
+    adapter_version: _SEMVER
+    product_contract: Literal["media-bridge-pre-upstream/v1"]
+    supported_external_versions: tuple[_SEMVER, ...]
+    external_base_commit: _COMMIT
+    extension_commit: _COMMIT
+    required_gateway_scopes: tuple[str, ...]
+
+
+class CompatibilityResult(StrictModel):
+    adapter_id: str
+    external_version: str
+    compatible: bool
+    reason: Literal["unknown_adapter", "unsupported_external_build"] | None
+    manifest: AdapterManifest | None
+
+
+class AdapterConfigRequest(StrictModel):
+    adapter_id: Literal["opencodex", "omniroute"]
+    external_version: _SEMVER
+    external_base_commit: _COMMIT
+    extension_commit: _COMMIT
+    endpoint: str
+    credential_env: _ENV_NAME
+    decision_hmac_env: _ENV_NAME
+    timeout_ms: int = Field(ge=1, le=120_000)
+    max_response_bytes: int = Field(ge=1, le=4 * 1024 * 1024)
+    output_path: Path
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint(cls, value: str) -> str:
+        return validate_adapter_endpoint(value)
+
+    @field_validator("output_path")
+    @classmethod
+    def validate_output_path(cls, value: Path) -> Path:
+        if not value.is_absolute() or value.name in {"", ".", ".."}:
+            raise ValueError("Adapter output path must be an explicit absolute file path")
+        return value
+
+
+class RenderedConfig(StrictModel):
+    adapter_id: Literal["opencodex", "omniroute"]
+    external_version: _SEMVER
+    content: str
+    output_path: Path
+
+
+class AdapterProbeResult(StrictModel):
+    reachable: bool
+    http_status: int | None
+    error: Literal[
+        "credential_unavailable",
+        "endpoint_invalid",
+        "probe_failed",
+        "redirect_rejected",
+        "response_invalid",
+        "response_too_large",
+    ] | None
 
 
 class AdapterSafeError(StrictModel):

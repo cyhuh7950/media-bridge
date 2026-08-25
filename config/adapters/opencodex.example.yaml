@@ -1,0 +1,11 @@
+# Preview input only. Do not place runtime Secret values in this file.
+adapter_id: opencodex
+external_version: 2.28.0
+external_base_commit: 5840591322117f3ee9568b35b135a6d4339f7711
+extension_commit: fbd539bc1a68a4a9ce85823096daa537a67ec742
+endpoint: https://media-bridge.example/adapter/v1/pre-upstream
+credential_env: MEDIA_BRIDGE_ADAPTER_CREDENTIAL
+decision_hmac_env: MEDIA_BRIDGE_ADAPTER_DECISION_HMAC
+timeout_ms: 15000
+max_response_bytes: 524288
+output_path: /absolute/path/to/opencodex-media-bridge-fragment.json
