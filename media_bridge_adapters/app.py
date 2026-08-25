@@ -34,14 +34,30 @@ def build_adapter_app(
         raise ValueError("Adapter request limit must be positive")
 
     async def prepare(request: Request) -> Response:
-        authorization = request.headers.get("authorization", "")
+        raw_headers = request.scope.get("headers", [])
+        authorization_values = [
+            value.decode("latin-1")
+            for name, value in raw_headers
+            if name.lower() == b"authorization"
+        ]
+        if len(authorization_values) != 1:
+            return _error("authentication_required", "Adapter credential is required.", 401)
+        authorization = authorization_values[0]
         if not authorization.startswith("Bearer ") or "," in authorization:
             return _error("authentication_required", "Adapter credential is required.", 401)
         credential = authorization.removeprefix("Bearer ")
         actual = hashlib.sha256(credential.encode()).hexdigest()
         if not hmac.compare_digest(actual, credential_digest):
             return _error("authentication_failed", "Adapter credential is invalid.", 401)
-        if request.headers.get("content-type", "").partition(";")[0] != "application/json":
+        content_type_values = [
+            value.decode("latin-1")
+            for name, value in raw_headers
+            if name.lower() == b"content-type"
+        ]
+        if (
+            len(content_type_values) != 1
+            or content_type_values[0].partition(";")[0] != "application/json"
+        ):
             return _error(
                 "unsupported_content_type",
                 "Adapter request must use application/json.",
@@ -49,9 +65,9 @@ def build_adapter_app(
             )
         body = bytearray()
         async for chunk in request.stream():
-            body.extend(chunk)
-            if len(body) > max_request_bytes:
+            if len(body) + len(chunk) > max_request_bytes:
                 return _error("request_too_large", "Adapter request exceeded the limit.", 413)
+            body.extend(chunk)
         try:
             payload = PreUpstreamRequest.model_validate_json(bytes(body))
         except (ValidationError, ValueError):

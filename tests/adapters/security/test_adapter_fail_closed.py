@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 
 import httpx
 import pytest
@@ -54,10 +55,20 @@ async def test_adapter_http_requires_digest_verified_bearer() -> None:
             headers={"authorization": "Bearer mba_wrong"},
             json=text_request(),
         )
+        duplicate = await client.post(
+            "/adapter/v1/pre-upstream",
+            headers=[
+                ("authorization", f"Bearer {raw_credential}"),
+                ("authorization", "Bearer mba_wrong"),
+                ("content-type", "application/json"),
+            ],
+            content=json.dumps(text_request()).encode(),
+        )
 
     assert missing.status_code == 401
     assert wrong.status_code == 401
-    assert raw_credential not in missing.text + wrong.text
+    assert duplicate.status_code == 401
+    assert raw_credential not in missing.text + wrong.text + duplicate.text
 
 
 @pytest.mark.asyncio
