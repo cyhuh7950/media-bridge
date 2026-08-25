@@ -1,6 +1,5 @@
-from pathlib import Path
 import re
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -25,4 +24,3 @@ def test_runtime_commands_are_service_specific() -> None:
     )
     assert '"media-bridge-gateway"' in data
     assert '"media-bridge-control"' in control
-

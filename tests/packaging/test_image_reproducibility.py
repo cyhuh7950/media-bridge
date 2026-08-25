@@ -1,6 +1,5 @@
-from pathlib import Path
 import re
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DEPLOY = ROOT / "deploy"
@@ -29,4 +28,3 @@ def test_build_context_is_explicitly_bounded() -> None:
     ignored = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
     required = {".git", ".env", ".env.*", ".venv", "**/__pycache__", "tests", "docs"}
     assert required.issubset(set(ignored))
-

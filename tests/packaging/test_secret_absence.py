@@ -1,6 +1,5 @@
-from pathlib import Path
 import re
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DEPLOY = ROOT / "deploy"
@@ -23,4 +22,3 @@ def test_secret_value_files_are_ignored() -> None:
     ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
     assert "deploy/secrets/*.secret" in ignored
     assert "deploy/secrets/*.pem" in ignored
-

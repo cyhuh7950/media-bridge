@@ -17,4 +17,5 @@ build/
 .env
 .env.*
 !.env.example
-
+deploy/secrets/*.secret
+deploy/secrets/*.pem
