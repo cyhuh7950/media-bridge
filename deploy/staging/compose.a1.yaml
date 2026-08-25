@@ -23,6 +23,7 @@ services:
   media-bridge-data:
     container_name: media-bridge-staging-data
     environment:
+      MEDIA_BRIDGE_GATEWAY_PORT: "8301"
       MEDIA_BRIDGE_OCR_ENDPOINT: ${MEDIA_BRIDGE_OCR_ENDPOINT:-https://media-bridge-staging-mock:8443/v1/document-digitization}
       MEDIA_BRIDGE_VISION_ENDPOINT: ${MEDIA_BRIDGE_VISION_ENDPOINT:-https://media-bridge-staging-mock:8443/v1/chat/completions}
       MEDIA_BRIDGE_SOLAR_ENDPOINT: ${MEDIA_BRIDGE_SOLAR_ENDPOINT:-https://media-bridge-staging-mock:8443/v1/chat/completions}
@@ -34,6 +35,18 @@ services:
     depends_on:
       media-bridge-staging-mock:
         condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json, os, socket;
+          path = os.environ['MEDIA_BRIDGE_SNAPSHOT_PATH'];
+          value = json.load(open(path, encoding='utf-8'));
+          assert isinstance(value.get('version'), int);
+          connection = socket.create_connection(('127.0.0.1', 8301), timeout=2);
+          connection.close()
 
   media-bridge-staging-mock:
     image: media-bridge-data:0.1.0

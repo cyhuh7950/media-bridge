@@ -65,6 +65,12 @@ def test_a1_overlay_isolates_db_edge_and_mock_networks() -> None:
     ] == "8381"
     assert "8381" in " ".join(services["media-bridge-control"]["healthcheck"]["test"])
     assert "edge" in services["media-bridge-data"]["networks"]
+    assert services["media-bridge-data"]["environment"][
+        "MEDIA_BRIDGE_GATEWAY_PORT"
+    ] == "8301"
+    assert "8301" in " ".join(
+        services["media-bridge-data"]["healthcheck"]["test"]
+    )
     assert "mock" not in services["media-bridge-control"]["networks"]
     assert "mock" in services["media-bridge-data"]["networks"]
     assert set(services["media-bridge-staging-mock"]["networks"]) == {"mock"}
