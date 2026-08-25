@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import secrets
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import suppress
 from typing import Any, cast
 
@@ -16,9 +16,21 @@ from media_bridge.contracts import (
     SafeError,
     TextPart,
 )
+from media_bridge.contracts_v2 import (
+    InteropV2Result,
+    MediaBridgeV2ErrorCode,
+    V2Error,
+)
 from media_bridge.detector import detect_media
 from media_bridge.gate import DownstreamPayload, PreRequestGate
-from media_bridge.receipts import GateReceiptSigner, ReceiptBinding, ReceiptValidationError
+from media_bridge.idempotency import IdempotencyStore
+from media_bridge.interop_v2 import (
+    ReceiptValidationError,
+    TransformationReceipt,
+    build_transformation_receipt,
+)
+from media_bridge.receipts import GateReceiptSigner, ReceiptBinding
+from media_bridge.receipts import ReceiptValidationError as GateReceiptValidationError
 from media_bridge.responses_state import ResponsesStateRecord
 from media_bridge_gateway.contracts import (
     DataPlaneSubject,
@@ -210,7 +222,7 @@ class GatewayTransaction:
                 snapshot_version=self._snapshot_version,
             )
         except (
-            ReceiptValidationError,
+            GateReceiptValidationError,
             DownstreamGuardError,
             TypeError,
             ValueError,
@@ -391,3 +403,58 @@ class GatewayTransaction:
             target_id=prepared.target_id,
             snapshot_version=self._snapshot_version,
         )
+
+
+class V2PreparationTransaction:
+    """Run transform, verified cleanup, then issue a metadata-only receipt."""
+
+    def __init__(self, *, ttl_seconds: int = 30) -> None:
+        self._idempotency = IdempotencyStore(ttl_seconds=ttl_seconds)
+        self._ttl_seconds = ttl_seconds
+
+    def execute(
+        self,
+        *,
+        idempotency_key: str,
+        fingerprint: str,
+        transform: Callable[[], InteropV2Result],
+        cleanup: Callable[[], bool],
+    ) -> tuple[InteropV2Result, TransformationReceipt | None]:
+        def operation() -> tuple[InteropV2Result, TransformationReceipt | None]:
+            result = transform()
+            if result.status != "PREPARED":
+                return result, None
+            if not cleanup():
+                blocked = result.model_copy(
+                    update={
+                        "status": "BLOCKED",
+                        "sanitized_messages": [],
+                        "original_media_removed": False,
+                        "error": V2Error(
+                            code=MediaBridgeV2ErrorCode.ORIGINAL_MEDIA_REMAINS,
+                            message="Original media cleanup was not verified.",
+                        ),
+                    }
+                )
+                return blocked, None
+            try:
+                receipt = build_transformation_receipt(
+                    result,
+                    ttl_seconds=self._ttl_seconds,
+                )
+            except ReceiptValidationError as error:
+                blocked = result.model_copy(
+                    update={
+                        "status": "BLOCKED",
+                        "sanitized_messages": [],
+                        "original_media_removed": False,
+                        "error": V2Error(
+                            code=MediaBridgeV2ErrorCode.SANITIZATION_FAILED,
+                            message=str(error),
+                        ),
+                    }
+                )
+                return blocked, None
+            return result, receipt
+
+        return self._idempotency.run(idempotency_key, fingerprint, operation)
