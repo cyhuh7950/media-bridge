@@ -64,6 +64,6 @@ def test_eoul_mode_cannot_claim_media_bridge_routing_ownership() -> None:
             provider_execution_owner="media_bridge",
         )
     except ValueError as error:
-        assert "Eoul mode" in str(error)
+        assert "host-managed mode" in str(error)
     else:
         raise AssertionError("invalid Eoul responsibility ownership was accepted")

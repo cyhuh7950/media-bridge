@@ -93,13 +93,28 @@ class InteropV2Request(StrictModel):
     request_id: OpaqueId
     trace_id: OpaqueId
     idempotency_key: OpaqueId
-    mode: Literal["standalone", "eoul"]
+    mode: Literal["standalone", "host_managed", "eoul"]
+    host_id: OpaqueId | None = None
     canonical_messages: list[dict[str, Any]] = Field(min_length=1, max_length=128)
     assets: list[AssetReference] = Field(default_factory=list, max_length=64)
     target: TargetCapabilitySnapshot
     transformation_policy: TransformationPolicy = Field(default_factory=TransformationPolicy)
     original_retention: Literal["delete_after_transform"] = "delete_after_transform"
     hop: HopMetadata
+
+    @model_validator(mode="after")
+    def validate_host_identity(self) -> InteropV2Request:
+        if self.mode == "host_managed" and self.host_id is None:
+            raise ValueError("host_managed requests require host_id")
+        return self
+
+    @property
+    def normalized_mode(self) -> Literal["standalone", "host_managed"]:
+        return "host_managed" if self.mode == "eoul" else self.mode
+
+    @property
+    def normalized_owner(self) -> Literal["media_bridge", "external_host"]:
+        return "media_bridge" if self.normalized_mode == "standalone" else "external_host"
 
 
 class TransformationEvidence(StrictModel):

@@ -34,20 +34,40 @@ class StrictModel(BaseModel):
 class ResponsibilityMode(StrictModel):
     """Declare which side owns capability, routing, and provider execution."""
 
-    mode: Literal["standalone", "eoul"]
-    capability_owner: Literal["media_bridge", "eoul"]
-    routing_owner: Literal["media_bridge", "eoul"]
-    provider_execution_owner: Literal["media_bridge", "eoul"]
+    mode: Literal["standalone", "host_managed", "eoul"]
+    host_id: _IDENTIFIER | None = None
+    capability_owner: Literal["media_bridge", "external_host", "eoul"]
+    routing_owner: Literal["media_bridge", "external_host", "eoul"]
+    provider_execution_owner: Literal["media_bridge", "external_host", "eoul"]
 
     @model_validator(mode="after")
     def validate_ownership(self) -> Self:
-        if self.mode == "eoul" and (
+        if self.mode == "host_managed" and self.host_id is None:
+            raise ValueError("host_managed responsibility requires host_id")
+        if self.normalized_mode == "host_managed" and (
             self.capability_owner,
             self.routing_owner,
             self.provider_execution_owner,
-        ) != ("eoul", "eoul", "eoul"):
-            raise ValueError("Eoul mode delegates capability, routing, and execution to Eoul")
+        ) not in {
+            ("external_host", "external_host", "external_host"),
+            ("eoul", "eoul", "eoul"),
+        }:
+            raise ValueError("host-managed mode delegates ownership to the external host")
+        if self.normalized_mode == "standalone" and (
+            self.capability_owner,
+            self.routing_owner,
+            self.provider_execution_owner,
+        ) != ("media_bridge", "media_bridge", "media_bridge"):
+            raise ValueError("standalone mode keeps ownership in Media Bridge")
         return self
+
+    @property
+    def normalized_mode(self) -> Literal["standalone", "host_managed"]:
+        return "host_managed" if self.mode == "eoul" else self.mode
+
+    @property
+    def normalized_owner(self) -> Literal["media_bridge", "external_host"]:
+        return "media_bridge" if self.normalized_mode == "standalone" else "external_host"
 
 
 class AdapterManifest(StrictModel):

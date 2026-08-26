@@ -171,7 +171,7 @@ class V2ResponsibilityRouter:
         vision = request.target.capabilities.get("vision")
         if not isinstance(vision, bool):
             return self._blocked(request, MediaBridgeV2ErrorCode.CAPABILITY_UNKNOWN)
-        if request.mode == "eoul" and not request.target.is_fresh(self._now()):
+        if request.normalized_mode == "host_managed" and not request.target.is_fresh(self._now()):
             return self._blocked(request, MediaBridgeV2ErrorCode.CAPABILITY_STALE)
         if not request.assets:
             result = InteropV2Result(
