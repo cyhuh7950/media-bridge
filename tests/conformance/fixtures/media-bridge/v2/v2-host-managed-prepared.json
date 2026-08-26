@@ -1,0 +1,19 @@
+{
+  "contract_version": "media-bridge-interop/v2",
+  "request_id": "host-prepared-request",
+  "trace_id": "host-prepared-trace",
+  "idempotency_key": "host-prepared-idempotency",
+  "mode": "host_managed",
+  "host_id": "host-fixture",
+  "canonical_messages": [{"role": "user", "content": "describe this"}],
+  "assets": [{"asset_id": "asset-fixture", "media_type_hint": "image", "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],
+  "target": {
+    "model_id": "fixture/text-model",
+    "capability_snapshot_version": "fixture-v1",
+    "capability_snapshot_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "capabilities": {"vision": false},
+    "observed_at": "2026-08-26T00:00:00Z",
+    "fresh_until": "2099-08-26T00:05:00Z"
+  },
+  "hop": {"hop_id": "host-fixture-hop"}
+}
