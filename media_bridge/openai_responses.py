@@ -56,7 +56,8 @@ def _contains_media_reference(value: object) -> bool:
     if not isinstance(value, dict):
         return False
     item = cast(dict[object, object], value)
-    if item.get("type") in {"input_image", "input_file", "image_url"}:
+    item_type = item.get("type")
+    if isinstance(item_type, str) and item_type in {"input_image", "input_file", "image_url"}:
         return True
     for key in ("image_url", "file_data", "file_id", "file_url", "asset_id"):
         locator = item.get(key)
