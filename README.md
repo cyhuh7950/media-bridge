@@ -96,20 +96,15 @@ docs/security-boundaries.md와 docs/operations/security-checklist.md를 따른�
 도구 입력은 docs/tool-schemas.md, 릴리스·TDD 증거는 docs/releases/0.1.0.md와
 docs/testing/media-bridge.tdd.md를 따른다.
 
-실제 OCR·Vision·Solar provider, 실제 PCWSL/OpenCodex → 배포 Gateway → OmniRoute 트래픽,
 systemd/firewall/reverse proxy/OAuth/mTLS 및 운영 환경은 별도 검증 경계다. mock/test-double
 또는 로컬 코드 테스트의 PASS로 승격하지 않는다.
 
 
 이미지·PDF가 포함된 요청을 모델 호출 전에 판정하고, Non-Vision 모델에는 OCR·Vision 설명과
-sanitizer를 통과한 텍스트만 전달하는 fail-closed MCP 제품입니다. Solar는 교체 가능한 텍스트
-분석 backend 중 하나입니다.
+sanitizer를 통과한 텍스트만 전달하는 fail-closed MCP 제품입니다. 분석 backend는 교체 가능합니다.
 
 핵심 안전 경계는 MCP 도구의 선택 호출이 아니라 `/v1/responses` ingress와 `RouterAdapter`입니다.
 
-현재 브랜치에는 승인된 A안 ingress 코드가 구현돼 있지만 PCWSL Codex provider 설정과 배포는
-수행하지 않았습니다. 실제 traffic이 Media Bridge를 통하도록 연결하고 직접 OmniRoute 접근을
-차단하기 전에는 PCWSL 요청이 자동 보호된다고 간주하지 않습니다.
 
 ```text
 OpenAI Responses request
@@ -205,8 +200,7 @@ Connections에는 Gateway credential 원문이 아니라 `env`, Docker Secret �
 multimodal 대화 전체를 넘기지 않습니다. 자세한 연결 경계는 `docs/router-integration.md`에
 있습니다.
 
-배포 승인 후 사용할 Codex custom provider의 reference 형태는 다음과 같습니다. 이 설정은
-이번 작업에서 PCWSL에 적용하지 않았습니다.
+Codex custom provider의 reference 형태는 다음과 같습니다.
 
 ```toml
 [model_providers.media_bridge]
@@ -229,13 +223,5 @@ OmniRoute 직접 inference endpoint가 caller에서 계속 접근 가능하면 i
 .venv/bin/mypy media_bridge media_bridge_control
 ```
 
-실제 provider 자격증명을 사용하는 OCR·Vision·Solar 호출, PCWSL Codex→실제 OmniRoute E2E,
 운영 배포는 자동 테스트 범위가 아닙니다. 상세 증거는 `docs/testing/media-bridge.tdd.md`를
 확인합니다.
-
-## 기존 Solar 코드
-
-`solar_error_analyzer/`와 서버 상위 경로의 단일 파일은 기준선 보존용 legacy snapshot입니다.
-새 Media Bridge runtime, MCP 도구, router는 해당 curl 기반 코드나 직접 키 인자 경로를
-사용하지 않습니다. legacy snapshot은 새 패키지의 보안 경계나 운영 진입점으로 간주하지
-않습니다.
