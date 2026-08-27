@@ -1,5 +1,106 @@
 # Non-Vision Media Bridge
 
+## README 완료조건과 사용 매뉴얼
+
+이 문서는 기능 소개가 아니라 설치·사용·검증 매뉴얼이다. 아래 절차를 실제로 수행할 수 있고,
+성공 조건과 차단 조건을 확인할 수 있어야 README 완료조건을 충족한다.
+
+- [ ] 전용 Python 환경에 패키지를 설치한다.
+- [ ] exact capability registry와 Secret 참조를 준비한다. Secret 원문은 Git·설정 예시·로그에
+  기록하지 않는다.
+- [ ] HTTP/MCP 또는 Responses Gateway를 전용 주소에 기동한다.
+- [ ] 인증된 text-only 요청과 이미지 포함 Non-Vision 요청을 실행한다.
+- [ ] 성공 시 downstream payload에 원본 media가 없고 변환 텍스트만 있는지 확인한다.
+- [ ] OCR·Vision·sanitizer·cleanup·capability 실패 시 downstream 호출이 0회인지 확인한다.
+- [ ] 테스트 후 임시 Secret·프로세스·listener·컨테이너·volume을 제거한다.
+
+### 빠른 설치
+
+Python 3.12 전용 환경에서 다음을 실행한다.
+
+~~~
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.lock
+.venv/bin/pip install -e '.[control,dev]'
+.venv/bin/python -c 'import media_bridge, media_bridge_control, media_bridge_gateway'
+~~~
+
+Control Plane을 사용하지 않는 data-plane 개발만 필요하면 마지막 설치 명령 대신
+.venv/bin/pip install -e . --no-deps를 사용한다. 운영 서비스 등록은 자동으로 하지 않는다.
+상세 설치는 docs/install/linux.md, docs/install/windows-wsl.md,
+docs/install/docker-compose.md를 따른다.
+
+### 실행과 요청
+
+개발 entrypoint는 다음과 같다.
+
+~~~
+.venv/bin/media-bridge-stdio
+.venv/bin/media-bridge-http
+.venv/bin/media-bridge-gateway
+.venv/bin/media-bridge-control
+~~~
+
+HTTP는 기본적으로 loopback 8000을 사용하며 MEDIA_BRIDGE_HTTP_HOST와
+MEDIA_BRIDGE_HTTP_PORT로 전용 주소를 지정한다. Gateway는 MEDIA_BRIDGE_GATEWAY_*와
+signed snapshot을 요구한다. /mcp, /assets, /v1/responses에는 bearer와
+X-Media-Bridge-Tenant가 필요하다.
+
+Secret 원문을 명령행이나 history에 넣지 않고, 실행 환경에서 주입한다.
+
+~~~
+curl --fail-with-body --silent --show-error \
+  -H "Authorization: Bearer <service-token>" \
+  -H "X-Media-Bridge-Tenant: <tenant-id>" \
+  -H "Content-Type: application/json" \
+  "http://127.0.0.1:<ephemeral-port>/v1/responses" \
+  --data-binary @request.json
+~~~
+
+text-only request.json은 {"model":"<exact-registry-id>","input":"hello"} 형태로 보낼 수
+있다. 이미지 포함 Non-Vision 요청이 성공하면 downstream에는 image item이 없어야 한다.
+registry에 없는 model, 만료 capability, 잘못된 tenant/state, OCR·Vision·sanitizer·cleanup
+실패는 HTTP 오류와 downstream zero-call이어야 한다. 구현 기준은
+tests/integration/test_responses_http.py, tests/gateway/integration/test_http_network.py,
+tests/gateway/security/test_zero_call_matrix.py다.
+
+MCP 확인 순서는 /mcp의 initialize → tools/list → tools/call이다. MCP tool 선택 호출은
+일반 Responses ingress를 대신하지 않으므로 일반 모델 요청은 /v1/responses 또는
+RouterAdapter.invoke()를 거쳐야 한다. 강제 순서는 docs/router-integration.md에 있다.
+
+### 격리 시험과 정리
+
+Control Plane 통합 시험은 PostgreSQL을 필요로 한다. 공유 개발 DB를 재사용하거나 변경하지 말고
+deploy/compose.test.yaml 또는 충돌하지 않는 loopback port와 임시 volume을 사용한다. 시험
+종료 후 임시 container·volume·Secret file·venv·listener를 확인해 제거한다. Compose와
+backup/restore·rollback은 docs/install/docker-compose.md, docs/operations/backup-restore.md,
+docs/operations/upgrade-rollback.md에 있다.
+
+README 완료 판정용 집중 명령:
+
+~~~
+.venv/bin/pytest -q tests/integration/test_responses_http.py
+.venv/bin/pytest -q tests/gateway/integration/test_http_network.py
+.venv/bin/pytest -q tests/gateway/security/test_zero_call_matrix.py
+.venv/bin/pytest -q tests/packaging/e2e
+~~~
+
+전체 판정은 집중 테스트만으로 대체하지 않는다. 격리 PostgreSQL 환경에서 전체 pytest,
+coverage, ruff, mypy를 실행하고 결과와 정리 여부를 작업현황에 기록한다.
+
+### 연결·운영 문서와 미검증 경계
+
+OpenCodex/OmniRoute 연결은 docs/integrations/opencodex-interface-audit.md와
+docs/integrations/host-consumer-handoff.md를, 보안·Secret·운영은
+docs/security-boundaries.md와 docs/operations/security-checklist.md를 따른다.
+도구 입력은 docs/tool-schemas.md, 릴리스·TDD 증거는 docs/releases/0.1.0.md와
+docs/testing/media-bridge.tdd.md를 따른다.
+
+실제 OCR·Vision·Solar provider, 실제 PCWSL/OpenCodex → 배포 Gateway → OmniRoute 트래픽,
+systemd/firewall/reverse proxy/OAuth/mTLS 및 운영 환경은 별도 검증 경계다. mock/test-double
+또는 로컬 코드 테스트의 PASS로 승격하지 않는다.
+
+
 이미지·PDF가 포함된 요청을 모델 호출 전에 판정하고, Non-Vision 모델에는 OCR·Vision 설명과
 sanitizer를 통과한 텍스트만 전달하는 fail-closed MCP 제품입니다. Solar는 교체 가능한 텍스트
 분석 backend 중 하나입니다.
