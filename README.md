@@ -2,6 +2,8 @@
 
 ## README 완료조건과 사용 매뉴얼
 
+개발환경 정본은 [docs/DEVELOPMENT_ENVIRONMENT.md](docs/DEVELOPMENT_ENVIRONMENT.md)를 참조한다.
+
 이 문서는 기능 소개가 아니라 설치·사용·검증 매뉴얼이다. 아래 절차를 실제로 수행할 수 있고,
 성공 조건과 차단 조건을 확인할 수 있어야 README 완료조건을 충족한다.
 
