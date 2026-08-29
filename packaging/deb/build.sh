@@ -5,6 +5,8 @@ source_root=${1:?source root is required}
 output=${2:?output path is required}
 version=${3:-0.1.0}
 test -x "$source_root/.venv/bin/python"
+architecture=$(dpkg --print-architecture)
+test -n "$architecture"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 pkg="$work/media-bridge-$version"
@@ -15,6 +17,7 @@ cp -a "$source_root/media_bridge" "$pkg/opt/media-bridge/app/"
 cp -a "$source_root/media_bridge_adapters" "$pkg/opt/media-bridge/app/"
 cp "$source_root/packaging/deb/control" "$pkg/DEBIAN/control"
 sed -i "s/^Version: .*/Version: $version/" "$pkg/DEBIAN/control"
+sed -i "s/^Architecture: .*/Architecture: $architecture/" "$pkg/DEBIAN/control"
 mkdir -p "$pkg/usr/bin" "$pkg/usr/lib/systemd/user"
 cp "$source_root/packaging/deb/media-bridge-personal-web" "$pkg/usr/bin/media-bridge-personal-web"
 chmod 0755 "$pkg/usr/bin/media-bridge-personal-web"

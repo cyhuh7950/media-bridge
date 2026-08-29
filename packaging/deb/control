@@ -2,7 +2,7 @@ Package: media-bridge
 Version: 0.0.0
 Section: utils
 Priority: optional
-Architecture: amd64
+Architecture: ARCH
 Maintainer: Media Bridge Project
 Description: Personal fail-closed media compatibility bridge
  A loopback-only personal runtime for OpenCodex media conversion.
