@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import parse_qs
 
 from starlette.applications import Starlette
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -43,7 +44,14 @@ def build_personal_web_app(*, state: PersonalStateStore) -> Starlette:
 
     async def settings(request: Request) -> JSONResponse:
         try:
-            payload = await request.json()
+            content_type = request.headers.get("content-type", "").partition(";")[0]
+            if content_type == "application/json":
+                payload = await request.json()
+            elif content_type == "application/x-www-form-urlencoded":
+                raw = (await request.body()).decode("utf-8")
+                payload = {key: values[-1] for key, values in parse_qs(raw).items() if values}
+            else:
+                raise ValueError
             rpm = int(payload["solar_rpm"])
             tpm = int(payload["solar_tpm"])
             if rpm < 1 or tpm < 1:
