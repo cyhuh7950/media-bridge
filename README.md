@@ -43,7 +43,7 @@ python3 -m venv .venv
 ~~~
 
 Control Plane을 사용하지 않는 data-plane 개발만 필요하면 마지막 설치 명령 대신
-.venv/bin/pip install -e . --no-deps를 사용한다. 운영 서비스 등록은 자동으로 하지 않는다.
+.venv/bin/pip install -e . --no-deps를 사용한다. 사용자 서비스 등록은 자동으로 하지 않는다.
 상세 설치는 docs/install/linux.md, docs/install/windows-wsl.md,
 docs/install/docker-compose.md를 따른다.
 
@@ -106,12 +106,12 @@ coverage, ruff, mypy를 실행하고 결과와 정리 여부를 작업현황에 
 ### 연결·운영 문서와 미검증 경계
 
 OpenCodex/OmniRoute 연결은 docs/integrations/opencodex-interface-audit.md와
-docs/integrations/host-consumer-handoff.md를, 보안·Secret·운영은
+docs/integrations/host-consumer-handoff.md를, 보안·Secret·관리 절차는
 docs/security-boundaries.md와 docs/operations/security-checklist.md를 따른다.
 도구 입력은 docs/tool-schemas.md, 릴리스·TDD 증거는 docs/releases/0.1.0.md와
 docs/testing/media-bridge.tdd.md를 따른다.
 
-systemd/firewall/reverse proxy/OAuth/mTLS 및 운영 환경은 별도 검증 경계다. mock/test-double
+systemd/firewall/reverse proxy/OAuth/mTLS 및 외부 실제 환경은 별도 검증 경계다. mock/test-double
 또는 로컬 코드 테스트의 PASS로 승격하지 않는다.
 
 
@@ -196,13 +196,13 @@ registry 형식은 `config/model_registry.example.yaml`을 복사한 뒤 실제 
 ```
 
 HTTP는 기본적으로 `127.0.0.1:8000`에 바인딩합니다. `/mcp`, `/assets`, 활성화된
-`/v1/responses` 모두 bearer 및 `X-Media-Bridge-Tenant`가 필요합니다. 운영 OAuth/mTLS,
+`/v1/responses` 모두 bearer 및 `X-Media-Bridge-Tenant`가 필요합니다. 외부 OAuth/mTLS,
 reverse proxy, 방화벽은 별도 배포 계층의 책임입니다.
 
 Control Plane은 실행 전에 Alembic revision `0002_connections`를 확인하고 다르면 fail-closed로
 중단합니다. 필요한 변수명과 Secret file 경로는 `config/control-plane.example.env`에 있으며,
 Provider·DB credential·security pepper·Ed25519 개인키 원문을 설정 파일에 넣지 않습니다. P1에서는
-격리 PostgreSQL 시험만 수행했고 운영 migration, 서비스 등록, 포트·proxy 변경, 배포는 수행하지
+격리 PostgreSQL 시험만 수행했고 외부 적용 migration, 서비스 등록, 포트·proxy 변경, 배포는 수행하지
 않았습니다.
 
 Connections에는 Gateway credential 원문이 아니라 `env`, Docker Secret 또는 외부 Secret Store
@@ -241,5 +241,5 @@ OmniRoute 연동은 후속 선택 기능이며 이번 OpenCodex acceptance 범�
 .venv/bin/mypy media_bridge media_bridge_control
 ```
 
-운영 배포는 자동 테스트 범위가 아닙니다. 상세 증거는 `docs/testing/media-bridge.tdd.md`를
+외부 배포는 자동 테스트 범위가 아닙니다. 상세 증거는 `docs/testing/media-bridge.tdd.md`를
 확인합니다.
