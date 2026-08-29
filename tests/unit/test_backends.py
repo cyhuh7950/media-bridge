@@ -205,3 +205,29 @@ async def test_solar_is_one_analysis_backend_and_missing_key_fails_closed(
         )
     assert result.status is BackendStatus.SUCCESS
     assert result.analysis == "Root cause: network policy"
+
+
+@pytest.mark.asyncio
+async def test_solar_backend_accepts_solar_api_key_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("UPSTAGE_API_KEY", raising=False)
+    monkeypatch.setenv("SOLAR_API_KEY", "solar-secret")
+
+    async def success(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer solar-secret"
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "alias works"}}]},
+        )
+
+    async with _client(httpx.MockTransport(success)) as client:
+        backend = SolarAnalysisBackend(
+            endpoint="https://solar.example/v1/chat/completions",
+            model="solar-pro4",
+            client=client,
+        )
+        result = await backend.analyze(context="converted", user_request="diagnose")
+
+    assert result.status is BackendStatus.SUCCESS
+    assert result.analysis == "alias works"
