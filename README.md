@@ -2,21 +2,36 @@
 
 ## README 완료조건과 사용 매뉴얼
 
+## 개인용 제품 사용자 경계
+
+최우선 사용 경로는 `Codex Desktop 또는 OpenCodex → loopback Media Bridge /v1/responses → Solar`이다. OmniRoute는 후속 선택 기능이다. 개인 사용자는 Docker·PostgreSQL·Redis·Python·Node를 수동 설치하거나 `.env`/YAML을 조립하지 않는다. 설치 후 loopback Web 설정 화면에서 정확한 OpenCodex endpoint/model과 Secret reference만 등록한다.
+
+QA/UNSIGNED 패키지의 재현 명령은 다음과 같다. 공식 서명 패키지가 아니므로 제품 release로 취급하지 않는다.
+
+```bash
+dpkg-deb --info media-bridge_<version>_<architecture>.deb
+sudo dpkg -i media-bridge_<version>_<architecture>.deb
+systemctl --user enable --now media-bridge-web.service media-bridge-data.service
+# 브라우저에서 http://127.0.0.1:8765/ 열기
+```
+
+화면 캡처가 포함된 Non-Vision 요청은 Media Bridge가 구조화된 OCR/Vision 설명 텍스트로 변환한 뒤 원본 이미지를 제거해 전달한다. 인식 기준 미달·변환 실패·credential/provider 오류는 Solar 호출 0회와 정상 안내 응답으로 종료한다. 실제 Codex Desktop·Solar·서명 MSI·systemd·Windows UAT는 작업현황의 별도 검증 경계다.
+
+
 개발환경 정본은 [docs/DEVELOPMENT_ENVIRONMENT.md](docs/DEVELOPMENT_ENVIRONMENT.md)를 참조한다.
 
 이 문서는 기능 소개가 아니라 설치·사용·검증 매뉴얼이다. 아래 절차를 실제로 수행할 수 있고,
 성공 조건과 차단 조건을 확인할 수 있어야 README 완료조건을 충족한다.
 
-- [ ] 전용 Python 환경에 패키지를 설치한다.
-- [ ] exact capability registry와 Secret 참조를 준비한다. Secret 원문은 Git·설정 예시·로그에
-  기록하지 않는다.
-- [ ] HTTP/MCP 또는 Responses Gateway를 전용 주소에 기동한다.
-- [ ] 인증된 text-only 요청과 이미지 포함 Non-Vision 요청을 실행한다.
-- [ ] 성공 시 downstream payload에 원본 media가 없고 변환 텍스트만 있는지 확인한다.
-- [ ] OCR·Vision·sanitizer·cleanup·capability 실패 시 downstream 호출이 0회인지 확인한다.
-- [ ] 테스트 후 임시 Secret·프로세스·listener·컨테이너·volume을 제거한다.
+- [ ] Linux/Windows에 맞는 QA/UNSIGNED 또는 서명된 설치 패키지를 확인한다.
+- [ ] 설치 후 loopback Web 설정을 연다. 사용자는 Python·Docker·PostgreSQL·Redis·Node를 별도 설치하지 않는다.
+- [ ] 정확한 OpenCodex endpoint/model과 Secret reference를 설정한다. Secret 원문은 Git·설정·로그에 기록하지 않는다.
+- [ ] text-only 코딩 요청과 화면 캡처가 포함된 Non-Vision 코딩 요청을 실행한다.
+- [ ] 정상 화면은 구조화된 설명 텍스트로 변환되고 downstream에 원본 media가 없다.
+- [ ] 인식 불충분·변환·credential/provider 실패 시 정상 안내 응답과 downstream 0회를 확인한다.
+- [ ] 재시작·설정 변경·업데이트/복구·제거 후 자신이 만든 파일·process·listener만 정리한다.
 
-### 빠른 설치
+### 개발자용 source 실행 (제품 사용자 경로 아님)
 
 Python 3.12 전용 환경에서 다음을 실행한다.
 
@@ -72,11 +87,9 @@ RouterAdapter.invoke()를 거쳐야 한다. 강제 순서는 docs/router-integra
 
 ### 격리 시험과 정리
 
-Control Plane 통합 시험은 PostgreSQL을 필요로 한다. 공유 개발 DB를 재사용하거나 변경하지 말고
-deploy/compose.test.yaml 또는 충돌하지 않는 loopback port와 임시 volume을 사용한다. 시험
-종료 후 임시 container·volume·Secret file·venv·listener를 확인해 제거한다. Compose와
-backup/restore·rollback은 docs/install/docker-compose.md, docs/operations/backup-restore.md,
-docs/operations/upgrade-rollback.md에 있다.
+개인용 제품 시험은 기존 지정 개발·테스트 runtime 안에서 고유 파일 디렉터리·process·loopback port만 사용한다. 새 Container·Database·Object Storage·volume·Compose project·service를 만들지 않으며 기존 자료·서비스·사용자 설정은 변경하지 않는다. 시험 종료 후 자신이 만든 profile, Secret reference, certificate, process, listener, temporary file만 정확히 제거하고 잔류 0을 확인한다.
+
+Docker Compose/PostgreSQL 내용은 개발·staging 보조 경로의 역사적 자료이며 일반 사용자 설치 경로가 아니다.
 
 README 완료 판정용 집중 명령:
 
