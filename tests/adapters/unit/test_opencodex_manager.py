@@ -50,6 +50,45 @@ def test_unowned_provider_is_never_overwritten(tmp_path: Path) -> None:
         )
 
 
+def test_reapplying_same_owned_provider_is_idempotent(tmp_path: Path) -> None:
+    item = manager(tmp_path)
+    first = item.apply(
+        provider_name="solar",
+        endpoint="http://127.0.0.1:18081/v1",
+        model="solar-test",
+        credential_env="MEDIA_BRIDGE_CREDENTIAL",
+        tenant_id="local-user",
+    )
+    config_bytes = (tmp_path / "config.json").read_bytes()
+    second = item.apply(
+        provider_name="solar",
+        endpoint="http://127.0.0.1:18081/v1",
+        model="solar-test",
+        credential_env="MEDIA_BRIDGE_CREDENTIAL",
+        tenant_id="local-user",
+    )
+    assert first["status"] == "applied"
+    assert second["status"] == "unchanged"
+    assert (tmp_path / "config.json").read_bytes() == config_bytes
+
+
+def test_invalid_backup_fails_closed(tmp_path: Path) -> None:
+    (tmp_path / "config.json").write_bytes(b'{"providers": {}}\n')
+    item = manager(tmp_path)
+    item.apply(
+        provider_name="solar",
+        endpoint="http://127.0.0.1:18081/v1",
+        model="solar-test",
+        credential_env="MEDIA_BRIDGE_CREDENTIAL",
+        tenant_id="local-user",
+    )
+    marker = json.loads((tmp_path / ".media-bridge-opencodex.json").read_text())
+    backup = tmp_path / marker["backup_name"]
+    backup.write_bytes(b"tampered")
+    with pytest.raises(OpenCodexConfigError, match="ownership_backup_invalid"):
+        item.remove()
+
+
 def test_tampered_owned_config_fails_closed_without_restore(tmp_path: Path) -> None:
     item = manager(tmp_path)
     item.apply(

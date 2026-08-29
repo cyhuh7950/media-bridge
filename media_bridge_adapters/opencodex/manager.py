@@ -101,9 +101,7 @@ class OpenCodexConfigManager:
         providers = config.setdefault("providers", {})
         if not isinstance(providers, dict):
             raise OpenCodexConfigError("config_invalid")
-        if provider_name in providers and self.marker_path.exists():
-            raise OpenCodexConfigError("already_owned")
-        if provider_name in providers:
+        if provider_name in providers and not self.marker_path.exists():
             raise OpenCodexConfigError("unowned_provider_present")
         previous = json.loads(json.dumps(config))
         managed = json.loads(json.dumps(config))
@@ -116,6 +114,18 @@ class OpenCodexConfigManager:
             "allowPrivateNetwork": True,
             "headers": {"X-Media-Bridge-Tenant": tenant_id},
         }
+        if self.marker_path.exists():
+            marker = self._read_marker()
+            if (
+                original_bytes is not None
+                and _digest_bytes(original_bytes) == marker.get("managed_digest")
+            ):
+                return {
+                    "status": "unchanged",
+                    "provider": provider_name,
+                    "config_digest": marker["managed_digest"],
+                }
+            raise OpenCodexConfigError("already_owned")
         backup = self.marker_path.with_name(
             f"{self.marker_path.name}.{_digest(previous)[:16]}.backup.json"
         )
@@ -144,7 +154,13 @@ class OpenCodexConfigManager:
             raise OpenCodexConfigError("owned_config_changed")
         backup = self.marker_path.with_name(str(marker.get("backup_name", "")))
         if marker.get("preimage_exists"):
-            _atomic_write_bytes(self.config_path, backup.read_bytes())
+            try:
+                original = backup.read_bytes()
+            except OSError as error:
+                raise OpenCodexConfigError("ownership_backup_missing") from error
+            if _digest_bytes(original) != marker.get("preimage_digest"):
+                raise OpenCodexConfigError("ownership_backup_invalid")
+            _atomic_write_bytes(self.config_path, original)
         else:
             self.config_path.unlink(missing_ok=True)
         self.marker_path.unlink(missing_ok=True)
