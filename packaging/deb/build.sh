@@ -30,5 +30,9 @@ chmod 0755 "$pkg/usr/bin/media-bridge-personal-data"
 cp "$source_root/packaging/deb/media-bridge-web.service" "$pkg/usr/lib/systemd/user/media-bridge-web.service"
 cp "$source_root/packaging/deb/media-bridge-data.service" "$pkg/usr/lib/systemd/user/media-bridge-data.service"
 mkdir -p "$(dirname "$output")"
+# The source venv is an editable development environment; never ship its
+# source-tree pointers or project install metadata in the product runtime.
+find "$pkg/opt/media-bridge/runtime" -type f \( -name '__editable__*.pth' -o -name '__editable__*_finder.py' -o -name '*.egg-link' \) -delete
+find "$pkg/opt/media-bridge/runtime" -type d -name 'nonvision_media_bridge-*.dist-info' -prune -exec rm -rf {} +
 find "$pkg" -type d -name __pycache__ -prune -exec rm -rf {} +
 dpkg-deb --build --root-owner-group "$pkg" "$output"

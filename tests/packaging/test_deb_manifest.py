@@ -29,3 +29,10 @@ def test_deb_build_excludes_omniroute_adapter_tree() -> None:
 def test_deb_build_removes_python_cache_directories() -> None:
     source = (ROOT / "packaging" / "deb" / "build.sh").read_text(encoding="utf-8")
     assert "find \"$pkg\" -type d -name __pycache__" in source
+
+
+def test_deb_build_removes_editable_development_metadata() -> None:
+    source = (ROOT / "packaging" / "deb" / "build.sh").read_text(encoding="utf-8")
+    assert "-name '__editable__*.pth'" in source
+    assert "-name '*.egg-link'" in source
+    assert "nonvision_media_bridge-*.dist-info" in source
