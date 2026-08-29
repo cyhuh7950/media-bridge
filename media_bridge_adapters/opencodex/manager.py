@@ -29,19 +29,27 @@ def _digest(value: object) -> str:
     return hashlib.sha256(_canonical(value)).hexdigest()
 
 
-def _atomic_write(path: Path, value: object) -> None:
+def _digest_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _atomic_write_bytes(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, raw = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temp = Path(raw)
     try:
         with os.fdopen(fd, "wb") as stream:
-            stream.write(_canonical(value))
+            stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temp, path)
         os.chmod(path, 0o600)
     finally:
         temp.unlink(missing_ok=True)
+
+
+def _atomic_write(path: Path, value: object) -> None:
+    _atomic_write_bytes(path, _canonical(value))
 
 
 def _validate_base_url(value: str) -> str:
@@ -89,6 +97,7 @@ class OpenCodexConfigManager:
             raise OpenCodexConfigError("credential_reference_invalid")
         endpoint = _validate_base_url(endpoint)
         config = self._read_config()
+        original_bytes = self.config_path.read_bytes() if self.config_path.exists() else None
         providers = config.setdefault("providers", {})
         if not isinstance(providers, dict):
             raise OpenCodexConfigError("config_invalid")
@@ -110,14 +119,18 @@ class OpenCodexConfigManager:
         backup = self.marker_path.with_name(
             f"{self.marker_path.name}.{_digest(previous)[:16]}.backup.json"
         )
-        _atomic_write(backup, previous)
+        if original_bytes is not None:
+            _atomic_write_bytes(backup, original_bytes)
         _atomic_write(self.config_path, managed)
         _atomic_write(
             self.marker_path,
             {
                 "schema": 1,
                 "provider": provider_name,
-                "preimage_digest": _digest(previous),
+                "preimage_digest": (
+                    _digest_bytes(original_bytes) if original_bytes is not None else None
+                ),
+                "preimage_exists": original_bytes is not None,
                 "managed_digest": _digest(managed),
                 "backup_name": backup.name,
             },
@@ -126,12 +139,14 @@ class OpenCodexConfigManager:
 
     def remove(self) -> dict[str, str]:
         marker = self._read_marker()
-        config = self._read_config()
-        if _digest(config) != marker.get("managed_digest"):
+        current_bytes = self.config_path.read_bytes() if self.config_path.exists() else None
+        if current_bytes is None or _digest_bytes(current_bytes) != marker.get("managed_digest"):
             raise OpenCodexConfigError("owned_config_changed")
         backup = self.marker_path.with_name(str(marker.get("backup_name", "")))
-        previous = self._read_json(backup)
-        _atomic_write(self.config_path, previous)
+        if marker.get("preimage_exists"):
+            _atomic_write_bytes(self.config_path, backup.read_bytes())
+        else:
+            self.config_path.unlink(missing_ok=True)
         self.marker_path.unlink(missing_ok=True)
         backup.unlink(missing_ok=True)
         return {"status": "removed", "provider": str(marker["provider"])}

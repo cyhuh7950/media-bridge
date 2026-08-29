@@ -34,7 +34,7 @@ def test_apply_writes_env_reference_and_owned_marker_then_remove_restores_clean_
     assert payload["providers"]["solar"]["headers"] == {"X-Media-Bridge-Tenant": "local-user"}
     assert "secret" not in (tmp_path / ".media-bridge-opencodex.json").read_text().lower()
     assert item.remove() == {"status": "removed", "provider": "solar"}
-    assert json.loads((tmp_path / "config.json").read_text()) == {"providers": {}}
+    assert not (tmp_path / "config.json").exists()
     assert not (tmp_path / ".media-bridge-opencodex.json").exists()
 
 
@@ -64,3 +64,18 @@ def test_tampered_owned_config_fails_closed_without_restore(tmp_path: Path) -> N
     with pytest.raises(OpenCodexConfigError, match="owned_config_changed"):
         item.remove()
     assert (tmp_path / ".media-bridge-opencodex.json").exists()
+
+
+def test_remove_restores_original_config_bytes_exactly(tmp_path: Path) -> None:
+    original = b'{"z": 1, "providers": {}}\n'
+    (tmp_path / "config.json").write_bytes(original)
+    item = manager(tmp_path)
+    item.apply(
+        provider_name="solar",
+        endpoint="http://127.0.0.1:18081/v1",
+        model="solar-test",
+        credential_env="MEDIA_BRIDGE_CREDENTIAL",
+        tenant_id="local-user",
+    )
+    item.remove()
+    assert (tmp_path / "config.json").read_bytes() == original
