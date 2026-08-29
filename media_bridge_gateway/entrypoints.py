@@ -6,6 +6,7 @@ import asyncio
 import base64
 import binascii
 import os
+import re
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +41,9 @@ from media_bridge_gateway.state import GatewayStateStore
 
 class GatewayConfigurationError(RuntimeError):
     pass
+
+
+_ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]{0,127}$")
 
 
 def _required(name: str) -> str:
@@ -173,27 +177,43 @@ def build_gateway_process_from_environment() -> GatewayProcess:
             verify=_backend_tls_verify(),
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
+        ocr_credential_env = os.environ.get(
+            "MEDIA_BRIDGE_OCR_CREDENTIAL_ENV", "MEDIA_BRIDGE_OCR_API_KEY"
+        ).strip()
+        vision_credential_env = os.environ.get(
+            "MEDIA_BRIDGE_VISION_CREDENTIAL_ENV", "MEDIA_BRIDGE_VISION_API_KEY"
+        ).strip()
+        if (
+            _ENV_NAME.fullmatch(ocr_credential_env) is None
+            or _ENV_NAME.fullmatch(vision_credential_env) is None
+        ):
+            raise GatewayConfigurationError("media credential environment name is invalid")
         ocr = UpstageOcrBackend(
             endpoint=_required("MEDIA_BRIDGE_OCR_ENDPOINT"),
-            api_key_env="MEDIA_BRIDGE_OCR_API_KEY",
-            api_key_file_env="MEDIA_BRIDGE_OCR_API_KEY_FILE",
+            api_key_env=ocr_credential_env,
+            api_key_file_env=None,
             client=client,
         )
         vision = OpenAICompatibleVisionBackend(
             endpoint=_required("MEDIA_BRIDGE_VISION_ENDPOINT"),
             model=_required("MEDIA_BRIDGE_VISION_MODEL"),
-            api_key_env="MEDIA_BRIDGE_VISION_API_KEY",
-            api_key_file_env="MEDIA_BRIDGE_VISION_API_KEY_FILE",
+            api_key_env=vision_credential_env,
+            api_key_file_env=None,
             client=client,
         )
+        solar_credential_env = os.environ.get(
+            "MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV", "MEDIA_BRIDGE_SOLAR_API_KEY"
+        ).strip()
+        if _ENV_NAME.fullmatch(solar_credential_env) is None:
+            raise GatewayConfigurationError("solar credential environment name is invalid")
         solar = SolarAnalysisBackend(
             endpoint=os.environ.get(
                 "MEDIA_BRIDGE_SOLAR_ENDPOINT",
                 "https://api.upstage.ai/v1/chat/completions",
             ),
             model=os.environ.get("MEDIA_BRIDGE_SOLAR_MODEL", "solar-pro4"),
-            api_key_env="MEDIA_BRIDGE_SOLAR_API_KEY",
-            api_key_file_env="MEDIA_BRIDGE_SOLAR_API_KEY_FILE",
+            api_key_env=solar_credential_env,
+            api_key_file_env=None,
             client=client,
         )
         configured_downstream = GuardedResponsesDownstream(

@@ -45,7 +45,7 @@ media-bridge-control = "media_bridge_control.entrypoints:run_control"
 media-bridge-adapter = "media_bridge_adapters.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["media_bridge*"]
+include = ["media_bridge", "media_bridge.*", "media_bridge_adapters", "media_bridge_adapters.*", "media_bridge_gateway", "media_bridge_gateway.*", "media_bridge_personal", "media_bridge_personal.*"]
 
 [tool.setuptools.package-data]
 media_bridge_adapters = ["omniroute/plugin/*.mjs"]

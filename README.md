@@ -1,14 +1,125 @@
 # Non-Vision Media Bridge
 
+## README 완료조건과 사용 매뉴얼
+
+## 개인용 제품 사용자 경계
+
+최우선 사용 경로는 `Codex Desktop 또는 OpenCodex → loopback Media Bridge /v1/responses → Solar`이다. OmniRoute는 후속 선택 기능이다. 개인 사용자는 Docker·PostgreSQL·Redis·Python·Node를 수동 설치하거나 `.env`/YAML을 조립하지 않는다. 설치 후 loopback Web 설정 화면에서 정확한 OpenCodex endpoint/model과 Secret reference만 등록한다.
+
+QA/UNSIGNED 패키지의 재현 명령은 다음과 같다. 공식 서명 패키지가 아니므로 제품 release로 취급하지 않는다.
+
+```bash
+dpkg-deb --info media-bridge_<version>_<architecture>.deb
+sudo dpkg -i media-bridge_<version>_<architecture>.deb
+systemctl --user enable --now media-bridge-web.service media-bridge-data.service
+# 브라우저에서 http://127.0.0.1:8765/ 열기
+```
+
+화면 캡처가 포함된 Non-Vision 요청은 Media Bridge가 구조화된 OCR/Vision 설명 텍스트로 변환한 뒤 원본 이미지를 제거해 전달한다. 인식 기준 미달·변환 실패·credential/provider 오류는 Solar 호출 0회와 정상 안내 응답으로 종료한다. 실제 Codex Desktop·Solar·서명 MSI·systemd·Windows UAT는 작업현황의 별도 검증 경계다.
+
+
+개발환경 정본은 [docs/DEVELOPMENT_ENVIRONMENT.md](docs/DEVELOPMENT_ENVIRONMENT.md)를 참조한다.
+
+이 문서는 기능 소개가 아니라 설치·사용·검증 매뉴얼이다. 아래 절차를 실제로 수행할 수 있고,
+성공 조건과 차단 조건을 확인할 수 있어야 README 완료조건을 충족한다.
+
+- [ ] Linux/Windows에 맞는 QA/UNSIGNED 또는 서명된 설치 패키지를 확인한다.
+- [ ] 설치 후 loopback Web 설정을 연다. 사용자는 Python·Docker·PostgreSQL·Redis·Node를 별도 설치하지 않는다.
+- [ ] 정확한 OpenCodex endpoint/model과 Secret reference를 설정한다. Secret 원문은 Git·설정·로그에 기록하지 않는다.
+- [ ] text-only 코딩 요청과 화면 캡처가 포함된 Non-Vision 코딩 요청을 실행한다.
+- [ ] 정상 화면은 구조화된 설명 텍스트로 변환되고 downstream에 원본 media가 없다.
+- [ ] 인식 불충분·변환·credential/provider 실패 시 정상 안내 응답과 downstream 0회를 확인한다.
+- [ ] 재시작·설정 변경·업데이트/복구·제거 후 자신이 만든 파일·process·listener만 정리한다.
+
+### 개발자용 source 실행 (제품 사용자 경로 아님)
+
+Python 3.12 전용 환경에서 다음을 실행한다.
+
+~~~
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.lock
+.venv/bin/pip install -e '.[control,dev]'
+.venv/bin/python -c 'import media_bridge, media_bridge_control, media_bridge_gateway'
+~~~
+
+Control Plane을 사용하지 않는 data-plane 개발만 필요하면 마지막 설치 명령 대신
+.venv/bin/pip install -e . --no-deps를 사용한다. 사용자 서비스 등록은 자동으로 하지 않는다.
+상세 설치는 docs/install/linux.md, docs/install/windows-wsl.md,
+docs/install/docker-compose.md를 따른다.
+
+### 실행과 요청
+
+개발 entrypoint는 다음과 같다.
+
+~~~
+.venv/bin/media-bridge-stdio
+.venv/bin/media-bridge-http
+.venv/bin/media-bridge-gateway
+.venv/bin/media-bridge-control
+~~~
+
+HTTP는 기본적으로 loopback 8000을 사용하며 MEDIA_BRIDGE_HTTP_HOST와
+MEDIA_BRIDGE_HTTP_PORT로 전용 주소를 지정한다. Gateway는 MEDIA_BRIDGE_GATEWAY_*와
+signed snapshot을 요구한다. /mcp, /assets, /v1/responses에는 bearer와
+X-Media-Bridge-Tenant가 필요하다.
+
+Secret 원문을 명령행이나 history에 넣지 않고, 실행 환경에서 주입한다.
+
+~~~
+curl --fail-with-body --silent --show-error \
+  -H "Authorization: Bearer <service-token>" \
+  -H "X-Media-Bridge-Tenant: <tenant-id>" \
+  -H "Content-Type: application/json" \
+  "http://127.0.0.1:<ephemeral-port>/v1/responses" \
+  --data-binary @request.json
+~~~
+
+text-only request.json은 {"model":"<exact-registry-id>","input":"hello"} 형태로 보낼 수
+있다. 이미지 포함 Non-Vision 요청이 성공하면 downstream에는 image item이 없어야 한다.
+registry에 없는 model, 만료 capability, 잘못된 tenant/state, OCR·Vision·sanitizer·cleanup
+실패는 HTTP 오류와 downstream zero-call이어야 한다. 구현 기준은
+tests/integration/test_responses_http.py, tests/gateway/integration/test_http_network.py,
+tests/gateway/security/test_zero_call_matrix.py다.
+
+MCP 확인 순서는 /mcp의 initialize → tools/list → tools/call이다. MCP tool 선택 호출은
+일반 Responses ingress를 대신하지 않으므로 일반 모델 요청은 /v1/responses 또는
+RouterAdapter.invoke()를 거쳐야 한다. 강제 순서는 docs/router-integration.md에 있다.
+
+### 격리 시험과 정리
+
+개인용 제품 시험은 기존 지정 개발·테스트 runtime 안에서 고유 파일 디렉터리·process·loopback port만 사용한다. 새 Container·Database·Object Storage·volume·Compose project·service를 만들지 않으며 기존 자료·서비스·사용자 설정은 변경하지 않는다. 시험 종료 후 자신이 만든 profile, Secret reference, certificate, process, listener, temporary file만 정확히 제거하고 잔류 0을 확인한다.
+
+Docker Compose/PostgreSQL 내용은 개발·staging 보조 경로의 역사적 자료이며 일반 사용자 설치 경로가 아니다.
+
+README 완료 판정용 집중 명령:
+
+~~~
+.venv/bin/pytest -q tests/integration/test_responses_http.py
+.venv/bin/pytest -q tests/gateway/integration/test_http_network.py
+.venv/bin/pytest -q tests/gateway/security/test_zero_call_matrix.py
+.venv/bin/pytest -q tests/packaging/e2e
+~~~
+
+전체 판정은 집중 테스트만으로 대체하지 않는다. 격리 PostgreSQL 환경에서 전체 pytest,
+coverage, ruff, mypy를 실행하고 결과와 정리 여부를 작업현황에 기록한다.
+
+### 연결·운영 문서와 미검증 경계
+
+OpenCodex/OmniRoute 연결은 docs/integrations/opencodex-interface-audit.md와
+docs/integrations/host-consumer-handoff.md를, 보안·Secret·관리 절차는
+docs/security-boundaries.md와 docs/operations/security-checklist.md를 따른다.
+도구 입력은 docs/tool-schemas.md, 릴리스·TDD 증거는 docs/releases/0.1.0.md와
+docs/testing/media-bridge.tdd.md를 따른다.
+
+systemd/firewall/reverse proxy/OAuth/mTLS 및 외부 실제 환경은 별도 검증 경계다. mock/test-double
+또는 로컬 코드 테스트의 PASS로 승격하지 않는다.
+
+
 이미지·PDF가 포함된 요청을 모델 호출 전에 판정하고, Non-Vision 모델에는 OCR·Vision 설명과
-sanitizer를 통과한 텍스트만 전달하는 fail-closed MCP 제품입니다. Solar는 교체 가능한 텍스트
-분석 backend 중 하나입니다.
+sanitizer를 통과한 텍스트만 전달하는 fail-closed MCP 제품입니다. 분석 backend는 교체 가능합니다.
 
 핵심 안전 경계는 MCP 도구의 선택 호출이 아니라 `/v1/responses` ingress와 `RouterAdapter`입니다.
 
-현재 브랜치에는 승인된 A안 ingress 코드가 구현돼 있지만 PCWSL Codex provider 설정과 배포는
-수행하지 않았습니다. 실제 traffic이 Media Bridge를 통하도록 연결하고 직접 OmniRoute 접근을
-차단하기 전에는 PCWSL 요청이 자동 보호된다고 간주하지 않습니다.
 
 ```text
 OpenAI Responses request
@@ -58,7 +169,10 @@ python3 -m venv .venv
 | `MEDIA_BRIDGE_ASSET_ROOT` | 전용 asset 디렉터리 절대 경로 |
 | `MEDIA_BRIDGE_RECEIPT_SECRET` 또는 `_FILE` | 32바이트 이상 receipt Secret |
 | `MEDIA_BRIDGE_OCR_ENDPOINT` | credential-free HTTPS OCR endpoint |
-| `UPSTAGE_API_KEY` 또는 `_FILE` | 기본 Upstage OCR·Solar Secret |
+| `UPSTAGE_API_KEY` 또는 `_FILE` | Upstage OCR Secret |
+| `SOLAR_API_KEY` 또는 `_FILE` | Solar analysis Secret |
+| `MEDIA_BRIDGE_SOLAR_ENDPOINT` | optional Solar endpoint (기본: Upstage Chat Completions) |
+| `MEDIA_BRIDGE_SOLAR_MODEL` | optional Solar model (기본: `solar-pro4`) |
 | `MEDIA_BRIDGE_VISION_ENDPOINT` | credential-free HTTPS Vision endpoint |
 | `MEDIA_BRIDGE_VISION_MODEL` | 변환용 Vision model exact ID |
 | `MEDIA_BRIDGE_VISION_API_KEY` 또는 `_FILE` | Vision provider Secret |
@@ -82,13 +196,13 @@ registry 형식은 `config/model_registry.example.yaml`을 복사한 뒤 실제 
 ```
 
 HTTP는 기본적으로 `127.0.0.1:8000`에 바인딩합니다. `/mcp`, `/assets`, 활성화된
-`/v1/responses` 모두 bearer 및 `X-Media-Bridge-Tenant`가 필요합니다. 운영 OAuth/mTLS,
+`/v1/responses` 모두 bearer 및 `X-Media-Bridge-Tenant`가 필요합니다. 외부 OAuth/mTLS,
 reverse proxy, 방화벽은 별도 배포 계층의 책임입니다.
 
 Control Plane은 실행 전에 Alembic revision `0002_connections`를 확인하고 다르면 fail-closed로
 중단합니다. 필요한 변수명과 Secret file 경로는 `config/control-plane.example.env`에 있으며,
 Provider·DB credential·security pepper·Ed25519 개인키 원문을 설정 파일에 넣지 않습니다. P1에서는
-격리 PostgreSQL 시험만 수행했고 운영 migration, 서비스 등록, 포트·proxy 변경, 배포는 수행하지
+격리 PostgreSQL 시험만 수행했고 외부 적용 migration, 서비스 등록, 포트·proxy 변경, 배포는 수행하지
 않았습니다.
 
 Connections에는 Gateway credential 원문이 아니라 `env`, Docker Secret 또는 외부 Secret Store
@@ -104,8 +218,7 @@ Connections에는 Gateway credential 원문이 아니라 `env`, Docker Secret �
 multimodal 대화 전체를 넘기지 않습니다. 자세한 연결 경계는 `docs/router-integration.md`에
 있습니다.
 
-배포 승인 후 사용할 Codex custom provider의 reference 형태는 다음과 같습니다. 이 설정은
-이번 작업에서 PCWSL에 적용하지 않았습니다.
+Codex custom provider의 reference 형태는 다음과 같습니다.
 
 ```toml
 [model_providers.media_bridge]
@@ -116,8 +229,8 @@ env_http_headers = { "X-Media-Bridge-Tenant" = "MEDIA_BRIDGE_TENANT_ID" }
 wire_api = "responses"
 ```
 
-OmniRoute 직접 inference endpoint가 caller에서 계속 접근 가능하면 ingress를 우회할 수 있습니다.
-운영 연결에서는 network/router 계층에서 Media Bridge만 OmniRoute에 접근하도록 강제해야 합니다.
+OmniRoute 연동은 후속 선택 기능이며 이번 OpenCodex acceptance 범위에 포함하지 않습니다.
+현재 제품 경로에서는 caller가 Media Bridge ingress를 우회하지 않도록 OpenCodex endpoint를 loopback Media Bridge로 고정합니다.
 
 ## 검증
 
@@ -128,13 +241,5 @@ OmniRoute 직접 inference endpoint가 caller에서 계속 접근 가능하면 i
 .venv/bin/mypy media_bridge media_bridge_control
 ```
 
-실제 provider 자격증명을 사용하는 OCR·Vision·Solar 호출, PCWSL Codex→실제 OmniRoute E2E,
-운영 배포는 자동 테스트 범위가 아닙니다. 상세 증거는 `docs/testing/media-bridge.tdd.md`를
+외부 배포는 자동 테스트 범위가 아닙니다. 상세 증거는 `docs/testing/media-bridge.tdd.md`를
 확인합니다.
-
-## 기존 Solar 코드
-
-`solar_error_analyzer/`와 서버 상위 경로의 단일 파일은 기준선 보존용 legacy snapshot입니다.
-새 Media Bridge runtime, MCP 도구, router는 해당 curl 기반 코드나 직접 키 인자 경로를
-사용하지 않습니다. legacy snapshot은 새 패키지의 보안 경계나 운영 진입점으로 간주하지
-않습니다.

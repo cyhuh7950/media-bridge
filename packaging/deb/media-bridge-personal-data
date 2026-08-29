@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+export PYTHONPATH="/opt/media-bridge/app${PYTHONPATH:+:$PYTHONPATH}"
+exec /opt/media-bridge/runtime/bin/python -m media_bridge_personal.data_entrypoint "$@"

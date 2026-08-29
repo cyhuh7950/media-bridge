@@ -281,7 +281,7 @@ class SolarAnalysisBackend:
         *,
         endpoint: str,
         model: str,
-        api_key_env: str = "UPSTAGE_API_KEY",
+        api_key_env: str = "SOLAR_API_KEY",
         api_key_file_env: str | None = None,
         client: httpx.AsyncClient,
     ) -> None:

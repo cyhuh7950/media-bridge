@@ -40,6 +40,18 @@ def test_normalize_string_input_to_exact_model_request() -> None:
     assert normalized.previous_state is None
 
 
+def test_media_scan_ignores_structured_non_string_type_values() -> None:
+    normalized = normalize_responses_request(
+        {
+            "model": "text-model",
+            "metadata": {"type": {"name": "opaque"}},
+            "input": "Describe",
+        },
+        state=None,
+    )
+
+    assert normalized.input_had_media is False
+
 def test_normalize_current_user_image_pdf_and_https_sources() -> None:
     normalized = normalize_responses_request(
         {

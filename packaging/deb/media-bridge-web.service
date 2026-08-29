@@ -1,0 +1,11 @@
+[Unit]
+Description=Media Bridge personal loopback Web UI
+After=default.target
+
+[Service]
+ExecStart=/usr/bin/media-bridge-personal-web
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
