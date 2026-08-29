@@ -98,11 +98,13 @@ class OpenCodexConfigManager:
             raise OpenCodexConfigError("unowned_provider_present")
         previous = json.loads(json.dumps(config))
         managed = json.loads(json.dumps(config))
+        managed["defaultProvider"] = provider_name
         managed["providers"][provider_name] = {
             "adapter": "openai-responses",
             "baseUrl": endpoint,
             "apiKey": f"env:{credential_env}",
             "defaultModel": model,
+            "allowPrivateNetwork": True,
             "headers": {"X-Media-Bridge-Tenant": tenant_id},
         }
         backup = self.marker_path.with_name(

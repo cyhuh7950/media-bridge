@@ -28,7 +28,9 @@ def test_apply_writes_env_reference_and_owned_marker_then_remove_restores_clean_
     )
     payload = json.loads((tmp_path / "config.json").read_text())
     assert result["status"] == "applied"
+    assert payload["defaultProvider"] == "solar"
     assert payload["providers"]["solar"]["apiKey"] == "env:MEDIA_BRIDGE_CREDENTIAL"
+    assert payload["providers"]["solar"]["allowPrivateNetwork"] is True
     assert payload["providers"]["solar"]["headers"] == {"X-Media-Bridge-Tenant": "local-user"}
     assert "secret" not in (tmp_path / ".media-bridge-opencodex.json").read_text().lower()
     assert item.remove() == {"status": "removed", "provider": "solar"}
