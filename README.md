@@ -169,7 +169,10 @@ python3 -m venv .venv
 | `MEDIA_BRIDGE_ASSET_ROOT` | 전용 asset 디렉터리 절대 경로 |
 | `MEDIA_BRIDGE_RECEIPT_SECRET` 또는 `_FILE` | 32바이트 이상 receipt Secret |
 | `MEDIA_BRIDGE_OCR_ENDPOINT` | credential-free HTTPS OCR endpoint |
-| `UPSTAGE_API_KEY` 또는 `_FILE` | 기본 Upstage OCR·Solar Secret |
+| `UPSTAGE_API_KEY` 또는 `_FILE` | Upstage OCR Secret |
+| `SOLAR_API_KEY` 또는 `_FILE` | Solar analysis Secret |
+| `MEDIA_BRIDGE_SOLAR_ENDPOINT` | optional Solar endpoint (기본: Upstage Chat Completions) |
+| `MEDIA_BRIDGE_SOLAR_MODEL` | optional Solar model (기본: `solar-pro4`) |
 | `MEDIA_BRIDGE_VISION_ENDPOINT` | credential-free HTTPS Vision endpoint |
 | `MEDIA_BRIDGE_VISION_MODEL` | 변환용 Vision model exact ID |
 | `MEDIA_BRIDGE_VISION_API_KEY` 또는 `_FILE` | Vision provider Secret |
