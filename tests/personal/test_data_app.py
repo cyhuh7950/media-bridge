@@ -57,3 +57,35 @@ async def test_responses_route_returns_structured_unavailable_when_not_configure
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "gateway_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_responses_route_forwards_to_configured_gateway(tmp_path: Path) -> None:
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    build_app, store_type = _types()
+    assert build_app is not None and store_type is not None
+    store = store_type(root=tmp_path)
+    store.publish({"version": 1, "mode": "configured"})
+
+    async def gateway_responses(_: object) -> JSONResponse:
+        return JSONResponse({"id": "synthetic-response", "output": []})
+
+    gateway = Starlette(
+        routes=[Route("/v1/responses", gateway_responses, methods=["POST"])]
+    )
+    app = build_app(state=store, responses_app=gateway)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1"
+    ) as client:
+        response = await client.post(
+            "/v1/responses",
+            headers={"content-type": "application/json"},
+            json={"model": "text-model", "input": "test"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "synthetic-response"
