@@ -78,15 +78,23 @@ def _page(snapshot: dict[str, object]) -> str:
     )
     solar_model = str(connection_values.get("solar_model", "solar-pro4"))
     solar_credential_env = str(connection_values.get("solar_credential_env", "SOLAR_API_KEY"))
+    safe_opencodex_endpoint = html.escape(opencodex_endpoint, quote=True)
+    safe_solar_endpoint = html.escape(solar_endpoint, quote=True)
+    safe_solar_model = html.escape(solar_model, quote=True)
+    safe_credential_env = html.escape(solar_credential_env, quote=True)
     return f"""<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><title>Media Bridge 설정</title></head>
 <body><main><h1>Media Bridge 시작하기</h1>
 <p>로컬 전용 설정입니다. 별도 계정이나 외부 데이터베이스가 필요하지 않습니다.</p>
 <form method="post" action="/settings">
-<label>OpenCodex endpoint <input name="opencodex_endpoint" type="url" value="{html.escape(opencodex_endpoint, quote=True)}"></label>
-<label>Solar endpoint <input name="solar_endpoint" type="url" value="{html.escape(solar_endpoint, quote=True)}"></label>
-<label>Solar model <input name="solar_model" type="text" value="{html.escape(solar_model, quote=True)}"></label>
-<label>Solar credential 환경변수 이름 <input name="solar_credential_env" type="text" value="{html.escape(solar_credential_env, quote=True)}"></label>
+<label>OpenCodex endpoint
+<input name="opencodex_endpoint" type="url" value="{safe_opencodex_endpoint}"></label>
+<label>Solar endpoint
+<input name="solar_endpoint" type="url" value="{safe_solar_endpoint}"></label>
+<label>Solar model
+<input name="solar_model" type="text" value="{safe_solar_model}"></label>
+<label>Solar credential 환경변수 이름
+<input name="solar_credential_env" type="text" value="{safe_credential_env}"></label>
 <p>API key 원문은 입력하지 않습니다. 지정한 환경변수 또는 OS credential reference를 사용합니다.</p>
 <label>Solar RPM <input name="solar_rpm" type="number" min="1" value="{rpm}"></label>
 <label>Solar TPM <input name="solar_tpm" type="number" min="1" value="{tpm}"></label>
