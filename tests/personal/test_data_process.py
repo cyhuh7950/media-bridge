@@ -69,3 +69,32 @@ def test_data_process_binds_loopback_serves_lkg_and_exits_cleanly(tmp_path: Path
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as socket_handle:
         assert socket_handle.connect_ex(("127.0.0.1", port)) != 0
+
+
+def test_connection_metadata_maps_to_process_configuration(monkeypatch, tmp_path: Path) -> None:
+    import os
+
+    from media_bridge_personal.data_entrypoint import _apply_connection_settings
+    from media_bridge_personal.local_state import PersonalStateStore
+
+    store = PersonalStateStore(root=tmp_path / "state")
+    store.publish(
+        {
+            "version": 2,
+            "connection": {
+                "opencodex_endpoint": "http://127.0.0.1:19100/v1/responses",
+                "solar_endpoint": "https://api.example.test/v1/chat/completions",
+                "solar_model": "solar-pro4",
+                "solar_credential_env": "SOLAR_API_KEY",
+            },
+        }
+    )
+    monkeypatch.delenv("MEDIA_BRIDGE_SOLAR_ENDPOINT", raising=False)
+    monkeypatch.delenv("MEDIA_BRIDGE_SOLAR_MODEL", raising=False)
+    monkeypatch.delenv("MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV", raising=False)
+
+    _apply_connection_settings(store)
+
+    assert os.environ["MEDIA_BRIDGE_SOLAR_ENDPOINT"] == "https://api.example.test/v1/chat/completions"
+    assert os.environ["MEDIA_BRIDGE_SOLAR_MODEL"] == "solar-pro4"
+    assert os.environ["MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV"] == "SOLAR_API_KEY"
