@@ -300,6 +300,10 @@ class PreRequestGate:
                     )
                     if ocr_result.status is BackendStatus.FAILURE:
                         raise GateFailureError("ocr_failed", "OCR conversion failed.")
+                    if ocr_result.status is BackendStatus.NO_TEXT:
+                        raise GateFailureError(
+                            "recognition_insufficient", "Screenshot recognition was insufficient."
+                        )
                     ocr_text = ocr_result.text or "No text detected."
 
                     vision_result = await self._vision_backend.describe(
