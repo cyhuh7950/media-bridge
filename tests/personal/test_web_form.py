@@ -16,7 +16,19 @@ async def test_settings_html_form_saves_rate_profile(tmp_path: Path) -> None:
     ) as client:
         response = await client.post(
             "/settings",
-            data={"solar_rpm": "100", "solar_tpm": "5000"},
+            data={
+                "solar_rpm": "100",
+                "solar_tpm": "5000",
+                "opencodex_endpoint": "http://127.0.0.1:19100/v1/responses",
+                "solar_endpoint": "https://api.example.test/v1/chat/completions",
+                "solar_model": "solar-pro4",
+                "solar_credential_env": "SOLAR_API_KEY",
+                "ocr_endpoint": "",
+                "ocr_credential_env": "",
+                "vision_endpoint": "",
+                "vision_model": "",
+                "vision_credential_env": "",
+            },
         )
     assert response.status_code == 200
     assert store.load_last_known_good()["rate"] == {"rpm": 100, "tpm": 5000}
@@ -96,4 +108,41 @@ async def test_first_run_shows_connection_fields_without_secret_input(tmp_path: 
     assert 'name="solar_endpoint"' in response.text
     assert 'name="solar_model"' in response.text
     assert 'name="solar_credential_env"' in response.text
+    assert 'name="ocr_endpoint"' in response.text
+    assert 'name="ocr_credential_env"' in response.text
+    assert 'name="vision_endpoint"' in response.text
+    assert 'name="vision_model"' in response.text
+    assert 'name="vision_credential_env"' in response.text
     assert 'name="solar_api_key"' not in response.text
+
+
+@pytest.mark.asyncio
+async def test_settings_saves_ocr_and_vision_connection_metadata(tmp_path: Path) -> None:
+    store = PersonalStateStore(root=tmp_path / "state")
+    app = build_personal_web_app(state=store)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1"
+    ) as client:
+        response = await client.post(
+            "/settings",
+            json={
+                "solar_rpm": 2000,
+                "solar_tpm": 750000,
+                "opencodex_endpoint": "http://127.0.0.1:19100/v1/responses",
+                "solar_endpoint": "https://api.example.test/v1/chat/completions",
+                "solar_model": "solar-pro4",
+                "solar_credential_env": "SOLAR_API_KEY",
+                "ocr_endpoint": "https://ocr.example.test/v1/parse",
+                "ocr_credential_env": "UPSTAGE_API_KEY",
+                "vision_endpoint": "https://vision.example.test/v1/chat/completions",
+                "vision_model": "vision-model",
+                "vision_credential_env": "VISION_API_KEY",
+            },
+        )
+    assert response.status_code == 200
+    connection = store.load_last_known_good()["connection"]
+    assert connection["ocr_endpoint"] == "https://ocr.example.test/v1/parse"
+    assert connection["ocr_credential_env"] == "UPSTAGE_API_KEY"
+    assert connection["vision_endpoint"] == "https://vision.example.test/v1/chat/completions"
+    assert connection["vision_model"] == "vision-model"
+    assert connection["vision_credential_env"] == "VISION_API_KEY"

@@ -29,10 +29,9 @@ def _connection_metadata(payload: object) -> dict[str, str] | None:
         "solar_model",
         "solar_credential_env",
     )
-    present = [name in payload for name in names]
-    if not any(present):
+    if not any(name in payload for name in names):
         return None
-    if not all(present):
+    if not all(name in payload for name in names):
         raise ValueError
     opencodex = str(payload["opencodex_endpoint"]).strip()
     solar = str(payload["solar_endpoint"]).strip()
@@ -57,12 +56,44 @@ def _connection_metadata(payload: object) -> dict[str, str] | None:
         or _ENV_NAME.fullmatch(credential_env) is None
     ):
         raise ValueError
-    return {
+    result = {
         "opencodex_endpoint": opencodex,
         "solar_endpoint": solar,
         "solar_model": model,
         "solar_credential_env": credential_env,
     }
+    optional_groups = (
+        ("ocr_endpoint", "ocr_credential_env"),
+        ("vision_endpoint", "vision_model", "vision_credential_env"),
+    )
+    for group in optional_groups:
+        values = [str(payload.get(name, "")).strip() for name in group]
+        if not any(values):
+            continue
+        if not all(values):
+            raise ValueError
+        endpoint = values[0]
+        endpoint_url = urlsplit(endpoint)
+        if (
+            endpoint_url.scheme != "https"
+            or not endpoint_url.hostname
+            or endpoint_url.username is not None
+            or endpoint_url.password is not None
+            or endpoint_url.query
+            or endpoint_url.fragment
+            or _ENV_NAME.fullmatch(str(payload[group[-1]]).strip()) is None
+        ):
+            raise ValueError
+        result[group[0]] = endpoint
+        if len(group) == 2:
+            result[group[1]] = str(payload[group[1]]).strip()
+        else:
+            vision_model = str(payload["vision_model"]).strip()
+            if not re.fullmatch(r"[a-z0-9][a-z0-9._:/-]{0,127}", vision_model):
+                raise ValueError
+            result["vision_model"] = vision_model
+            result["vision_credential_env"] = str(payload["vision_credential_env"]).strip()
+    return result
 
 
 def _page(snapshot: dict[str, object]) -> str:
@@ -78,10 +109,20 @@ def _page(snapshot: dict[str, object]) -> str:
     )
     solar_model = str(connection_values.get("solar_model", "solar-pro4"))
     solar_credential_env = str(connection_values.get("solar_credential_env", "SOLAR_API_KEY"))
+    ocr_endpoint = str(connection_values.get("ocr_endpoint", ""))
+    ocr_credential_env = str(connection_values.get("ocr_credential_env", ""))
+    vision_endpoint = str(connection_values.get("vision_endpoint", ""))
+    vision_model = str(connection_values.get("vision_model", ""))
+    vision_credential_env = str(connection_values.get("vision_credential_env", ""))
     safe_opencodex_endpoint = html.escape(opencodex_endpoint, quote=True)
     safe_solar_endpoint = html.escape(solar_endpoint, quote=True)
     safe_solar_model = html.escape(solar_model, quote=True)
     safe_credential_env = html.escape(solar_credential_env, quote=True)
+    safe_ocr_endpoint = html.escape(ocr_endpoint, quote=True)
+    safe_ocr_credential_env = html.escape(ocr_credential_env, quote=True)
+    safe_vision_endpoint = html.escape(vision_endpoint, quote=True)
+    safe_vision_model = html.escape(vision_model, quote=True)
+    safe_vision_credential_env = html.escape(vision_credential_env, quote=True)
     return f"""<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><title>Media Bridge 설정</title></head>
 <body><main><h1>Media Bridge 시작하기</h1>
@@ -96,6 +137,16 @@ def _page(snapshot: dict[str, object]) -> str:
 <label>Solar credential 환경변수 이름
 <input name="solar_credential_env" type="text" value="{safe_credential_env}"></label>
 <p>API key 원문은 입력하지 않습니다. 지정한 환경변수 또는 OS credential reference를 사용합니다.</p>
+<label>OCR endpoint
+<input name="ocr_endpoint" type="url" value="{safe_ocr_endpoint}"></label>
+<label>OCR credential 환경변수 이름
+<input name="ocr_credential_env" type="text" value="{safe_ocr_credential_env}"></label>
+<label>Vision endpoint
+<input name="vision_endpoint" type="url" value="{safe_vision_endpoint}"></label>
+<label>Vision model
+<input name="vision_model" type="text" value="{safe_vision_model}"></label>
+<label>Vision credential 환경변수 이름
+<input name="vision_credential_env" type="text" value="{safe_vision_credential_env}"></label>
 <label>Solar RPM <input name="solar_rpm" type="number" min="1" value="{rpm}"></label>
 <label>Solar TPM <input name="solar_tpm" type="number" min="1" value="{tpm}"></label>
 <button type="submit">설정 저장</button></form>

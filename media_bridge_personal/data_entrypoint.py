@@ -29,6 +29,11 @@ def _apply_connection_settings(state: PersonalStateStore) -> None:
         "MEDIA_BRIDGE_SOLAR_ENDPOINT": connection.get("solar_endpoint"),
         "MEDIA_BRIDGE_SOLAR_MODEL": connection.get("solar_model"),
         "MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV": connection.get("solar_credential_env"),
+        "MEDIA_BRIDGE_OCR_ENDPOINT": connection.get("ocr_endpoint"),
+        "MEDIA_BRIDGE_OCR_CREDENTIAL_ENV": connection.get("ocr_credential_env"),
+        "MEDIA_BRIDGE_VISION_ENDPOINT": connection.get("vision_endpoint"),
+        "MEDIA_BRIDGE_VISION_MODEL": connection.get("vision_model"),
+        "MEDIA_BRIDGE_VISION_CREDENTIAL_ENV": connection.get("vision_credential_env"),
     }
     for name, value in settings.items():
         if isinstance(value, str) and value:
