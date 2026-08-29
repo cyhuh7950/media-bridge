@@ -19,6 +19,13 @@ def test_deb_build_does_not_copy_legacy_control_tree() -> None:
     assert 'cp -a "$source_root/media_bridge_control"' not in source
 
 
+def test_deb_build_excludes_omniroute_adapter_tree() -> None:
+    source = (ROOT / "packaging" / "deb" / "build.sh").read_text(encoding="utf-8")
+    assert 'cp -a "$source_root/media_bridge_adapters"' not in source
+    assert 'rm -f "$pkg/opt/media-bridge/app/media_bridge/omniroute_adapter.py"' in source
+    assert 'cp -a "$source_root/media_bridge_adapters/opencodex"' in source
+
+
 def test_deb_build_removes_python_cache_directories() -> None:
     source = (ROOT / "packaging" / "deb" / "build.sh").read_text(encoding="utf-8")
     assert "find \"$pkg\" -type d -name __pycache__" in source
