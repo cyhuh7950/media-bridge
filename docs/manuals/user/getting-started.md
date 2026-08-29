@@ -67,3 +67,15 @@ Test Lab에서 Connection, 정확한 대상 model ID, 변환 profile, 요청과 
 - OpenCodex·OmniRoute 실제 adapter 연결.
 
 이 항목은 현재 화면이나 테스트 통과로 완료된 것으로 간주하지 않는다.
+
+## 개인용 패키지 첫 실행 (현재 제품 경로)
+
+배포된 서명 package가 아니라면 `QA/UNSIGNED` 시험 자료로만 사용한다. 설치 후 Web UI는
+`http://127.0.0.1:8765/`에서 열고, Data runtime은 loopback `127.0.0.1:8766`에서 동작한다.
+첫 화면에서 endpoint, 정확한 Solar model ID, credential reference와 fail-closed 정책을
+확인한다. API key 자체나 화면 캡처 원문을 설정·로그에 입력하지 않는다.
+
+Codex Desktop 연결은 사용자 profile을 덮어쓰지 않는 별도 profile에서만 시험한다. 이미지가
+포함된 코딩 요청은 Media Bridge가 화면 종류·오류 원문·파일/라인·UI 관계·확실/불확실 관측을
+검증한 뒤 설명 텍스트로 변환한다. 인식 기준 미달이면 Solar를 호출하지 않고 재캡처 안내를
+정상 응답으로 표시한다. 이 문서의 실제 Codex Desktop/Solar 경계는 아직 미검증이다.
