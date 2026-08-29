@@ -21,4 +21,21 @@ def build_personal_data_app(*, state: PersonalStateStore) -> Starlette:
             )
         return JSONResponse({"status": "ready", "snapshot_version": snapshot["version"]})
 
-    return Starlette(routes=[Route("/status", status, methods=["GET"])])
+    async def responses(_: Request) -> JSONResponse:
+        return JSONResponse(
+            {
+                "error": {
+                    "type": "media_bridge_error",
+                    "code": "gateway_unavailable",
+                    "message": "Media Bridge response routing is not configured.",
+                }
+            },
+            status_code=503,
+        )
+
+    return Starlette(
+        routes=[
+            Route("/status", status, methods=["GET"]),
+            Route("/v1/responses", responses, methods=["POST"]),
+        ]
+    )
