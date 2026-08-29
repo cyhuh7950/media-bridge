@@ -98,3 +98,17 @@ def test_connection_metadata_maps_to_process_configuration(monkeypatch, tmp_path
     assert os.environ["MEDIA_BRIDGE_SOLAR_ENDPOINT"] == "https://api.example.test/v1/chat/completions"
     assert os.environ["MEDIA_BRIDGE_SOLAR_MODEL"] == "solar-pro4"
     assert os.environ["MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV"] == "SOLAR_API_KEY"
+
+
+def test_gateway_configuration_failure_keeps_data_process_available(monkeypatch) -> None:
+    from media_bridge_gateway.entrypoints import GatewayConfigurationError
+    from media_bridge_personal import data_entrypoint
+
+    monkeypatch.setenv("MEDIA_BRIDGE_GATEWAY_ENABLED", "true")
+
+    def fail() -> object:
+        raise GatewayConfigurationError("required environment setting is missing")
+
+    monkeypatch.setattr(data_entrypoint, "build_gateway_process_from_environment", fail)
+
+    assert data_entrypoint._build_optional_gateway() is None

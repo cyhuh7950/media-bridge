@@ -10,6 +10,7 @@ from pathlib import Path
 import uvicorn
 
 from media_bridge_gateway.entrypoints import (
+    GatewayConfigurationError,
     GatewayProcess,
     build_gateway_process_from_environment,
 )
@@ -40,6 +41,15 @@ def _apply_connection_settings(state: PersonalStateStore) -> None:
             os.environ[name] = value
 
 
+def _build_optional_gateway() -> GatewayProcess | None:
+    if os.environ.get("MEDIA_BRIDGE_GATEWAY_ENABLED", "").strip().lower() != "true":
+        return None
+    try:
+        return build_gateway_process_from_environment()
+    except GatewayConfigurationError:
+        return None
+
+
 def run_personal_data(*, profile_root: Path, port: int, host: str = "127.0.0.1") -> None:
     if host != "127.0.0.1":
         raise ValueError("personal data runtime must bind loopback only")
@@ -47,9 +57,7 @@ def run_personal_data(*, profile_root: Path, port: int, host: str = "127.0.0.1")
         raise ValueError("personal data port is invalid")
     state = PersonalStateStore(root=profile_root / "state")
     _apply_connection_settings(state)
-    gateway_process: GatewayProcess | None = None
-    if os.environ.get("MEDIA_BRIDGE_GATEWAY_ENABLED", "").strip().lower() == "true":
-        gateway_process = build_gateway_process_from_environment()
+    gateway_process = _build_optional_gateway()
     app = build_personal_data_app(
         state=state,
         responses_app=gateway_process.app if gateway_process is not None else None,
