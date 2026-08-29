@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import html
 import json
-from urllib.parse import parse_qs
+import re
+from urllib.parse import parse_qs, urlsplit
 
 from starlette.applications import Starlette
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -15,18 +17,77 @@ from media_bridge_personal.local_state import LocalStateError, PersonalStateStor
 
 _DEFAULT_RPM = 2_000
 _DEFAULT_TPM = 750_000
+_ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]{0,127}$")
+
+
+def _connection_metadata(payload: object) -> dict[str, str] | None:
+    if not isinstance(payload, dict):
+        raise ValueError
+    names = (
+        "opencodex_endpoint",
+        "solar_endpoint",
+        "solar_model",
+        "solar_credential_env",
+    )
+    present = [name in payload for name in names]
+    if not any(present):
+        return None
+    if not all(present):
+        raise ValueError
+    opencodex = str(payload["opencodex_endpoint"]).strip()
+    solar = str(payload["solar_endpoint"]).strip()
+    model = str(payload["solar_model"]).strip()
+    credential_env = str(payload["solar_credential_env"]).strip()
+    opencodex_url = urlsplit(opencodex)
+    solar_url = urlsplit(solar)
+    if (
+        opencodex_url.scheme not in {"http", "https"}
+        or not opencodex_url.hostname
+        or opencodex_url.username is not None
+        or opencodex_url.password is not None
+        or opencodex_url.query
+        or opencodex_url.fragment
+        or solar_url.scheme != "https"
+        or not solar_url.hostname
+        or solar_url.username is not None
+        or solar_url.password is not None
+        or solar_url.query
+        or solar_url.fragment
+        or not re.fullmatch(r"[a-z0-9][a-z0-9._:/-]{0,127}", model)
+        or _ENV_NAME.fullmatch(credential_env) is None
+    ):
+        raise ValueError
+    return {
+        "opencodex_endpoint": opencodex,
+        "solar_endpoint": solar,
+        "solar_model": model,
+        "solar_credential_env": credential_env,
+    }
 
 
 def _page(snapshot: dict[str, object]) -> str:
     rate = snapshot.get("rate")
     rates = rate if isinstance(rate, dict) else {}
+    connection = snapshot.get("connection")
+    connection_values = connection if isinstance(connection, dict) else {}
     rpm = rates.get("rpm", _DEFAULT_RPM)
     tpm = rates.get("tpm", _DEFAULT_TPM)
+    opencodex_endpoint = str(connection_values.get("opencodex_endpoint", ""))
+    solar_endpoint = str(
+        connection_values.get("solar_endpoint", "https://api.upstage.ai/v1/chat/completions")
+    )
+    solar_model = str(connection_values.get("solar_model", "solar-pro4"))
+    solar_credential_env = str(connection_values.get("solar_credential_env", "SOLAR_API_KEY"))
     return f"""<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><title>Media Bridge 설정</title></head>
 <body><main><h1>Media Bridge 시작하기</h1>
 <p>로컬 전용 설정입니다. 별도 계정이나 외부 데이터베이스가 필요하지 않습니다.</p>
 <form method="post" action="/settings">
+<label>OpenCodex endpoint <input name="opencodex_endpoint" type="url" value="{html.escape(opencodex_endpoint, quote=True)}"></label>
+<label>Solar endpoint <input name="solar_endpoint" type="url" value="{html.escape(solar_endpoint, quote=True)}"></label>
+<label>Solar model <input name="solar_model" type="text" value="{html.escape(solar_model, quote=True)}"></label>
+<label>Solar credential 환경변수 이름 <input name="solar_credential_env" type="text" value="{html.escape(solar_credential_env, quote=True)}"></label>
+<p>API key 원문은 입력하지 않습니다. 지정한 환경변수 또는 OS credential reference를 사용합니다.</p>
 <label>Solar RPM <input name="solar_rpm" type="number" min="1" value="{rpm}"></label>
 <label>Solar TPM <input name="solar_tpm" type="number" min="1" value="{tpm}"></label>
 <button type="submit">설정 저장</button></form>
@@ -54,6 +115,7 @@ def build_personal_web_app(*, state: PersonalStateStore) -> TrustedHostMiddlewar
                 raise ValueError
             rpm = int(payload["solar_rpm"])
             tpm = int(payload["solar_tpm"])
+            connection = _connection_metadata(payload)
             if rpm < 1 or tpm < 1:
                 raise ValueError
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
@@ -68,6 +130,7 @@ def build_personal_web_app(*, state: PersonalStateStore) -> TrustedHostMiddlewar
                 "version": int(current.get("version", 0)) + 1,
                 "mode": "configured",
                 "rate": {"rpm": rpm, "tpm": tpm},
+                **({"connection": connection} if connection is not None else {}),
             }
         )
         return JSONResponse({"status": "saved", "rate": {"rpm": rpm, "tpm": tpm}})
