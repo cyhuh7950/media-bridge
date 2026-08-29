@@ -12,6 +12,21 @@ Docker, PostgreSQL, Redis, Python 또는 Node를 별도로 설치하거나 `.env
 최초 화면에는 안전한 Solar rate 기본값인 RPM `2000`, TPM `750000`이 표시됩니다.
 이 값은 Solar 사용 한도의 설계 입력값이며 실제 provider 호출을 의미하지 않습니다.
 
+## 연결 설정
+
+첫 실행 화면에서 다음 metadata를 입력합니다.
+
+1. OpenCodex endpoint: OpenCodex가 호출할 Responses URL을 입력합니다.
+2. Solar endpoint: credential이 URL에 포함되지 않은 HTTPS 주소를 입력합니다.
+3. Solar model: 실제 사용할 model ID를 입력합니다.
+4. Solar credential 환경변수 이름: API key 원문이 아니라 이미 준비된 환경변수 이름을 입력합니다.
+
+API key 원문 입력란은 제공하지 않습니다. endpoint에 사용자명·비밀번호·query·fragment를 넣지
+않으며, 잘못된 연결값은 저장하지 않습니다. 저장된 연결 metadata는 Data process 시작 시
+Solar endpoint·model·credential reference에 반영됩니다. OCR/Vision 변환 endpoint와 model이
+별도로 필요한 설치에서는 해당 개발·테스트 환경 설정을 먼저 확인해야 하며, 값 원문을 이
+화면이나 문서에 입력하지 않습니다.
+
 ## rate 설정 변경
 
 1. `Solar RPM`과 `Solar TPM`에 양의 정수를 입력합니다.
