@@ -3,17 +3,15 @@
 ## 1. GitHub에서 설치 파일 받기
 
 소스 코드를 내려받아 Python 환경을 조립할 필요 없이 GitHub Release의 `.deb` 파일을
-사용합니다. GitHub 저장소의 Releases에서 원하는 버전을 확인하고, Ubuntu/Debian 터미널에서
-다음 명령을 실행합니다.
+사용합니다. 이번 버전은 `0.1.0`이며 Ubuntu/Debian 터미널에서 다음 명령을 그대로 실행합니다.
 
 ```bash
-VERSION=0.1.0
-ARCH=amd64
-BASE="https://github.com/cyhuh7950/media-bridge/releases/download/v${VERSION}"
-curl -fL -o "media-bridge_${VERSION}_${ARCH}.deb" "${BASE}/media-bridge_${VERSION}_${ARCH}.deb"
-curl -fL -o "media-bridge_${VERSION}_${ARCH}.deb.sha256" "${BASE}/media-bridge_${VERSION}_${ARCH}.deb.sha256"
-sha256sum -c "media-bridge_${VERSION}_${ARCH}.deb.sha256"
-sudo dpkg -i "./media-bridge_${VERSION}_${ARCH}.deb"
+mkdir -p "$HOME/Downloads/media-bridge-0.1.0"
+cd "$HOME/Downloads/media-bridge-0.1.0"
+curl -fL -o media-bridge_0.1.0_amd64.deb https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.0/media-bridge_0.1.0_amd64.deb
+curl -fL -o media-bridge_0.1.0_amd64.deb.sha256 https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.0/media-bridge_0.1.0_amd64.deb.sha256
+sha256sum -c media-bridge_0.1.0_amd64.deb.sha256
+sudo dpkg -i ./media-bridge_0.1.0_amd64.deb
 ```
 
 체크섬 결과가 `OK`가 아니면 설치하지 말고 파일을 삭제한 뒤 Release에서 다시 받습니다.

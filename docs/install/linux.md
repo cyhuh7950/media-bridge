@@ -12,15 +12,15 @@ Debian package에 필요한 실행 환경이 포함됩니다.
 완성된 Debian 설치 파일을 받는 것입니다. 이 방식은 Python, Node, Docker, PostgreSQL,
 Redis를 따로 설치하지 않습니다. 현재 Release workflow가 만드는 파일은 `amd64` Linux용입니다.
 
-GitHub 저장소의 Releases에서 버전을 확인한 뒤 다음 명령을 그대로 실행합니다.
+이번 패키지 버전은 `0.1.0`이며 파일명은 `media-bridge_0.1.0_amd64.deb`입니다. Ubuntu/Debian
+터미널에서 다음 명령을 그대로 실행하면 됩니다.
 
 ```bash
-VERSION=0.1.0
-ARCH=amd64
-BASE="https://github.com/cyhuh7950/media-bridge/releases/download/v${VERSION}"
-curl -fL -o "media-bridge_${VERSION}_${ARCH}.deb" "${BASE}/media-bridge_${VERSION}_${ARCH}.deb"
-curl -fL -o "media-bridge_${VERSION}_${ARCH}.deb.sha256" "${BASE}/media-bridge_${VERSION}_${ARCH}.deb.sha256"
-sha256sum -c "media-bridge_${VERSION}_${ARCH}.deb.sha256"
+mkdir -p "$HOME/Downloads/media-bridge-0.1.0"
+cd "$HOME/Downloads/media-bridge-0.1.0"
+curl -fL -o media-bridge_0.1.0_amd64.deb https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.0/media-bridge_0.1.0_amd64.deb
+curl -fL -o media-bridge_0.1.0_amd64.deb.sha256 https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.0/media-bridge_0.1.0_amd64.deb.sha256
+sha256sum -c media-bridge_0.1.0_amd64.deb.sha256
 ```
 
 `sha256sum ...: OK`가 나오면 다음 설치 절차로 이동합니다. 해당 버전의 Release 파일이
@@ -29,26 +29,21 @@ sha256sum -c "media-bridge_${VERSION}_${ARCH}.deb.sha256"
 
 ## 2. 설치 파일 확인
 
-Debian 파일이 있는 폴더에서 실행합니다.
+방금 다운로드한 폴더에서 실행합니다.
 
 ```bash
-cd /설치파일이-있는-폴더
-VERSION=0.1.0
-ARCH=amd64
-DEB="media-bridge_${VERSION}_${ARCH}.deb"
-ls -l "$DEB"
-sha256sum "$DEB"
-dpkg-deb --info "$DEB"
+cd "$HOME/Downloads/media-bridge-0.1.0"
+ls -l media-bridge_0.1.0_amd64.deb
+sha256sum media-bridge_0.1.0_amd64.deb
+dpkg-deb --info media-bridge_0.1.0_amd64.deb
 ```
 
-예를 들어 Release 버전이 `0.1.0`이고 컴퓨터가 `amd64`이면 실제 파일명은
-`media-bridge_0.1.0_amd64.deb`입니다. `VERSION`은 받은 파일명과 같은 버전으로 바꿉니다.
 공식 서명이 없는 QA 파일은 개발·테스트에서만 사용합니다.
 
 ## 3. 설치·시작
 
 ```bash
-sudo dpkg -i "./media-bridge_${VERSION}_${ARCH}.deb"
+sudo dpkg -i ./media-bridge_0.1.0_amd64.deb
 systemctl --user daemon-reload
 systemctl --user enable --now media-bridge-web.service
 systemctl --user enable --now media-bridge-data.service
@@ -115,9 +110,8 @@ journalctl --user -u media-bridge-web.service -u media-bridge-data.service --sin
 
 ```bash
 systemctl --user stop media-bridge-web.service media-bridge-data.service
-VERSION=0.2.0
-ARCH=amd64
-sudo dpkg -i "./media-bridge_${VERSION}_${ARCH}.deb"
+cd "$HOME/Downloads/media-bridge-0.1.0"
+sudo dpkg -i ./media-bridge_0.1.0_amd64.deb
 systemctl --user daemon-reload
 systemctl --user start media-bridge-web.service media-bridge-data.service
 dpkg-query -W -f "Version: \${Version}\n" media-bridge
@@ -127,9 +121,8 @@ dpkg-query -W -f "Version: \${Version}\n" media-bridge
 
 ```bash
 systemctl --user stop media-bridge-web.service media-bridge-data.service
-VERSION=0.1.0
-ARCH=amd64
-sudo dpkg -i "./media-bridge_${VERSION}_${ARCH}.deb"
+cd "$HOME/Downloads/media-bridge-0.1.0"
+sudo dpkg -i ./media-bridge_0.1.0_amd64.deb
 systemctl --user daemon-reload
 systemctl --user start media-bridge-web.service media-bridge-data.service
 ```
