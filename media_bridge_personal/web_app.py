@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from starlette.applications import Starlette
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Route
@@ -63,9 +64,12 @@ def build_personal_web_app(*, state: PersonalStateStore) -> Starlette:
         )
         return JSONResponse({"status": "saved", "rate": {"rpm": rpm, "tpm": tpm}})
 
-    return Starlette(
-        routes=[
-            Route("/", home, methods=["GET"]),
-            Route("/settings", settings, methods=["POST"]),
-        ]
+    return TrustedHostMiddleware(
+        Starlette(
+            routes=[
+                Route("/", home, methods=["GET"]),
+                Route("/settings", settings, methods=["POST"]),
+            ]
+        ),
+        allowed_hosts=["127.0.0.1", "localhost"],
     )
