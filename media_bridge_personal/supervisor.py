@@ -78,11 +78,11 @@ class PersonalSupervisor:
         if timeout_seconds <= 0:
             raise ValueError("stop timeout must be positive")
         self._stopping = True
-        children = tuple(
-            process
-            for process in (self._control, self._data)
-            if self._running(process)
-        )
+        children: list[subprocess.Popen[bytes]] = []
+        for process in (self._control, self._data):
+            if self._running(process):
+                assert process is not None
+                children.append(process)
         for process in children:
             self._terminate_group(process)
         deadline = time.monotonic() + timeout_seconds
@@ -141,7 +141,7 @@ class PersonalSupervisor:
 
     def _backoff(self, failures: int) -> float:
         return min(
-            self._restart_base_seconds * (2 ** (failures - 1)),
+            self._restart_base_seconds * (2.0 ** (failures - 1)),
             self._restart_max_seconds,
         )
 
@@ -151,7 +151,9 @@ class PersonalSupervisor:
 
     @classmethod
     def _pid_if_running(cls, process: subprocess.Popen[bytes] | None) -> int | None:
-        return process.pid if cls._running(process) else None
+        if process is None or not cls._running(process):
+            return None
+        return process.pid
 
     @staticmethod
     def _launch(command: Sequence[str]) -> subprocess.Popen[bytes]:

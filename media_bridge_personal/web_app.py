@@ -34,7 +34,7 @@ def _page(snapshot: dict[str, object]) -> str:
 </main></body></html>"""
 
 
-def build_personal_web_app(*, state: PersonalStateStore) -> Starlette:
+def build_personal_web_app(*, state: PersonalStateStore) -> TrustedHostMiddleware:
     async def home(_: Request) -> HTMLResponse:
         try:
             snapshot = state.load_last_known_good()
