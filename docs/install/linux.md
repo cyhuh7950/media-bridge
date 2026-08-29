@@ -6,24 +6,49 @@
 개인용 설치에는 Docker, PostgreSQL, Redis, Python, Node를 따로 설치하지 않습니다.
 Debian package에 필요한 실행 환경이 포함됩니다.
 
-## 1. 설치 파일 확인
+## 1. GitHub에서 설치 파일 받기
+
+가장 쉬운 설치 방법은 소스 코드를 내려받아 직접 빌드하는 것이 아니라 GitHub Release의
+완성된 Debian 설치 파일을 받는 것입니다. 이 방식은 Python, Node, Docker, PostgreSQL,
+Redis를 따로 설치하지 않습니다. 현재 Release workflow가 만드는 파일은 `amd64` Linux용입니다.
+
+GitHub 저장소의 Releases에서 버전을 확인한 뒤 다음 명령을 그대로 실행합니다.
+
+```bash
+VERSION=0.1.0
+ARCH=amd64
+BASE="https://github.com/cyhuh7950/media-bridge/releases/download/v${VERSION}"
+curl -fL -o "media-bridge_${VERSION}_${ARCH}.deb" "${BASE}/media-bridge_${VERSION}_${ARCH}.deb"
+curl -fL -o "media-bridge_${VERSION}_${ARCH}.deb.sha256" "${BASE}/media-bridge_${VERSION}_${ARCH}.deb.sha256"
+sha256sum -c "media-bridge_${VERSION}_${ARCH}.deb.sha256"
+```
+
+`sha256sum ...: OK`가 나오면 다음 설치 절차로 이동합니다. 해당 버전의 Release 파일이
+아직 없으면 저장소의 소스 설치 절차가 아니라, 담당자가 만든 검증된 `.deb` 파일을 준비해야
+합니다. GitHub Release 파일은 태그가 생성되고 workflow가 성공한 뒤에만 생깁니다.
+
+## 2. 설치 파일 확인
 
 Debian 파일이 있는 폴더에서 실행합니다.
 
 ```bash
 cd /설치파일이-있는-폴더
-ls -l media-bridge_*.deb
-sha256sum media-bridge_<버전>_<아키텍처>.deb
-dpkg-deb --info media-bridge_<버전>_<아키텍처>.deb
+VERSION=0.1.0
+ARCH=amd64
+DEB="media-bridge_${VERSION}_${ARCH}.deb"
+ls -l "$DEB"
+sha256sum "$DEB"
+dpkg-deb --info "$DEB"
 ```
 
-예시 파일명은 `media-bridge_0.1.0_amd64.deb`입니다.
+예를 들어 Release 버전이 `0.1.0`이고 컴퓨터가 `amd64`이면 실제 파일명은
+`media-bridge_0.1.0_amd64.deb`입니다. `VERSION`은 받은 파일명과 같은 버전으로 바꿉니다.
 공식 서명이 없는 QA 파일은 개발·테스트에서만 사용합니다.
 
-## 2. 설치·시작
+## 3. 설치·시작
 
 ```bash
-sudo dpkg -i ./media-bridge_<버전>_<아키텍처>.deb
+sudo dpkg -i "./media-bridge_${VERSION}_${ARCH}.deb"
 systemctl --user daemon-reload
 systemctl --user enable --now media-bridge-web.service
 systemctl --user enable --now media-bridge-data.service
@@ -32,7 +57,7 @@ systemctl --user --no-pager status media-bridge-web.service media-bridge-data.se
 
 두 service에 `active (running)`이 표시되어야 합니다.
 
-## 3. 최초 설정
+## 4. 최초 설정
 
 브라우저에서 `http://127.0.0.1:8765/`를 엽니다. 화면에 다음 값을 입력합니다.
 
@@ -47,7 +72,7 @@ systemctl --user --no-pager status media-bridge-web.service media-bridge-data.se
 API key 원문은 입력하지 않습니다. 설정 저장 후 페이지를 새로고침해 값이 유지되는지 확인합니다.
 Data 상태는 `http://127.0.0.1:8766/status`에서 확인합니다.
 
-## 4. OpenCodex 연결과 화면 요청
+## 5. OpenCodex 연결과 화면 요청
 
 OpenCodex endpoint에는 `http://127.0.0.1:8766/v1`을 지정합니다. 기존 설정을 덮어쓰지 말고
 별도 profile에서 먼저 확인합니다.
@@ -61,7 +86,7 @@ OpenCodex endpoint에는 `http://127.0.0.1:8766/v1`을 지정합니다. 기존 �
 판독이 충분하지 않으면 Solar로 보내지 않고 재캡처 안내를 표시합니다. 화면 확대, 오류 영역
 자르기, 고해상도 유지, 여러 장 분리, 오류 문구 직접 입력을 사용합니다.
 
-## 5. 상태 확인·재시작·중지
+## 6. 상태 확인·재시작·중지
 
 ```bash
 systemctl --user --no-pager status media-bridge-web.service media-bridge-data.service
@@ -84,13 +109,15 @@ systemctl --user disable media-bridge-web.service media-bridge-data.service
 journalctl --user -u media-bridge-web.service -u media-bridge-data.service --since "10 minutes ago" --no-pager
 ```
 
-## 6. 업데이트·되돌리기
+## 7. 업데이트·되돌리기
 
 업데이트:
 
 ```bash
 systemctl --user stop media-bridge-web.service media-bridge-data.service
-sudo dpkg -i ./media-bridge_<새버전>_<아키텍처>.deb
+VERSION=0.2.0
+ARCH=amd64
+sudo dpkg -i "./media-bridge_${VERSION}_${ARCH}.deb"
 systemctl --user daemon-reload
 systemctl --user start media-bridge-web.service media-bridge-data.service
 dpkg-query -W -f "Version: \${Version}\n" media-bridge
@@ -100,12 +127,14 @@ dpkg-query -W -f "Version: \${Version}\n" media-bridge
 
 ```bash
 systemctl --user stop media-bridge-web.service media-bridge-data.service
-sudo dpkg -i ./media-bridge_<이전버전>_<아키텍처>.deb
+VERSION=0.1.0
+ARCH=amd64
+sudo dpkg -i "./media-bridge_${VERSION}_${ARCH}.deb"
 systemctl --user daemon-reload
 systemctl --user start media-bridge-web.service media-bridge-data.service
 ```
 
-## 7. 제거
+## 8. 제거
 
 ```bash
 systemctl --user disable --now media-bridge-web.service media-bridge-data.service
@@ -131,7 +160,7 @@ systemctl --user is-enabled media-bridge-data.service 2>/dev/null || true
 package가 없고 두 service가 중지 또는 비활성 상태이며 8765·8766 listener가 없으면 제거가
 끝난 것입니다.
 
-## 8. 문제 해결
+## 9. 문제 해결
 
 - Web이 열리지 않으면 Web service를 재시작하고 `status`와 `journalctl`을 확인합니다.
 - Data 상태가 정상이 아니면 Data service를 재시작합니다.

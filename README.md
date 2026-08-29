@@ -1,5 +1,26 @@
 # Non-Vision Media Bridge
 
+## 설치
+
+처음 설치하는 사용자는 GitHub Release의 Linux `.deb` 파일을 내려받아 설치합니다.
+아래 명령은 Ubuntu/Debian `amd64` 컴퓨터에서 그대로 실행할 수 있습니다.
+
+```bash
+VERSION=0.1.0
+ARCH=amd64
+BASE="https://github.com/cyhuh7950/media-bridge/releases/download/v${VERSION}"
+curl -fL -o "media-bridge_${VERSION}_${ARCH}.deb" "${BASE}/media-bridge_${VERSION}_${ARCH}.deb"
+curl -fL -o "media-bridge_${VERSION}_${ARCH}.deb.sha256" "${BASE}/media-bridge_${VERSION}_${ARCH}.deb.sha256"
+sha256sum -c "media-bridge_${VERSION}_${ARCH}.deb.sha256"
+sudo dpkg -i "./media-bridge_${VERSION}_${ARCH}.deb"
+```
+
+`VERSION`은 GitHub Release에 실제로 표시된 버전으로 바꾸고, `ARCH`는 설치 파일 이름과
+일치시킵니다. `sha256sum` 결과가 `OK`가 아니면 설치하지 않습니다. 설치 후 시작·중지·제거는
+[`docs/install/linux.md`](docs/install/linux.md), 첫 실행은
+[`docs/manuals/user/getting-started.md`](docs/manuals/user/getting-started.md)를 따릅니다.
+Release 파일은 태그별 workflow가 만들며, 태그와 workflow가 성공한 뒤에만 내려받을 수 있습니다.
+
 이미지·PDF가 포함된 요청을 모델 호출 전에 판정하고, Non-Vision 모델에는 OCR·Vision 설명과
 sanitizer를 통과한 텍스트만 전달하는 fail-closed MCP 제품입니다. Solar는 교체 가능한 텍스트
 분석 backend 중 하나입니다.

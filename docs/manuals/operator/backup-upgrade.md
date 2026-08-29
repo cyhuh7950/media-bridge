@@ -11,7 +11,9 @@ systemctl --user stop media-bridge-web.service media-bridge-data.service
 ## 업데이트
 
 ```bash
-sudo dpkg -i ./media-bridge_<새버전>_<아키텍처>.deb
+VERSION=0.2.0
+ARCH=amd64
+sudo dpkg -i "./media-bridge_${VERSION}_${ARCH}.deb"
 systemctl --user daemon-reload
 systemctl --user start media-bridge-web.service media-bridge-data.service
 ```
@@ -24,7 +26,9 @@ Web 화면을 새로 열어 기존 설정을 확인합니다.
 
 ```bash
 systemctl --user stop media-bridge-web.service media-bridge-data.service
-sudo dpkg -i ./media-bridge_<이전버전>_<아키텍처>.deb
+VERSION=0.1.0
+ARCH=amd64
+sudo dpkg -i "./media-bridge_${VERSION}_${ARCH}.deb"
 systemctl --user daemon-reload
 systemctl --user start media-bridge-web.service media-bridge-data.service
 ```

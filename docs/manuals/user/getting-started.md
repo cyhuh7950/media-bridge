@@ -1,12 +1,32 @@
 # Media Bridge 처음 사용하기
 
-## 1. 시작
+## 1. GitHub에서 설치 파일 받기
+
+소스 코드를 내려받아 Python 환경을 조립할 필요 없이 GitHub Release의 `.deb` 파일을
+사용합니다. GitHub 저장소의 Releases에서 원하는 버전을 확인하고, Ubuntu/Debian 터미널에서
+다음 명령을 실행합니다.
+
+```bash
+VERSION=0.1.0
+ARCH=amd64
+BASE="https://github.com/cyhuh7950/media-bridge/releases/download/v${VERSION}"
+curl -fL -o "media-bridge_${VERSION}_${ARCH}.deb" "${BASE}/media-bridge_${VERSION}_${ARCH}.deb"
+curl -fL -o "media-bridge_${VERSION}_${ARCH}.deb.sha256" "${BASE}/media-bridge_${VERSION}_${ARCH}.deb.sha256"
+sha256sum -c "media-bridge_${VERSION}_${ARCH}.deb.sha256"
+sudo dpkg -i "./media-bridge_${VERSION}_${ARCH}.deb"
+```
+
+체크섬 결과가 `OK`가 아니면 설치하지 말고 파일을 삭제한 뒤 Release에서 다시 받습니다.
+설치가 끝나면 상세한 시작·중지·제거 절차는
+`docs/install/linux.md`를 따릅니다.
+
+## 2. 시작
 
 Linux에서는 `docs/install/linux.md`의 설치 절차를 먼저 실행합니다. 설치 후 브라우저에서 다음 주소를 엽니다.
 
 `http://127.0.0.1:8765/`
 
-## 2. 첫 설정
+## 3. 첫 설정
 
 화면의 OpenCodex endpoint, Solar endpoint, 정확한 model ID, credential 환경변수 이름을 입력합니다.
 필요한 경우 OCR/Vision endpoint와 model ID도 입력합니다. 기본 rate는 RPM 2000, TPM 750000입니다.
@@ -16,7 +36,7 @@ key 원문은 입력하지 않습니다.
 
 `http://127.0.0.1:8766/status`
 
-## 3. 첫 화면 요청
+## 4. 첫 화면 요청
 
 1. OpenCodex에서 코딩 작업을 시작합니다.
 2. 오류 밑줄, 파일·라인, 터미널 결과가 보이는 화면을 캡처합니다.
@@ -26,7 +46,7 @@ key 원문은 입력하지 않습니다.
 
 화면을 확대하고, 오류 영역을 잘라 캡처하며, 필요하면 오류 문구를 직접 붙여 넣습니다.
 
-## 4. 중지와 재시작
+## 5. 중지와 재시작
 
 ```bash
 systemctl --user stop media-bridge-web.service media-bridge-data.service
