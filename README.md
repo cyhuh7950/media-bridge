@@ -226,8 +226,8 @@ env_http_headers = { "X-Media-Bridge-Tenant" = "MEDIA_BRIDGE_TENANT_ID" }
 wire_api = "responses"
 ```
 
-OmniRoute 직접 inference endpoint가 caller에서 계속 접근 가능하면 ingress를 우회할 수 있습니다.
-운영 연결에서는 network/router 계층에서 Media Bridge만 OmniRoute에 접근하도록 강제해야 합니다.
+OmniRoute 연동은 후속 선택 기능이며 이번 OpenCodex acceptance 범위에 포함하지 않습니다.
+현재 제품 경로에서는 caller가 Media Bridge ingress를 우회하지 않도록 OpenCodex endpoint를 loopback Media Bridge로 고정합니다.
 
 ## 검증
 
