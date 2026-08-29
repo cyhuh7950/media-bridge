@@ -1,9 +1,38 @@
 # Media Bridge 문제 해결
 
-- Data가 ready가 아니면 첫 signed snapshot, signature key ID, snapshot volume UID를 확인한다.
-- `credential_invalid`이면 credential scope/expiry/revoke와 Control/Data pepper 참조 일치를 확인한다.
-- `https_required`/`origin_rejected`이면 proxy scheme, Host, Origin allowlist를 확인한다.
-- capability unknown/stale, OCR/Vision/sanitizer/cleanup 실패는 정상적인 fail-closed 차단이다.
-- 실패 뒤 원본 media를 Non-Vision 모델에 직접 보내 우회하지 않는다.
+## Web이 열리지 않음
 
-오류 보고에는 safe error code와 request ID만 사용하고 Secret·media·OCR 본문을 첨부하지 않는다.
+```bash
+systemctl --user restart media-bridge-web.service
+systemctl --user --no-pager status media-bridge-web.service
+```
+
+주소는 `http://127.0.0.1:8765/`인지 확인합니다.
+
+## Data 상태가 정상적이지 않음
+
+```bash
+systemctl --user restart media-bridge-data.service
+systemctl --user --no-pager status media-bridge-data.service
+curl http://127.0.0.1:8766/status
+```
+
+최초 설정이 저장되지 않았거나 유효한 snapshot이 없으면 요청이 차단될 수 있습니다.
+
+## 설정 저장 실패
+
+endpoint에 사용자명·비밀번호·query를 넣지 않습니다. model ID는 실제 제공자가 요구하는 정확한 값을
+입력하고 RPM·TPM은 양의 정수로 입력합니다.
+
+## 화면 인식 차단
+
+화면을 확대하고 오류 영역만 다시 캡처합니다. 작은 글씨, 흐림, 잘린 오류 문구를 피하고 필요하면
+오류 문구를 직접 입력합니다. 인식이 부족한 화면을 Solar로 우회 전달하지 않습니다.
+
+## 로그 확인
+
+```bash
+journalctl --user -u media-bridge-web.service -u media-bridge-data.service --since "10 minutes ago" --no-pager
+```
+
+로그와 오류 보고에는 key 원문, 화면 원문, OCR 원문을 넣지 않습니다.

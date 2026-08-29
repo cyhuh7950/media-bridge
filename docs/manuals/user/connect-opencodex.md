@@ -1,12 +1,24 @@
-# OpenCodex 연결 상태 안내
+# OpenCodex 연결
 
-현재 OpenCodex Adapter는 `2.28.0` exact source extension과 Media Bridge 설정 fragment까지
-코드 검증된 상태다. 일반 설치 프로그램이나 자동 연결 화면은 아직 제공하지 않으며, 설치된
-OpenCodex 원본에는 자동 적용되지 않는다.
+## 연결 주소
 
-연결이 적용된 환경에서는 이미지가 포함된 Non-Vision 요청이 모델 호출 전에 텍스트로 변환된다.
-변환·sanitizer·cleanup 또는 capability 확인이 실패하면 요청은 차단되지만 실패한 response item을
-세션에 남기지 않아 이후 텍스트 대화를 계속할 수 있도록 설계됐다.
+Media Bridge를 시작한 뒤 Web 설정 화면의 OpenCodex endpoint에 다음 주소를 입력합니다.
 
-현재 단계에서 사용자가 직접 source·설정 파일을 변경하는 것은 권장하지 않는다. P5 설치 bundle과
-실제 환경 검증이 완료되기 전에는 운영 연결 완료로 간주하지 않는다.
+`http://127.0.0.1:8766/v1`
+
+OpenCodex 설정에서는 Responses API와 Media Bridge credential reference를 선택합니다. API key 원문은
+입력하지 않습니다. 기존 설정을 덮어쓰지 말고 별도 profile에서 먼저 연결을 확인합니다.
+
+## 연결 확인
+
+1. Web 설정을 저장합니다.
+2. OpenCodex에서 text-only 요청을 보냅니다.
+3. 정상 응답을 확인합니다.
+4. 화면 캡처 요청을 보내 이미지 원문이 전달되지 않고 설명 텍스트로 처리되는지 확인합니다.
+
+인식 결과가 부족하면 요청은 정상 안내 응답으로 끝나며 Solar 호출은 0회입니다.
+
+## 연결 해제
+
+OpenCodex profile에서 Media Bridge endpoint를 제거하거나 이전 endpoint로 되돌립니다. Media Bridge 자체를
+중지하려면 Linux 설치 매뉴얼의 중지 절차를 사용합니다.
