@@ -27,4 +27,5 @@ chmod 0755 "$pkg/usr/bin/media-bridge-personal-data"
 cp "$source_root/packaging/deb/media-bridge-web.service" "$pkg/usr/lib/systemd/user/media-bridge-web.service"
 cp "$source_root/packaging/deb/media-bridge-data.service" "$pkg/usr/lib/systemd/user/media-bridge-data.service"
 mkdir -p "$(dirname "$output")"
+find "$pkg" -type d -name __pycache__ -prune -exec rm -rf {} +
 dpkg-deb --build --root-owner-group "$pkg" "$output"
