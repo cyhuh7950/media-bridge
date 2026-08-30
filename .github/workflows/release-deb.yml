@@ -32,7 +32,7 @@ jobs:
       - name: Run product checks
         shell: bash
         run: |
-          .venv/bin/pytest -q tests/personal tests/adapters tests/interop_v2 tests/gateway tests/integration tests/packaging --ignore=tests/packaging/test_a1_staging_config.py
+          .venv/bin/pytest -q tests/unit tests/security tests/contracts_v2 tests/adapters tests/interop_v2 tests/gateway tests/integration tests/conformance tests/packaging --ignore=tests/packaging/test_a1_staging_config.py
           .venv/bin/ruff check media_bridge media_bridge_control migrations tests
           .venv/bin/mypy media_bridge media_bridge_control
 

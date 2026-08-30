@@ -1,0 +1,8 @@
+Package: media-bridge
+Version: 0.1.0
+Section: misc
+Priority: optional
+Architecture: amd64
+Maintainer: Media Bridge
+Description: Non-Vision Media Bridge
+ Fail-closed media pre-request gate and MCP server.
