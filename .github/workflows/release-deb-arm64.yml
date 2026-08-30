@@ -1,6 +1,9 @@
 name: Build Linux arm64 package
 
 on:
+  push:
+    tags:
+      - 'v*-arm64'
   workflow_dispatch:
     inputs:
       version:
@@ -42,6 +45,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${{ inputs.version }}"
+          if [[ -z "$VERSION" ]]; then VERSION="0.1.0"; fi
           mkdir -p dist
           DEB="dist/media-bridge_${VERSION}_arm64.deb"
           bash packaging/deb/build.sh "$PWD" "$DEB" "$VERSION"
