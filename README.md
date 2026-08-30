@@ -1,5 +1,27 @@
 # Non-Vision Media Bridge
 
+## Quick start
+
+Ubuntu/Debian에서 GitHub Release의 설치 파일을 받아 설치하는 최소 절차입니다. GitHub 저장소가
+비공개이므로 `gh auth login`을 한 번 완료한 계정에서 실행합니다. 아래 블록은 컴퓨터 아키텍처를
+자동으로 선택하고 checksum 확인 후 설치합니다.
+
+```bash
+gh auth status
+case "$(dpkg --print-architecture)" in amd64|arm64) ARCH="$(dpkg --print-architecture)" ;; *) echo "지원하지 않는 아키텍처"; exit 1 ;; esac
+DIR="$HOME/Downloads/media-bridge-0.1.0"
+mkdir -p "$DIR"
+gh release download v0.1.0 --repo cyhuh7950/media-bridge --pattern "media-bridge_0.1.0_${ARCH}.deb*" --dir "$DIR"
+cd "$DIR"
+sha256sum -c "media-bridge_0.1.0_${ARCH}.deb.sha256"
+sudo dpkg -i "./media-bridge_0.1.0_${ARCH}.deb"
+dpkg -s media-bridge | grep -E '^(Package|Version|Architecture|Status):'
+```
+
+상세한 실행·설정·중지·제거 절차는 [Linux 설치 매뉴얼](docs/install/linux.md)을 따릅니다. 현재
+Release에는 `media-bridge-http` 실행기와 Python runtime이 포함되어 있으며, 설치 직후 필요한
+설정과 실행 조건은 해당 매뉴얼에 실제 값 기준으로 설명되어 있습니다.
+
 ## 설치
 
 처음 설치하는 사용자는 GitHub Release의 Linux `.deb` 파일을 내려받아 설치합니다.

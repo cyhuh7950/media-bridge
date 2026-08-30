@@ -10,7 +10,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 pkg="$work/media-bridge-$version"
 
-mkdir -p "$pkg/DEBIAN" "$pkg/opt/media-bridge/app" "$pkg/opt/media-bridge/runtime/bin"
+mkdir -p "$pkg/DEBIAN" "$pkg/usr/bin" "$pkg/opt/media-bridge/app" "$pkg/opt/media-bridge/runtime/bin"
 cp -aL "$source_root/.venv/." "$pkg/opt/media-bridge/runtime/"
 cp -a "$source_root/media_bridge" "$pkg/opt/media-bridge/app/"
 cp -a "$source_root/media_bridge_adapters" "$pkg/opt/media-bridge/app/"
@@ -22,6 +22,8 @@ sed -i "s/^Architecture: .*/Architecture: $architecture/" "$pkg/DEBIAN/control"
 
 cp "$source_root/packaging/deb/media-bridge-http" "$pkg/opt/media-bridge/runtime/bin/media-bridge-http"
 chmod 0755 "$pkg/opt/media-bridge/runtime/bin/media-bridge-http"
+cp "$source_root/packaging/deb/media-bridge" "$pkg/usr/bin/media-bridge"
+chmod 0755 "$pkg/usr/bin/media-bridge"
 
 # The source virtual environment is editable; do not ship source-tree pointers.
 find "$pkg/opt/media-bridge/runtime" -type f \( -name '__editable__*.pth' -o -name '__editable__*_finder.py' -o -name '*.egg-link' \) -delete

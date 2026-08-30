@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/media-bridge"
+pid_file="$state_dir/media-bridge.pid"
+python_bin=/opt/media-bridge/runtime/bin/python
+
+usage() {
+  cat <<'EOF'
+media-bridge init
+media-bridge start [--port PORT]
+media-bridge stop
+media-bridge status
+media-bridge health
+media-bridge ready
+media-bridge gui
+media-bridge uninstall
+EOF
+}
+
+start() {
+  mkdir -p "$state_dir"
+  if [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+    echo "media-bridge is already running"
+    return 0
+  fi
+  local port=8000
+  if [[ "${1:-}" == "--port" ]]; then port="${2:?port is required}"; fi
+  nohup env MEDIA_BRIDGE_HTTP_HOST=127.0.0.1 MEDIA_BRIDGE_HTTP_PORT="$port" \
+    "$python_bin" -c 'from media_bridge.entrypoints import run_http; run_http()' \
+    >"$state_dir/media-bridge.log" 2>&1 &
+  echo $! >"$pid_file"
+  echo "media-bridge started on http://127.0.0.1:$port"
+}
+
+stop() {
+  if [[ ! -f "$pid_file" ]]; then echo "media-bridge is stopped"; return 0; fi
+  pid=$(cat "$pid_file")
+  kill "$pid" 2>/dev/null || true
+  rm -f "$pid_file"
+  echo "media-bridge stopped"
+}
+
+case "${1:-help}" in
+  init) mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/media-bridge"; echo "media-bridge initialized" ;;
+  start) start "${@:2}" ;;
+  stop) stop ;;
+  status) [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null && echo "running" || echo "stopped" ;;
+  health|ready) exec curl --fail --silent --show-error "http://127.0.0.1:8000/" >/dev/null ;;
+  gui) echo "http://127.0.0.1:8000/" ;;
+  uninstall) stop; rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/media-bridge" "$state_dir"; echo "media-bridge uninstalled" ;;
+  *) usage ;;
+esac

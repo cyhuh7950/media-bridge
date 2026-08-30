@@ -60,6 +60,16 @@ function pythonCommand() {
   return process.platform === 'win32' ? 'python' : 'python3';
 }
 
+function pythonEnvironment() {
+  const env = { ...process.env };
+  if (process.platform !== 'win32' && fs.existsSync('/opt/media-bridge/app')) {
+    env.PYTHONPATH = env.PYTHONPATH
+      ? `/opt/media-bridge/app${path.delimiter}${env.PYTHONPATH}`
+      : '/opt/media-bridge/app';
+  }
+  return env;
+}
+
 function start(argv) {
   const config = readConfig();
   const portIndex = argv.indexOf('--port');
@@ -69,7 +79,11 @@ function start(argv) {
   }
   const child = spawn(pythonCommand(), ['-c', 'from media_bridge.entrypoints import run_http; run_http()'], {
     stdio: 'inherit',
-    env: { ...process.env, MEDIA_BRIDGE_HTTP_HOST: config.host, MEDIA_BRIDGE_HTTP_PORT: String(port) },
+    env: {
+      ...pythonEnvironment(),
+      MEDIA_BRIDGE_HTTP_HOST: config.host,
+      MEDIA_BRIDGE_HTTP_PORT: String(port),
+    },
   });
   child.on('error', (error) => {
     process.stderr.write(`Media Bridge 실행기를 시작하지 못했습니다: ${error.message}\n`);
@@ -164,7 +178,11 @@ function service(action) {
     const child = spawn(pythonCommand(), ['-c', 'from media_bridge.entrypoints import run_http; run_http()'], {
       detached: true,
       stdio: 'ignore',
-      env: { ...process.env, MEDIA_BRIDGE_HTTP_HOST: config.host, MEDIA_BRIDGE_HTTP_PORT: String(config.port) },
+      env: {
+        ...pythonEnvironment(),
+        MEDIA_BRIDGE_HTTP_HOST: config.host,
+        MEDIA_BRIDGE_HTTP_PORT: String(config.port),
+      },
     });
     fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
     fs.writeFileSync(pidFile, `${child.pid}\n`, { mode: 0o600 });
