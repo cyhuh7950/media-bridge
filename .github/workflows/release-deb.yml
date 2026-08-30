@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to build, for example 0.1.0'
+        required: true
+        default: '0.1.0'
 
 permissions:
   contents: write
@@ -39,7 +44,9 @@ jobs:
       - name: Build and inspect Debian package
         shell: bash
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
             VERSION="0.0.0+${GITHUB_SHA::12}"
@@ -53,11 +60,14 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Publish tagged release
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || inputs.version != ''
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
-        run: gh release create "$GITHUB_REF_NAME" dist/media-bridge_*.deb dist/media-bridge_*.deb.sha256 --title "Media Bridge $VERSION" --generate-notes
+        run: |
+          TAG="v${VERSION}"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Media Bridge $TAG" --generate-notes
+          gh release upload "$TAG" dist/media-bridge_*.deb dist/media-bridge_*.deb.sha256 --clobber
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
