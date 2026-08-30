@@ -16,10 +16,10 @@ Redis를 따로 설치하지 않습니다. 현재 Release workflow가 만드는 
 터미널에서 다음 명령을 그대로 실행하면 됩니다.
 
 ```bash
+gh auth status
 mkdir -p "$HOME/Downloads/media-bridge-0.1.0"
+gh release download v0.1.0 --repo cyhuh7950/media-bridge --pattern 'media-bridge_0.1.0_amd64.deb*' --dir "$HOME/Downloads/media-bridge-0.1.0"
 cd "$HOME/Downloads/media-bridge-0.1.0"
-curl -fL -o media-bridge_0.1.0_amd64.deb https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.0/media-bridge_0.1.0_amd64.deb
-curl -fL -o media-bridge_0.1.0_amd64.deb.sha256 https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.0/media-bridge_0.1.0_amd64.deb.sha256
 sha256sum -c media-bridge_0.1.0_amd64.deb.sha256
 ```
 

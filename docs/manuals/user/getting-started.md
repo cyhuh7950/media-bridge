@@ -6,10 +6,10 @@
 사용합니다. 이번 버전은 `0.1.0`이며 Ubuntu/Debian 터미널에서 다음 명령을 그대로 실행합니다.
 
 ```bash
+gh auth status
 mkdir -p "$HOME/Downloads/media-bridge-0.1.0"
+gh release download v0.1.0 --repo cyhuh7950/media-bridge --pattern 'media-bridge_0.1.0_amd64.deb*' --dir "$HOME/Downloads/media-bridge-0.1.0"
 cd "$HOME/Downloads/media-bridge-0.1.0"
-curl -fL -o media-bridge_0.1.0_amd64.deb https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.0/media-bridge_0.1.0_amd64.deb
-curl -fL -o media-bridge_0.1.0_amd64.deb.sha256 https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.0/media-bridge_0.1.0_amd64.deb.sha256
 sha256sum -c media-bridge_0.1.0_amd64.deb.sha256
 sudo dpkg -i ./media-bridge_0.1.0_amd64.deb
 ```
