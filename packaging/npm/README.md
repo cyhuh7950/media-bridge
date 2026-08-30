@@ -3,7 +3,7 @@
 이 패키지는 Media Bridge의 설치 후 실행·상태 확인·설정 진입점을 제공합니다.
 
 ```bash
-npm install -g @bitkyc08/media-bridge
+npm install -g @cyhuh/media-bridge
 mb init
 mb start
 ```
