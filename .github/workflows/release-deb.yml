@@ -56,7 +56,7 @@ jobs:
           bash packaging/deb/build.sh "$PWD" "$DEB" "$VERSION"
           dpkg-deb --info "$DEB"
           dpkg-deb --contents "$DEB" > /dev/null
-          sha256sum "$DEB" > "$DEB.sha256"
+          sha256sum "$(basename "$DEB")" > "$DEB.sha256"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Publish tagged release
