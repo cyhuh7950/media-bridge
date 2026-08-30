@@ -1,11 +1,12 @@
 # Windows에서 Media Bridge 설치·중지·제거
 
-이 문서는 Windows 설치 파일을 받은 뒤 수행할 사용자 절차입니다. Windows 설치 파일은 제공된 버전과
-아키텍처에 맞는 것을 사용합니다.
+이 문서는 Windows 설치 파일을 받은 뒤 수행할 사용자 절차입니다. 이번 QA 파일은
+`Media-Bridge-0.1.0-x64.msi`입니다.
 
 ## 1. 설치
 
-1. `Media-Bridge-<버전>.msi`를 준비합니다.
+1. [GitHub Release v0.1.0](https://github.com/cyhuh7950/media-bridge/releases/tag/v0.1.0)에서
+   `Media-Bridge-0.1.0-x64.msi`를 다운로드합니다.
 2. 파일을 마우스 오른쪽 버튼으로 클릭합니다.
 3. 설치를 선택하고 사용자 폴더를 확인합니다.
 4. 설치가 끝나면 시작 메뉴에서 Media Bridge를 실행합니다.
