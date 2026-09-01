@@ -4,7 +4,10 @@ const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
+const readline = require('node:readline');
 const { spawn } = require('node:child_process');
+const { defaultConfig, loadConfig, saveConfig } = require('../lib/config.cjs');
+const { parseNonInteractiveConfig, runWizard } = require('../lib/wizard.cjs');
 
 const configDir = path.join(os.homedir(), '.media-bridge');
 const configFile = path.join(configDir, 'config.json');
@@ -30,25 +33,31 @@ function detectExecutable(names) {
 }
 
 function readConfig() {
-  try {
-    return JSON.parse(fs.readFileSync(configFile, 'utf8'));
-  } catch {
-    return { host: '127.0.0.1', port: 8765 };
-  }
+  return loadConfig({ homeDir: os.homedir() });
 }
 
-function init() {
-  fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
-  if (!fs.existsSync(configFile)) {
-    const openCodex = detectExecutable(['opencodex', 'ocx']);
-    fs.writeFileSync(configFile, `${JSON.stringify({
-      host: '127.0.0.1',
-      port: 8765,
-      openCodex: { detectedCommand: openCodex },
-    }, null, 2)}\n`, {
-      mode: 0o600,
-    });
+async function init() {
+  const existing = fs.existsSync(configFile) ? readConfig() : defaultConfig();
+  let config;
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    const interfaceRef = readline.createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      config = await runWizard({
+        existingConfig: existing,
+        ask: (question, fallback) => new Promise((resolve) => {
+          interfaceRef.question(`${question} [${fallback}]: `, resolve);
+        }),
+      });
+    } finally {
+      interfaceRef.close();
+    }
+  } else {
+    config = parseNonInteractiveConfig(process.env, existing);
   }
+  if (!config.openCodex) {
+    config.openCodex = { detectedCommand: detectExecutable(['opencodex', 'ocx']) };
+  }
+  saveConfig({ homeDir: os.homedir(), config });
   process.stdout.write(`Media Bridge initialized: ${configFile}\n`);
 }
 
@@ -208,7 +217,7 @@ function service(action) {
   throw new Error(`알 수 없는 service 명령입니다: ${action}`);
 }
 
-function main(argv) {
+async function main(argv) {
   const [command, ...rest] = argv;
   if (!command || command === 'help' || command === '--help' || command === '-h') return help();
   if (command === 'init') return init();
@@ -235,7 +244,10 @@ function main(argv) {
 }
 
 try {
-  main(process.argv.slice(2));
+  Promise.resolve(main(process.argv.slice(2))).catch((error) => {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 1;
+  });
 } catch (error) {
   process.stderr.write(`${error.message}\n`);
   process.exitCode = 1;
