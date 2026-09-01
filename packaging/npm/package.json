@@ -1,5 +1,5 @@
 {
-  "name": "@cyhuh/media-bridge",
+  "name": "@bitkyc08/media-bridge",
   "version": "0.1.0",
   "description": "Media Bridge command-line launcher",
   "bin": {
