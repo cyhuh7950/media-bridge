@@ -8,6 +8,7 @@ const readline = require('node:readline');
 const { spawn } = require('node:child_process');
 const { defaultConfig, loadConfig, saveConfig } = require('../lib/config.cjs');
 const { parseNonInteractiveConfig, runWizard } = require('../lib/wizard.cjs');
+const { resolveRuntime } = require('../lib/runtime.cjs');
 
 const configDir = path.join(os.homedir(), '.media-bridge');
 const configFile = path.join(configDir, 'config.json');
@@ -61,14 +62,6 @@ async function init() {
   process.stdout.write(`Media Bridge initialized: ${configFile}\n`);
 }
 
-function pythonCommand() {
-  if (process.env.MEDIA_BRIDGE_PYTHON) return process.env.MEDIA_BRIDGE_PYTHON;
-  if (process.platform !== 'win32' && fs.existsSync('/opt/media-bridge/runtime/bin/python')) {
-    return '/opt/media-bridge/runtime/bin/python';
-  }
-  return process.platform === 'win32' ? 'python' : 'python3';
-}
-
 function pythonEnvironment() {
   const env = { ...process.env };
   if (process.platform !== 'win32' && fs.existsSync('/opt/media-bridge/app')) {
@@ -79,16 +72,18 @@ function pythonEnvironment() {
   return env;
 }
 
-function start(argv) {
+async function start(argv) {
   const config = readConfig();
   const portIndex = argv.indexOf('--port');
   const port = portIndex >= 0 ? Number(argv[portIndex + 1]) : Number(config.port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('포트는 1부터 65535 사이의 정수여야 합니다.');
   }
-  const child = spawn(pythonCommand(), ['-c', 'from media_bridge.entrypoints import run_http; run_http()'], {
+  const runtime = await resolveRuntime({ homeDir: os.homedir() });
+  const child = spawn(runtime.command, ['-c', 'from media_bridge.entrypoints import run_http; run_http()'], {
     stdio: 'inherit',
     env: {
+      ...runtime.env,
       ...pythonEnvironment(),
       MEDIA_BRIDGE_HTTP_HOST: config.host,
       MEDIA_BRIDGE_HTTP_PORT: String(port),
@@ -147,7 +142,7 @@ function ready(argv) {
   check();
 }
 
-function service(action) {
+async function service(action) {
   if (!action || action === 'status') {
     const installed = fs.existsSync(serviceFile);
     let running = false;
@@ -184,10 +179,12 @@ function service(action) {
       return;
     }
     const config = readConfig();
-    const child = spawn(pythonCommand(), ['-c', 'from media_bridge.entrypoints import run_http; run_http()'], {
+    const runtime = await resolveRuntime({ homeDir: os.homedir() });
+    const child = spawn(runtime.command, ['-c', 'from media_bridge.entrypoints import run_http; run_http()'], {
       detached: true,
       stdio: 'ignore',
       env: {
+        ...runtime.env,
         ...pythonEnvironment(),
         MEDIA_BRIDGE_HTTP_HOST: config.host,
         MEDIA_BRIDGE_HTTP_PORT: String(config.port),
@@ -211,7 +208,7 @@ function service(action) {
     return;
   }
   if (action === 'restart') {
-    service('stop');
+    await service('stop');
     return service('start');
   }
   throw new Error(`알 수 없는 service 명령입니다: ${action}`);
@@ -235,7 +232,7 @@ async function main(argv) {
     return;
   }
   if (command === 'uninstall') {
-    service('stop');
+    await service('stop');
     if (fs.existsSync(configDir)) fs.rmSync(configDir, { recursive: true });
     process.stdout.write('Media Bridge uninstalled\n');
     return;
