@@ -2,44 +2,22 @@
 
 ## Quick start
 
-Ubuntu/Debian에서 GitHub Release의 설치 파일을 받아 설치하는 최소 절차입니다. GitHub 저장소가
-비공개이므로 `gh auth login`을 한 번 완료한 계정에서 실행합니다. 아래 블록은 컴퓨터 아키텍처를
-자동으로 선택하고 checksum 확인 후 설치합니다.
+일반 사용자는 Python, Docker, PostgreSQL 또는 `.deb` 명령을 직접 입력하지 않습니다.
 
 ```bash
-gh auth status
-case "$(dpkg --print-architecture)" in amd64|arm64) ARCH="$(dpkg --print-architecture)" ;; *) echo "지원하지 않는 아키텍처"; exit 1 ;; esac
-DIR="$HOME/Downloads/media-bridge-0.1.0"
-mkdir -p "$DIR"
-gh release download v0.1.0 --repo cyhuh7950/media-bridge --pattern "media-bridge_0.1.0_${ARCH}.deb*" --dir "$DIR"
-cd "$DIR"
-sha256sum -c "media-bridge_0.1.0_${ARCH}.deb.sha256"
-sudo dpkg -i "./media-bridge_0.1.0_${ARCH}.deb"
-dpkg -s media-bridge | grep -E '^(Package|Version|Architecture|Status):'
+npm install -g @bitkyc08/media-bridge
+mb init
+mb start
 ```
 
-상세한 실행·설정·중지·제거 절차는 [Linux 설치 매뉴얼](docs/install/linux.md)을 따릅니다. 현재
-Release에는 `media-bridge-http` 실행기와 Python runtime이 포함되어 있으며, 설치 직후 필요한
-설정과 실행 조건은 해당 매뉴얼에 실제 값 기준으로 설명되어 있습니다.
+상세한 설치·설정·lifecycle 절차는 [Linux 설치 매뉴얼](docs/install/linux.md)과
+[npm CLI 사용법](docs/manuals/user/npm-cli.md)을 따릅니다. npm registry 공개와 플랫폼별
+runtime artifact 배포는 별도 release 검증 대상입니다.
 
 ## 설치
 
-처음 설치하는 사용자는 GitHub Release의 Linux `.deb` 파일을 내려받아 설치합니다.
-아래 명령은 Ubuntu/Debian `amd64` 컴퓨터에서 그대로 실행할 수 있습니다.
-
-```bash
-gh auth status
-mkdir -p "$HOME/Downloads/media-bridge-0.1.0"
-gh release download v0.1.0 --repo cyhuh7950/media-bridge --pattern 'media-bridge_0.1.0_amd64.deb*' --dir "$HOME/Downloads/media-bridge-0.1.0"
-cd "$HOME/Downloads/media-bridge-0.1.0"
-sha256sum -c media-bridge_0.1.0_amd64.deb.sha256
-sudo dpkg -i ./media-bridge_0.1.0_amd64.deb
-```
-
-`sha256sum` 결과가 `OK`가 아니면 설치하지 않습니다. 설치 후 시작·중지·제거는
-[`docs/install/linux.md`](docs/install/linux.md), 첫 실행은
-[`docs/manuals/user/getting-started.md`](docs/manuals/user/getting-started.md)를 따릅니다.
-Release 파일은 태그별 workflow가 만들며, 태그와 workflow가 성공한 뒤에만 내려받을 수 있습니다.
+일반 사용자의 설치·실행은 npm 경로를 사용합니다. `.deb`는 내부 배포·복구용으로만
+유지하며, 운영자 절차는 [Linux 설치 매뉴얼](docs/install/linux.md)의 내부 배포 절을 따릅니다.
 
 이미지·PDF가 포함된 요청을 모델 호출 전에 판정하고, Non-Vision 모델에는 OCR·Vision 설명과
 sanitizer를 통과한 텍스트만 전달하는 fail-closed MCP 제품입니다. Solar는 교체 가능한 텍스트

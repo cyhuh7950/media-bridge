@@ -1,12 +1,12 @@
 {
-  "name": "@cyhuh/media-bridge",
+  "name": "@bitkyc08/media-bridge",
   "version": "0.1.0",
   "description": "Media Bridge command-line launcher",
   "bin": {
     "media-bridge": "bin/mb.cjs",
     "mb": "bin/mb.cjs"
   },
-  "files": ["bin", "README.md"],
+  "files": ["bin", "lib", "README.md"],
   "engines": {
     "node": ">=18"
   },
