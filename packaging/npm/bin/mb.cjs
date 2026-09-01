@@ -61,9 +61,6 @@ async function init() {
   } else {
     config = parseNonInteractiveConfig(process.env, existing);
   }
-  if (!config.openCodex) {
-    config.openCodex = { detectedCommand: detectExecutable(['opencodex', 'ocx']) };
-  }
   saveConfig({ homeDir: os.homedir(), config });
   process.stdout.write(`Media Bridge initialized: ${configFile}\n`);
 }

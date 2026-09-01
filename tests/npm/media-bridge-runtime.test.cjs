@@ -16,6 +16,14 @@ test('runtime platform key supports the release target matrix', () => {
   assert.throws(() => platformKey('freebsd', 'x64'), /unsupported/i);
 });
 
+test('npm package includes the runtime support modules', () => {
+  const packageJson = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '../../packaging/npm/package.json'),
+    'utf8',
+  ));
+  assert.equal(packageJson.files.includes('lib'), true);
+});
+
 test('runtime resolver honors an explicit local runtime command for QA', async () => {
   const result = await resolveRuntime({
     homeDir: path.join(__dirname, '../../.tmp-runtime-override'),
