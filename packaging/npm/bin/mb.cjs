@@ -9,6 +9,12 @@ const { spawn } = require('node:child_process');
 const { defaultConfig, loadConfig, saveConfig } = require('../lib/config.cjs');
 const { parseNonInteractiveConfig, runWizard } = require('../lib/wizard.cjs');
 const { resolveRuntime } = require('../lib/runtime.cjs');
+const {
+  checkHealth,
+  readStatus,
+  startProcess,
+  stopProcess,
+} = require('../lib/process.cjs');
 
 const configDir = path.join(os.homedir(), '.media-bridge');
 const configFile = path.join(configDir, 'config.json');
@@ -62,16 +68,6 @@ async function init() {
   process.stdout.write(`Media Bridge initialized: ${configFile}\n`);
 }
 
-function pythonEnvironment() {
-  const env = { ...process.env };
-  if (process.platform !== 'win32' && fs.existsSync('/opt/media-bridge/app')) {
-    env.PYTHONPATH = env.PYTHONPATH
-      ? `/opt/media-bridge/app${path.delimiter}${env.PYTHONPATH}`
-      : '/opt/media-bridge/app';
-  }
-  return env;
-}
-
 async function start(argv) {
   const config = readConfig();
   const portIndex = argv.indexOf('--port');
@@ -80,38 +76,22 @@ async function start(argv) {
     throw new Error('포트는 1부터 65535 사이의 정수여야 합니다.');
   }
   const runtime = await resolveRuntime({ homeDir: os.homedir() });
-  const child = spawn(runtime.command, ['-c', 'from media_bridge.entrypoints import run_http; run_http()'], {
-    stdio: 'inherit',
-    env: {
-      ...runtime.env,
-      ...pythonEnvironment(),
-      MEDIA_BRIDGE_HTTP_HOST: config.host,
-      MEDIA_BRIDGE_HTTP_PORT: String(port),
-    },
-  });
-  child.on('error', (error) => {
-    process.stderr.write(`Media Bridge 실행기를 시작하지 못했습니다: ${error.message}\n`);
-    process.exitCode = 1;
-  });
-  child.on('exit', (code, signal) => {
-    process.exitCode = code ?? 1;
-    if (signal) process.stderr.write(`Media Bridge가 ${signal}로 종료되었습니다.\n`);
-  });
+  const state = await startProcess({ config, runtime, homeDir: os.homedir(), portOverride: port });
+  process.stdout.write(`Media Bridge started: ${state.pid}\n`);
 }
 
 function status(json) {
   const { host, port } = readConfig();
-  const socket = net.createConnection({ host, port });
-  socket.once('connect', () => {
-    socket.destroy();
-    const result = { running: true, host, port };
-    process.stdout.write(json ? `${JSON.stringify(result)}\n` : `running ${host}:${port}\n`);
-  });
-  socket.once('error', () => {
-    const result = { running: false, host, port };
-    process.stdout.write(json ? `${JSON.stringify(result)}\n` : `stopped ${host}:${port}\n`);
-    process.exitCode = 1;
-  });
+  const result = { ...readStatus({ homeDir: os.homedir() }), host, port };
+  process.stdout.write(json ? `${JSON.stringify(result)}\n` : `${result.running ? 'running' : 'stopped'} ${host}:${port}\n`);
+  if (!result.running) process.exitCode = 1;
+}
+
+async function health(json) {
+  const config = readConfig();
+  const result = await checkHealth({ config });
+  process.stdout.write(json ? `${JSON.stringify(result)}\n` : `${result.healthy ? 'healthy' : 'unhealthy'} ${result.url}\n`);
+  if (!result.healthy) process.exitCode = 1;
 }
 
 function gui() {
@@ -145,16 +125,7 @@ function ready(argv) {
 async function service(action) {
   if (!action || action === 'status') {
     const installed = fs.existsSync(serviceFile);
-    let running = false;
-    if (fs.existsSync(pidFile)) {
-      const pid = Number(fs.readFileSync(pidFile, 'utf8'));
-      try {
-        process.kill(pid, 0);
-        running = Number.isInteger(pid) && pid > 0;
-      } catch {
-        fs.rmSync(pidFile);
-      }
-    }
+    const running = readStatus({ homeDir: os.homedir() }).running;
     process.stdout.write(`${installed ? 'installed' : 'not-installed'} ${running ? 'running' : 'stopped'}\n`);
     return;
   }
@@ -168,42 +139,25 @@ async function service(action) {
   }
   if (action === 'uninstall') {
     if (fs.existsSync(serviceFile)) fs.rmSync(serviceFile);
-    if (fs.existsSync(pidFile)) fs.rmSync(pidFile);
+    await stopProcess({ homeDir: os.homedir() });
     process.stdout.write('service uninstalled\n');
     return;
   }
   if (action === 'start') {
     if (!fs.existsSync(serviceFile)) service('install');
-    if (fs.existsSync(pidFile)) {
-      process.stdout.write('service already started or stale pid exists; run status first\n');
-      return;
-    }
     const config = readConfig();
     const runtime = await resolveRuntime({ homeDir: os.homedir() });
-    const child = spawn(runtime.command, ['-c', 'from media_bridge.entrypoints import run_http; run_http()'], {
-      detached: true,
-      stdio: 'ignore',
-      env: {
-        ...runtime.env,
-        ...pythonEnvironment(),
-        MEDIA_BRIDGE_HTTP_HOST: config.host,
-        MEDIA_BRIDGE_HTTP_PORT: String(config.port),
-      },
-    });
-    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(pidFile, `${child.pid}\n`, { mode: 0o600 });
-    child.unref();
-    process.stdout.write(`service started: ${child.pid}\n`);
+    const state = await startProcess({ config, runtime, homeDir: os.homedir() });
+    process.stdout.write(`service started: ${state.pid}\n`);
     return;
   }
   if (action === 'stop') {
-    if (!fs.existsSync(pidFile)) {
+    if (!readStatus({ homeDir: os.homedir() }).running) {
+      await stopProcess({ homeDir: os.homedir() });
       process.stdout.write('service already stopped\n');
       return;
     }
-    const pid = Number(fs.readFileSync(pidFile, 'utf8'));
-    try { process.kill(pid); } catch { /* process already exited */ }
-    fs.rmSync(pidFile);
+    await stopProcess({ homeDir: os.homedir() });
     process.stdout.write('service stopped\n');
     return;
   }
@@ -220,7 +174,8 @@ async function main(argv) {
   if (command === 'init') return init();
   if (command === 'start') return start(rest);
   if (command === 'stop') return service('stop');
-  if (command === 'status' || command === 'health') return status(rest.includes('--json'));
+  if (command === 'status') return status(rest.includes('--json'));
+  if (command === 'health') return health(rest.includes('--json'));
   if (command === 'ready') return ready(rest);
   if (command === 'gui') return gui();
   if (command === 'service') {

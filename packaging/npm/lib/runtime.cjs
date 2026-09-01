@@ -78,7 +78,7 @@ async function installArtifact({ homeDir, url, sha256, platform }) {
 
 async function resolveRuntime({ homeDir = os.homedir(), env = process.env, platform = process.platform, arch = process.arch } = {}) {
   const key = platformKey(platform, arch);
-  if (env.MEDIA_BRIDGE_RUNTIME_COMMAND) return { command: env.MEDIA_BRIDGE_RUNTIME_COMMAND, args: [], env: { ...env } };
+  if (env.MEDIA_BRIDGE_RUNTIME_COMMAND) return { command: env.MEDIA_BRIDGE_RUNTIME_COMMAND, args: [], env: { ...env }, python: true };
   const root = env.MEDIA_BRIDGE_RUNTIME_DIR || runtimeDir(homeDir);
   const command = runtimeCommand(root, platform);
   if (!fs.existsSync(command)) {
@@ -89,7 +89,7 @@ async function resolveRuntime({ homeDir = os.homedir(), env = process.env, platf
   }
   if (!fs.existsSync(command)) throw new Error(`Media Bridge runtime artifact is not available for ${key}`);
   const runtimeEnv = { ...env, MEDIA_BRIDGE_RUNTIME_PLATFORM: key };
-  return { command, args: [], env: runtimeEnv };
+  return { command, args: [], env: runtimeEnv, python: true };
 }
 
 module.exports = {
