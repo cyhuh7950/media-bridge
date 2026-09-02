@@ -14,6 +14,8 @@ RUNTIME_DIR = ROOT / "packaging" / "runtime"
 ENTRYPOINT = RUNTIME_DIR / "entrypoint.py"
 BUILD_SCRIPT = RUNTIME_DIR / "build-win32-x64.ps1"
 BUILD_LOCK = RUNTIME_DIR / "requirements-build.lock"
+VERIFY_SCRIPT = RUNTIME_DIR / "verify-win32-x64.ps1"
+MANAGED_VERIFY_SCRIPT = RUNTIME_DIR / "verify-managed-runtime.cjs"
 WORKFLOW = ROOT / ".github" / "workflows" / "build-runtime-win32-x64.yml"
 
 
@@ -73,6 +75,64 @@ def test_runtime_workflow_builds_without_public_release_commands() -> None:
     assert "actions/upload-artifact@v4" in workflow
     assert "gh release" not in workflow
     assert "npm publish" not in workflow
+
+
+def test_runtime_verifier_is_wired_to_private_workflow_evidence() -> None:
+    verifier = VERIFY_SCRIPT.read_text(encoding="utf-8")
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "Get-FileHash" in verifier
+    assert "runtime-manifest.json" in verifier
+    assert "System32\\tar.exe" in verifier
+    assert "/health" in verifier
+    assert "verification-result.json" in verifier
+    assert "sourceCommit" in verifier
+    assert "MEDIA_BRIDGE_SERVICE_TOKEN" in verifier
+    assert "packaging/runtime/verify-win32-x64.ps1" in workflow
+    assert "-SourceCommit '${{ github.sha }}'" in workflow
+    assert "RUNTIME_OUTPUT" in workflow
+    assert "actions/upload-artifact@v4" in workflow
+    assert "retention-days: 14" in workflow
+
+
+def test_runtime_verifier_rejects_relative_artifact_directory(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            str(VERIFY_SCRIPT),
+            "-ArtifactDirectory",
+            "relative-output",
+            "-TestRoot",
+            str(tmp_path / "verify"),
+            "-SourceCommit",
+            "a" * 40,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+
+    assert result.returncode != 0
+    assert "ArtifactDirectory must be an absolute path" in f"{result.stdout}\n{result.stderr}"
+    assert not (tmp_path / "verify").exists()
+
+
+def test_runtime_verifier_checks_actual_managed_install_and_rollback() -> None:
+    verifier = VERIFY_SCRIPT.read_text(encoding="utf-8")
+    managed_verifier = MANAGED_VERIFY_SCRIPT.read_text(encoding="utf-8")
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "resolveRuntime" in managed_verifier
+    assert "checksum mismatch" in managed_verifier
+    assert "rollbackPreserved" in managed_verifier
+    assert "verify-managed-runtime.cjs" in verifier
+    assert "managedInstall" in verifier
+    assert "managedRollbackPreserved" in verifier
+    assert "actions/setup-node@v4" in workflow
+    assert "node-version: '22'" in workflow
 
 
 def test_runtime_build_ignores_git_gnu_tar_precedence_on_windows(tmp_path: Path) -> None:

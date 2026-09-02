@@ -2,6 +2,24 @@
 
 이 문서는 공개 npm 패키지를 실제 사용자 환경에서 확인할 때 사용합니다.
 
+## 공개 전 runtime artifact 독립 재검증
+
+공개 전 QA에서는 원격 `codex/media-bridge`의 정확한 source commit에서
+`Build win32-x64 runtime artifact` workflow를 실행합니다. `gh` CLI는 사용하지 않으며 GitHub Actions
+화면에서 실행·다운로드합니다. 다운로드한 private workflow artifact에 다음 네 파일이 있어야 합니다.
+
+- `media-bridge-runtime-<version>-win32-x64.tar.gz`
+- 동일 이름의 `.sha256`
+- `runtime-manifest.json`
+- `verification-result.json`
+
+`verification-result.json`의 `sourceCommit`이 시험 대상 commit과 같고, `sha256`이 archive 및 manifest와
+일치하며, `platform=win32-x64`, `python=false`, `pythonDirectCall=false`, `forbiddenEntries=0`,
+`healthStatus=200`, `managedInstall=true`, `checksumMismatchRejected=true`,
+`managedRollbackPreserved=true`인지 확인합니다. workflow가 실패하거나 이 증거가 없으면 실제 artifact E2E는
+`PASS`가 아니라 `FAIL` 또는 `NOT RUN`으로 기록합니다. 이 private artifact 검증은 npm registry 공개
+설치나 public URL 재다운로드를 증명하지 않습니다.
+
 ## 사전 조건
 
 - Node.js 18 이상
@@ -53,6 +71,7 @@ npm uninstall -g @bitkyc08/media-bridge
 다음 항목을 각각 기록합니다.
 
 - npm package version과 registry 설치 결과
+- source commit, GitHub Actions workflow run URL/ID와 private artifact 이름
 - 운영체제·아키텍처
 - `mb init`, `start`, `status`, `health`, `ready`, `stop` 결과
 - runtime artifact 이름과 SHA-256
@@ -61,3 +80,4 @@ npm uninstall -g @bitkyc08/media-bridge
 - 실패 원인과 재현 명령
 
 Node 계약 테스트, fixture 테스트, 로컬 `npm pack` 결과만으로 외부 설치 PASS를 선언하지 않습니다.
+현재 공개 전 제품 상태 명칭은 `PUBLIC_RELEASE_BLOCKED`이며, runtime 구현 결정 대기 상태가 아닙니다.
