@@ -1,31 +1,46 @@
 # Windows에서 Media Bridge 설치·중지·제거
 
-이 문서는 Windows 설치 파일을 받은 뒤 수행할 사용자 절차입니다. 이번 QA 파일은
-`Media-Bridge-0.1.0-x64.msi`입니다.
+일반 사용자의 Windows 설치 경로는 npm CLI입니다. MSI는 현재 내부 QA·복구용
+artifact이며, 이 문서는 MSI에 웹 화면·트레이·시작 메뉴가 있다고 가정하지 않습니다.
 
 ## 1. 설치
 
-1. [GitHub Release v0.1.0](https://github.com/cyhuh7950/media-bridge/releases/tag/v0.1.0)에서
-   `Media-Bridge-0.1.0-x64.msi`를 다운로드합니다.
-2. 파일을 마우스 오른쪽 버튼으로 클릭합니다.
-3. 설치를 선택하고 사용자 폴더를 확인합니다.
-4. 설치가 끝나면 시작 메뉴에서 Media Bridge를 실행합니다.
-5. 브라우저에서 `http://127.0.0.1:8765/`를 엽니다.
+```powershell
+npm install -g @bitkyc08/media-bridge
+mb init
+```
+
+현재 npm registry 공개와 Windows runtime artifact가 준비되지 않았다면 이 명령은
+외부 설치 PASS가 아닙니다. 그 경우 Python, Docker 또는 MSI를 사용자 우회 경로로
+요구하지 말고 release 준비 상태를 확인합니다.
 
 ## 2. 최초 설정
 
-OpenCodex endpoint, Solar endpoint, 정확한 model ID, credential 환경변수 이름 또는 OS credential
-reference 이름을 입력합니다. key 원문은 입력하지 않습니다. 저장 후 페이지를 새로고침합니다.
+`mb init`에서 OpenCodex 주소, Media Bridge 포트(기본 `8765`), Solar 모델·HTTPS
+endpoint·Secret 참조, OCR/Vision 변환 기본값과 변환 실패 시 Solar 전송 차단 정책을
+입력합니다. Secret 원문은 저장하지 않습니다.
 
-## 3. 중지·재시작
+## 3. 시작·상태·중지
 
-작업 표시줄의 Media Bridge 아이콘 메뉴에서 중지 또는 다시 시작을 선택합니다. 브라우저에서
-`http://127.0.0.1:8765/`와 `http://127.0.0.1:8766/status`를 다시 확인합니다.
+```powershell
+mb start
+mb status
+mb health --json
+mb service restart
+mb stop
+```
+
+`mb gui`는 현재 설정된 주소를 출력합니다. 현재 CLI에는 트레이 아이콘, 시작 메뉴
+바로가기 또는 별도 `8766/status` 웹 화면이 없습니다.
 
 ## 4. 제거
 
-Windows 설정 → 앱 → 설치된 앱 → Media Bridge → 제거를 선택합니다. 설정을 남길지 묻는 경우,
-다시 사용할 계획이 있으면 보존하고 완전히 삭제할 때만 삭제를 선택합니다.
+```powershell
+mb service uninstall
+npm uninstall -g @bitkyc08/media-bridge
+```
 
-설치 파일이 서명되지 않은 QA 파일이면 Windows 경고가 표시될 수 있습니다. QA 파일을 공식 배포 파일로
-간주하지 않습니다.
+CLI 설정까지 삭제할 때는 `mb uninstall`을 사용합니다.
+
+MSI를 내부 복구 목적으로 사용하는 경우에도 이 문서의 CLI 사용자 경험과 혼동하지
+않으며, MSI의 실제 payload·runtime·실행 경로를 별도 운영 기록으로 남깁니다.
