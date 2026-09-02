@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const {
@@ -11,7 +12,7 @@ const {
 } = require('../../packaging/npm/lib/config.cjs');
 
 function home(name) {
-  const value = path.join(__dirname, `../../.tmp-npm-config-${name}`);
+  const value = path.join(process.env.MEDIA_BRIDGE_TEST_TMP || os.tmpdir(), `media-bridge-npm-config-${name}`);
   fs.rmSync(value, { recursive: true, force: true });
   return value;
 }

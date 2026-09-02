@@ -11,7 +11,8 @@ mb start
 ```
 
 상세한 설치·설정·lifecycle 절차는 [Linux 설치 매뉴얼](docs/install/linux.md)과
-[npm CLI 사용법](docs/manuals/user/npm-cli.md)을 따릅니다. npm registry 공개와 플랫폼별
+[npm CLI 사용법](docs/manuals/user/npm-cli.md)을 따릅니다. 실제 외부 설치는
+[외부 설치 테스트](docs/manuals/user/external-test.md)를 사용합니다. npm registry 공개와 플랫폼별
 runtime artifact 배포는 별도 release 검증 대상입니다.
 
 ## 설치

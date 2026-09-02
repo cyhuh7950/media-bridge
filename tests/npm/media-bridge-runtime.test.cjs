@@ -1,7 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
+
+const testRoot = process.env.MEDIA_BRIDGE_TEST_TMP || os.tmpdir();
 
 const {
   platformKey,
@@ -26,7 +29,7 @@ test('npm package includes the runtime support modules', () => {
 
 test('runtime resolver honors an explicit local runtime command for QA', async () => {
   const result = await resolveRuntime({
-    homeDir: path.join(__dirname, '../../.tmp-runtime-override'),
+    homeDir: path.join(testRoot, 'media-bridge-runtime-override'),
     env: { MEDIA_BRIDGE_RUNTIME_COMMAND: process.execPath },
     platform: 'win32',
     arch: 'x64',
@@ -36,7 +39,7 @@ test('runtime resolver honors an explicit local runtime command for QA', async (
 });
 
 test('runtime resolver fails closed when no managed artifact is available', async () => {
-  const tempHome = path.join(__dirname, '../../.tmp-runtime-missing');
+  const tempHome = path.join(testRoot, 'media-bridge-runtime-missing');
   fs.rmSync(tempHome, { recursive: true, force: true });
   await assert.rejects(() => resolveRuntime({
     homeDir: tempHome,

@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const fsp = fs.promises;
 const os = require('node:os');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const { execFileSync, spawn } = require('node:child_process');
 
 function statePath(homeDir = os.homedir()) {
   return path.join(homeDir, '.media-bridge', 'service.pid');
@@ -20,6 +20,54 @@ function isAlive(pid) {
   } catch {
     return false;
   }
+}
+
+function inspectProcessIdentity(pid, platform = process.platform) {
+  if (!isAlive(pid)) return null;
+  try {
+    if (platform === 'linux') {
+      const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+      const commandEnd = stat.lastIndexOf(')');
+      const fieldsAfterCommand = stat.slice(commandEnd + 2).trim().split(/\s+/);
+      const startMarker = fieldsAfterCommand[19];
+      const executable = fs.readlinkSync(`/proc/${pid}/exe`);
+      if (!startMarker || !executable) return null;
+      return { executable, startMarker: `linux:${startMarker}` };
+    }
+    if (platform === 'win32') {
+      const script = [
+        `$p = Get-Process -Id ${pid} -ErrorAction Stop`,
+        '$result = [ordered]@{ executable = $p.Path; startMarker = $p.StartTime.ToUniversalTime().Ticks.ToString() }',
+        '$result | ConvertTo-Json -Compress',
+      ].join('; ');
+      const output = execFileSync('powershell.exe', [
+        '-NoProfile', '-NonInteractive', '-Command', script,
+      ], { encoding: 'utf8', windowsHide: true }).trim();
+      const identity = JSON.parse(output);
+      if (!identity.executable || !identity.startMarker) return null;
+      return identity;
+    }
+    const output = execFileSync('ps', [
+      '-p', String(pid), '-o', 'lstart=', '-o', 'comm=',
+    ], { encoding: 'utf8' }).trim();
+    const match = output.match(/^(.{24})\s+(.+)$/);
+    if (!match) return null;
+    return { executable: match[2].trim(), startMarker: `${platform}:${match[1].trim()}` };
+  } catch {
+    return null;
+  }
+}
+
+function normalizedExecutable(value, platform = process.platform) {
+  if (!value) return '';
+  const normalized = path.normalize(value);
+  return platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function identityMatches(recorded, current, platform = process.platform) {
+  if (!recorded || !current) return false;
+  return recorded.startMarker === current.startMarker
+    && normalizedExecutable(recorded.executable, platform) === normalizedExecutable(current.executable, platform);
 }
 
 function readState(homeDir) {
@@ -42,9 +90,8 @@ async function writeState(homeDir, state) {
 }
 
 async function startProcess({ config, runtime, homeDir = os.homedir(), portOverride } = {}) {
-  const current = readState(homeDir);
-  if (current && isAlive(current.pid)) throw new Error(`Media Bridge is already running: ${current.pid}`);
-  if (current) await fsp.rm(statePath(homeDir), { force: true });
+  const current = readStatus({ homeDir });
+  if (current.running) throw new Error(`Media Bridge is already running: ${current.pid}`);
   const port = portOverride ?? config.port;
   const args = runtime.python
     ? [...(runtime.args || []), '-c', 'from media_bridge.entrypoints import run_http; run_http()']
@@ -58,16 +105,33 @@ async function startProcess({ config, runtime, homeDir = os.homedir(), portOverr
       MEDIA_BRIDGE_HTTP_PORT: String(port),
     },
   });
-  const state = { pid: child.pid, command: runtime.command, host: config.host, port };
-  await writeState(homeDir, state);
-  child.unref();
-  return state;
+  try {
+    await new Promise((resolve, reject) => {
+      child.once('spawn', resolve);
+      child.once('error', reject);
+    });
+    const identity = inspectProcessIdentity(child.pid);
+    if (!identity) throw new Error('Media Bridge child identity could not be verified');
+    const state = { pid: child.pid, command: runtime.command, identity, host: config.host, port };
+    await writeState(homeDir, state);
+    child.unref();
+    return state;
+  } catch (error) {
+    if (child.pid && isAlive(child.pid)) child.kill();
+    await fsp.rm(statePath(homeDir), { force: true });
+    throw error;
+  }
 }
 
 async function stopProcess({ homeDir = os.homedir() } = {}) {
   const state = readState(homeDir);
   if (!state) return { running: false };
   if (isAlive(state.pid)) {
+    const currentIdentity = inspectProcessIdentity(state.pid);
+    if (!identityMatches(state.identity, currentIdentity)) {
+      await fsp.rm(statePath(homeDir), { force: true });
+      return { running: false, pid: state.pid, ownershipMismatch: true };
+    }
     try { process.kill(state.pid); } catch { /* process exited between checks */ }
   }
   await fsp.rm(statePath(homeDir), { force: true });
@@ -79,7 +143,13 @@ function readStatus({ homeDir = os.homedir() } = {}) {
   if (!state) return { running: false };
   const running = isAlive(state.pid);
   if (!running) fs.rmSync(statePath(homeDir), { force: true });
-  return running ? { ...state, running: true } : { running: false };
+  if (!running) return { running: false };
+  const currentIdentity = inspectProcessIdentity(state.pid);
+  if (!identityMatches(state.identity, currentIdentity)) {
+    fs.rmSync(statePath(homeDir), { force: true });
+    return { running: false, ownershipMismatch: true };
+  }
+  return { ...state, running: true };
 }
 
 async function checkHealth({ config, fetchImpl = fetch } = {}) {
@@ -94,6 +164,8 @@ async function checkHealth({ config, fetchImpl = fetch } = {}) {
 
 module.exports = {
   checkHealth,
+  identityMatches,
+  inspectProcessIdentity,
   isAlive,
   readStatus,
   startProcess,

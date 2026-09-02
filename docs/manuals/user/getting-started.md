@@ -9,6 +9,7 @@ npm install -g @bitkyc08/media-bridge
 ```
 
 현재 npm registry 공개와 플랫폼별 runtime artifact 배포는 release 검증 대상입니다.
+실제 외부 설치 검증은 [외부 설치 테스트](external-test.md)의 증거 양식을 사용합니다.
 
 ## 2. 최초 설정
 
