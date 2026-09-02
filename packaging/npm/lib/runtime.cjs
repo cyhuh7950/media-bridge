@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const packageMetadata = require('../package.json');
 
 const execFileAsync = promisify(execFile);
 const defaultManifestPath = path.join(__dirname, '..', 'runtime-manifest.json');
@@ -72,71 +73,153 @@ function selectArtifact({ manifest, packageVersion, platform = process.platform,
   return { key, ...artifact };
 }
 
-async function downloadArtifact(url, destination) {
-  if (url.startsWith('file://')) {
-    await fsp.copyFile(new URL(url), destination);
-    return;
-  }
-  const response = await fetch(url);
+async function downloadArtifact(url, destination, fetchImpl = fetch) {
+  const response = await fetchImpl(url);
   if (!response.ok) throw new Error(`runtime artifact download failed: HTTP ${response.status}`);
   await fsp.writeFile(destination, Buffer.from(await response.arrayBuffer()));
 }
 
-async function extractArtifact(archive, destination) {
+async function extractArtifact(archive, destination, execFileImpl = execFileAsync) {
   await fsp.mkdir(destination, { recursive: true, mode: 0o700 });
   const tarCommand = process.platform === 'win32' ? 'tar.exe' : 'tar';
   try {
-    await execFileAsync(tarCommand, ['-xzf', archive, '-C', destination]);
+    await execFileImpl(tarCommand, ['-xzf', archive, '-C', destination]);
   } catch (error) {
     throw new Error(`runtime artifact extraction failed: ${error.message}`);
   }
 }
 
-async function installArtifact({ homeDir, url, sha256, platform }) {
-  if (!isAllowedArtifactUrl(url)) throw new Error('runtime artifact URL must use HTTPS or loopback HTTP');
-  if (!/^[a-f0-9]{64}$/i.test(sha256 || '')) throw new Error('runtime artifact SHA-256 is required');
-  const root = runtimeDir(homeDir);
+function artifactCommand(root, artifact) {
+  const target = path.resolve(root, ...artifact.command.replaceAll('\\', '/').split('/'));
+  const relative = path.relative(root, target);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('runtime artifact command escapes the runtime directory');
+  }
+  return target;
+}
+
+function verifiedMetadata(artifact) {
+  return {
+    schemaVersion: 1,
+    platform: artifact.key,
+    version: artifact.version,
+    sha256: artifact.sha256.toLowerCase(),
+    command: artifact.command,
+    python: artifact.python,
+  };
+}
+
+function readVerified(root) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(root, '.verified.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function metadataMatches(actual, expected) {
+  return actual && Object.keys(expected).every((key) => actual[key] === expected[key]);
+}
+
+async function installArtifact({
+  homeDir,
+  root = runtimeDir(homeDir),
+  artifact,
+  fetchImpl = fetch,
+  execFileImpl = execFileAsync,
+}) {
   const parent = path.dirname(root);
-  const staging = path.join(parent, `.runtime-${process.pid}-${Date.now()}`);
-  const archive = path.join(parent, `.runtime-${process.pid}.tar.gz`);
+  const token = `${process.pid}-${Date.now()}`;
+  const staging = path.join(parent, `.runtime-${token}`);
+  const backup = path.join(parent, `.runtime-backup-${token}`);
+  const archive = path.join(parent, `.runtime-${token}.tar.gz`);
+  let movedPrevious = false;
   try {
     await fsp.mkdir(parent, { recursive: true, mode: 0o700 });
-    await downloadArtifact(url, archive);
+    await downloadArtifact(artifact.url, archive, fetchImpl);
     const digest = crypto.createHash('sha256').update(await fsp.readFile(archive)).digest('hex');
-    if (digest.toLowerCase() !== sha256.toLowerCase()) throw new Error('runtime artifact checksum mismatch');
-    await extractArtifact(archive, staging);
-    const command = runtimeCommand(staging, platform);
-    await fsp.access(command, fs.constants.X_OK);
-    await fsp.writeFile(path.join(staging, '.verified'), `${sha256.toLowerCase()}\n`, { mode: 0o600 });
-    await fsp.rm(root, { recursive: true, force: true });
+    if (digest.toLowerCase() !== artifact.sha256.toLowerCase()) {
+      throw new Error('runtime artifact checksum mismatch');
+    }
+    await extractArtifact(archive, staging, execFileImpl);
+    const stagedCommand = artifactCommand(staging, artifact);
+    let commandStat;
+    try { commandStat = await fsp.stat(stagedCommand); } catch { commandStat = null; }
+    if (!commandStat?.isFile()) throw new Error('runtime artifact command is missing or unavailable');
+    await fsp.access(stagedCommand, fs.constants.X_OK);
+    await fsp.writeFile(
+      path.join(staging, '.verified.json'),
+      `${JSON.stringify(verifiedMetadata(artifact), null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    if (fs.existsSync(root)) {
+      await fsp.rename(root, backup);
+      movedPrevious = true;
+    }
     await fsp.rename(staging, root);
-    return runtimeCommand(root, platform);
+    if (movedPrevious) await fsp.rm(backup, { recursive: true, force: true });
+    return {
+      command: artifactCommand(root, artifact),
+      args: [],
+      python: artifact.python,
+    };
   } catch (error) {
     await fsp.rm(staging, { recursive: true, force: true });
+    if (movedPrevious && !fs.existsSync(root) && fs.existsSync(backup)) {
+      await fsp.rename(backup, root);
+    }
     throw error;
   } finally {
     await fsp.rm(archive, { force: true });
   }
 }
 
-async function resolveRuntime({ homeDir = os.homedir(), env = process.env, platform = process.platform, arch = process.arch } = {}) {
+async function resolveRuntime({
+  homeDir = os.homedir(),
+  env = process.env,
+  platform = process.platform,
+  arch = process.arch,
+  fetchImpl = fetch,
+  execFileImpl = execFileAsync,
+} = {}) {
   const key = platformKey(platform, arch);
   if (env.MEDIA_BRIDGE_RUNTIME_COMMAND) return { command: env.MEDIA_BRIDGE_RUNTIME_COMMAND, args: [], env: { ...env }, python: true };
   const root = env.MEDIA_BRIDGE_RUNTIME_DIR || runtimeDir(homeDir);
-  const command = runtimeCommand(root, platform);
-  if (!fs.existsSync(command)) {
-    if (!env.MEDIA_BRIDGE_RUNTIME_URL) {
-      throw new Error(`Media Bridge runtime artifact is not available for ${key}`);
-    }
-    await installArtifact({ homeDir, url: env.MEDIA_BRIDGE_RUNTIME_URL, sha256: env.MEDIA_BRIDGE_RUNTIME_SHA256, platform });
+  let artifact;
+  if (env.MEDIA_BRIDGE_RUNTIME_URL) {
+    artifact = {
+      key,
+      version: packageMetadata.version,
+      published: true,
+      url: env.MEDIA_BRIDGE_RUNTIME_URL,
+      sha256: env.MEDIA_BRIDGE_RUNTIME_SHA256,
+      archive: 'tar.gz',
+      command: `bin/${platform === 'win32' ? 'python.exe' : 'python'}`,
+      python: true,
+    };
+    if (!isAllowedArtifactUrl(artifact.url)) throw new Error('runtime artifact URL must use HTTPS or loopback HTTP');
+    if (!/^[a-f0-9]{64}$/i.test(artifact.sha256 || '')) throw new Error('runtime artifact SHA-256 is required');
+  } else {
+    const manifest = loadRuntimeManifest({
+      manifestPath: env.MEDIA_BRIDGE_RUNTIME_MANIFEST || defaultManifestPath,
+      packageVersion: packageMetadata.version,
+    });
+    artifact = selectArtifact({ manifest, packageVersion: packageMetadata.version, platform, arch });
+  }
+  const expectedMetadata = verifiedMetadata(artifact);
+  let command = artifactCommand(root, artifact);
+  if (!fs.existsSync(command) || !metadataMatches(readVerified(root), expectedMetadata)) {
+    const installed = await installArtifact({ homeDir, root, artifact, fetchImpl, execFileImpl });
+    command = installed.command;
   }
   if (!fs.existsSync(command)) throw new Error(`Media Bridge runtime artifact is not available for ${key}`);
   const runtimeEnv = { ...env, MEDIA_BRIDGE_RUNTIME_PLATFORM: key };
-  return { command, args: [], env: runtimeEnv, python: true };
+  return { command, args: [], env: runtimeEnv, python: artifact.python };
 }
 
 module.exports = {
   loadRuntimeManifest,
+  installArtifact,
   platformKey,
   resolveRuntime,
   runtimeDir,

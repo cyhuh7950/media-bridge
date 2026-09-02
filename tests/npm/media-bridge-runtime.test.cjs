@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
+const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 
@@ -31,6 +34,44 @@ function publishedManifest(overrides = {}) {
       },
     },
   };
+}
+
+function createArtifact(root, { command = 'bin/media-bridge-runtime.exe', contents = 'runtime-v1' } = {}) {
+  const payload = path.join(root, 'payload');
+  const archive = path.join(root, 'runtime.tar.gz');
+  fs.rmSync(payload, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(path.join(payload, command)), { recursive: true });
+  fs.writeFileSync(path.join(payload, command), contents);
+  execFileSync(process.platform === 'win32' ? 'tar.exe' : 'tar', [
+    '-czf', archive, '-C', payload, '.',
+  ]);
+  return {
+    archive,
+    bytes: fs.readFileSync(archive),
+    sha256: crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex'),
+  };
+}
+
+async function serveArtifact(bytes) {
+  let requests = 0;
+  const server = http.createServer((_request, response) => {
+    requests += 1;
+    response.writeHead(200, { 'content-type': 'application/gzip' });
+    response.end(bytes);
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  return {
+    url: `http://127.0.0.1:${address.port}/runtime.tar.gz`,
+    requests: () => requests,
+    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
+  };
+}
+
+function writeManifest(root, artifact) {
+  const manifestPath = path.join(root, 'runtime-manifest.json');
+  fs.writeFileSync(manifestPath, JSON.stringify(publishedManifest(artifact)));
+  return manifestPath;
 }
 
 test('runtime platform key supports the release target matrix', () => {
@@ -127,4 +168,82 @@ test('runtime resolver fails closed when no managed artifact is available', asyn
     arch: 'x64',
   }), /runtime.*(available|artifact)|artifact.*(available|configured)/i);
   assert.equal(fs.existsSync(runtimeDir(tempHome)), false);
+});
+
+test('runtime resolver downloads the selected artifact and reuses verified metadata', async () => {
+  const root = path.join(testRoot, 'media-bridge-runtime-download');
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.mkdirSync(root, { recursive: true });
+  const fixture = createArtifact(root);
+  const server = await serveArtifact(fixture.bytes);
+  try {
+    const manifestPath = writeManifest(root, { url: server.url, sha256: fixture.sha256 });
+    const env = { MEDIA_BRIDGE_RUNTIME_MANIFEST: manifestPath };
+    const first = await resolveRuntime({ homeDir: path.join(root, 'home'), env, platform: 'win32', arch: 'x64' });
+    assert.equal(first.command, path.join(root, 'home', '.media-bridge', 'runtime', 'bin', 'media-bridge-runtime.exe'));
+    assert.equal(first.python, false);
+    assert.equal(fs.readFileSync(first.command, 'utf8'), 'runtime-v1');
+    assert.deepEqual(JSON.parse(fs.readFileSync(
+      path.join(runtimeDir(path.join(root, 'home')), '.verified.json'), 'utf8',
+    )), {
+      schemaVersion: 1,
+      platform: 'win32-x64',
+      version: '0.1.0',
+      sha256: fixture.sha256,
+      command: 'bin/media-bridge-runtime.exe',
+      python: false,
+    });
+    const second = await resolveRuntime({ homeDir: path.join(root, 'home'), env, platform: 'win32', arch: 'x64' });
+    assert.equal(second.command, first.command);
+    assert.equal(server.requests(), 1);
+  } finally {
+    await server.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('checksum failure preserves the previous verified runtime', async () => {
+  const root = path.join(testRoot, 'media-bridge-runtime-checksum-rollback');
+  const homeDir = path.join(root, 'home');
+  const installedRoot = runtimeDir(homeDir);
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.mkdirSync(path.join(installedRoot, 'bin'), { recursive: true });
+  fs.writeFileSync(path.join(installedRoot, 'bin', 'media-bridge-runtime.exe'), 'previous-runtime');
+  fs.writeFileSync(path.join(installedRoot, '.verified.json'), JSON.stringify({
+    schemaVersion: 1, platform: 'win32-x64', version: '0.0.9', sha256: 'b'.repeat(64),
+    command: 'bin/media-bridge-runtime.exe', python: false,
+  }));
+  const fixture = createArtifact(root, { contents: 'replacement-runtime' });
+  const server = await serveArtifact(fixture.bytes);
+  try {
+    const manifestPath = writeManifest(root, { url: server.url, sha256: 'c'.repeat(64) });
+    await assert.rejects(() => resolveRuntime({
+      homeDir, env: { MEDIA_BRIDGE_RUNTIME_MANIFEST: manifestPath }, platform: 'win32', arch: 'x64',
+    }), /checksum mismatch/i);
+    assert.equal(fs.readFileSync(path.join(installedRoot, 'bin', 'media-bridge-runtime.exe'), 'utf8'), 'previous-runtime');
+  } finally {
+    await server.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('missing artifact command preserves the previous verified runtime', async () => {
+  const root = path.join(testRoot, 'media-bridge-runtime-command-rollback');
+  const homeDir = path.join(root, 'home');
+  const installedRoot = runtimeDir(homeDir);
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.mkdirSync(path.join(installedRoot, 'bin'), { recursive: true });
+  fs.writeFileSync(path.join(installedRoot, 'bin', 'media-bridge-runtime.exe'), 'previous-runtime');
+  const fixture = createArtifact(root, { command: 'bin/not-the-command.exe' });
+  const server = await serveArtifact(fixture.bytes);
+  try {
+    const manifestPath = writeManifest(root, { url: server.url, sha256: fixture.sha256 });
+    await assert.rejects(() => resolveRuntime({
+      homeDir, env: { MEDIA_BRIDGE_RUNTIME_MANIFEST: manifestPath }, platform: 'win32', arch: 'x64',
+    }), /command.*(missing|unavailable)/i);
+    assert.equal(fs.readFileSync(path.join(installedRoot, 'bin', 'media-bridge-runtime.exe'), 'utf8'), 'previous-runtime');
+  } finally {
+    await server.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
