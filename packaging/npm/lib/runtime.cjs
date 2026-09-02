@@ -81,7 +81,15 @@ async function downloadArtifact(url, destination, fetchImpl = fetch) {
 
 async function extractArtifact(archive, destination, execFileImpl = execFileAsync) {
   await fsp.mkdir(destination, { recursive: true, mode: 0o700 });
-  const tarCommand = process.platform === 'win32' ? 'tar.exe' : 'tar';
+  let tarCommand = 'tar';
+  if (process.platform === 'win32') {
+    const windowsRoot = process.env.SystemRoot || process.env.WINDIR;
+    if (!windowsRoot) throw new Error('runtime artifact extraction failed: Windows system root is unavailable');
+    tarCommand = path.join(windowsRoot, 'System32', 'tar.exe');
+    if (!fs.existsSync(tarCommand)) {
+      throw new Error(`runtime artifact extraction failed: Windows system tar is unavailable: ${tarCommand}`);
+    }
+  }
   try {
     await execFileImpl(tarCommand, ['-xzf', archive, '-C', destination]);
   } catch (error) {

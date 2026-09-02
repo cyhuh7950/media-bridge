@@ -87,7 +87,15 @@ foreach ($target in @($artifactPath, $checksumPath, $manifestPath)) {
     }
 }
 
-& tar.exe -czf $artifactPath -C $payloadPath .
+$windowsRoot = $env:SystemRoot
+if ([string]::IsNullOrWhiteSpace($windowsRoot)) {
+    throw 'Windows system root is unavailable.'
+}
+$tarPath = Join-Path $windowsRoot 'System32\tar.exe'
+if (-not (Test-Path -LiteralPath $tarPath -PathType Leaf)) {
+    throw "Windows system tar is unavailable: $tarPath"
+}
+& $tarPath -czf $artifactPath -C $payloadPath .
 if ($LASTEXITCODE -ne 0) {
     throw 'runtime archive creation failed.'
 }

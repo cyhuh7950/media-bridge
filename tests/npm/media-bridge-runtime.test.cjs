@@ -42,7 +42,10 @@ function createArtifact(root, { command = 'bin/media-bridge-runtime.exe', conten
   fs.rmSync(payload, { recursive: true, force: true });
   fs.mkdirSync(path.dirname(path.join(payload, command)), { recursive: true });
   fs.writeFileSync(path.join(payload, command), contents);
-  execFileSync(process.platform === 'win32' ? 'tar.exe' : 'tar', [
+  const tarCommand = process.platform === 'win32'
+    ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')
+    : 'tar';
+  execFileSync(tarCommand, [
     '-czf', archive, '-C', payload, '.',
   ]);
   return {
@@ -51,6 +54,37 @@ function createArtifact(root, { command = 'bin/media-bridge-runtime.exe', conten
     sha256: crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex'),
   };
 }
+
+test('runtime install succeeds when Git GNU tar precedes Windows system tar on PATH', {
+  skip: process.platform !== 'win32',
+}, async (context) => {
+  const gitTarDirectory = 'C:\\Program Files\\Git\\usr\\bin';
+  if (!fs.existsSync(path.join(gitTarDirectory, 'tar.exe'))) {
+    context.skip('Git for Windows GNU tar is unavailable');
+    return;
+  }
+  const root = path.join(testRoot, 'media-bridge-runtime-gnu-tar-path');
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.mkdirSync(root, { recursive: true });
+  const fixture = createArtifact(root);
+  const server = await serveArtifact(fixture.bytes);
+  const originalPath = process.env.Path;
+  try {
+    process.env.Path = `${gitTarDirectory};${originalPath || ''}`;
+    const manifestPath = writeManifest(root, { url: server.url, sha256: fixture.sha256 });
+    const result = await resolveRuntime({
+      homeDir: path.join(root, 'home'),
+      env: { MEDIA_BRIDGE_RUNTIME_MANIFEST: manifestPath },
+      platform: 'win32',
+      arch: 'x64',
+    });
+    assert.equal(fs.readFileSync(result.command, 'utf8'), 'runtime-v1');
+  } finally {
+    process.env.Path = originalPath;
+    await server.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 async function serveArtifact(bytes) {
   let requests = 0;
