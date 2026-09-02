@@ -1,0 +1,62 @@
+name: Build win32-x64 runtime artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Runtime version in x.y.z format
+        required: true
+        default: 0.1.0
+
+permissions:
+  contents: read
+
+jobs:
+  build-runtime:
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: x64
+
+      - name: Create isolated build environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $venv = Join-Path $env:RUNNER_TEMP 'media-bridge-runtime-venv'
+          python -m venv $venv
+          & (Join-Path $venv 'Scripts\python.exe') -m pip install -r packaging/runtime/requirements-build.lock
+          & (Join-Path $venv 'Scripts\python.exe') -m pip install .
+          "RUNTIME_BUILD_PYTHON=$(Join-Path $venv 'Scripts\python.exe')" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build private workflow artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $output = Join-Path $env:RUNNER_TEMP 'media-bridge-runtime-output'
+          $work = Join-Path $env:RUNNER_TEMP 'media-bridge-runtime-work'
+          ./packaging/runtime/build-win32-x64.ps1 `
+            -Python $env:RUNTIME_BUILD_PYTHON `
+            -Version '${{ inputs.version }}' `
+            -OutputDirectory $output `
+            -WorkDirectory $work `
+            -BaseUrl 'http://127.0.0.1:18080'
+          "RUNTIME_OUTPUT=$output" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Run artifact contract tests
+        shell: pwsh
+        run: |
+          python -m pip install -e . --no-deps
+          python -m pytest tests/packaging/test_runtime_artifact_contract.py -q
+
+      - name: Retain private workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-bridge-runtime-win32-x64-${{ github.sha }}
+          path: ${{ env.RUNTIME_OUTPUT }}/*
+          if-no-files-found: error
