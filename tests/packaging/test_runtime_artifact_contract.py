@@ -66,6 +66,52 @@ def test_runtime_build_script_rejects_invalid_version_before_build(tmp_path: Pat
     assert list(tmp_path.iterdir()) == []
 
 
+def test_runtime_build_rejects_conda_python_before_pyinstaller(tmp_path: Path) -> None:
+    if sys.platform != "win32":
+        return
+
+    probe_state = tmp_path / "probe-state.txt"
+    pyinstaller_marker = tmp_path / "pyinstaller-invoked.txt"
+    fake_python = tmp_path / "fake-conda-python.cmd"
+    fake_python.write_text(
+        f"""@echo off
+if not "%~1"=="-c" goto pyinstaller
+if exist "{probe_state}" goto conda
+>"{probe_state}" echo architecture-checked
+exit /b 0
+:conda
+exit /b 86
+:pyinstaller
+>"{pyinstaller_marker}" echo invoked
+exit /b 0
+""",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(  # noqa: S603 - fixed local PowerShell test command
+        [  # noqa: S607 - pwsh is intentionally resolved from the test environment
+            "pwsh", "-NoProfile", "-File", str(BUILD_SCRIPT),
+            "-Python", str(fake_python),
+            "-Version", "0.1.0",
+            "-OutputDirectory", str(tmp_path / "output"),
+            "-WorkDirectory", str(tmp_path / "work"),
+            "-BaseUrl", "http://127.0.0.1:18080",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    combined_output = f"{result.stdout}\n{result.stderr}"
+    assert result.returncode != 0
+    assert "official CPython" in combined_output
+    assert not pyinstaller_marker.exists()
+    assert not (tmp_path / "output").exists()
+    assert not (tmp_path / "work").exists()
+
+
 def test_runtime_workflow_builds_without_public_release_commands() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 

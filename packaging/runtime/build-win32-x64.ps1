@@ -38,6 +38,14 @@ if (-not (Test-Path -LiteralPath $pythonPath -PathType Leaf)) {
 if ($LASTEXITCODE -ne 0) {
     throw 'win32-x64 runtime requires 64-bit Windows Python.'
 }
+& $pythonPath -c "import pathlib, sys; raise SystemExit(86 if (pathlib.Path(sys.base_prefix) / 'conda-meta').is_dir() else 0)"
+$pythonDistributionExitCode = $LASTEXITCODE
+if ($pythonDistributionExitCode -eq 86) {
+    throw 'win32-x64 runtime builds require official CPython; Conda distributions are unsupported.'
+}
+if ($pythonDistributionExitCode -ne 0) {
+    throw 'Unable to verify the Python distribution for the win32-x64 runtime build.'
+}
 
 $outputPath = [System.IO.Path]::GetFullPath($OutputDirectory)
 $workPath = [System.IO.Path]::GetFullPath($WorkDirectory)
