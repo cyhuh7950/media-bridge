@@ -61,6 +61,63 @@ test('lifecycle refuses to kill a live process when recorded ownership does not 
   }
 });
 
+for (const platform of ['win32', 'linux']) {
+  test(`stop refuses a mismatched ${platform} process without invoking kill`, async () => {
+    const homeDir = home(`synthetic-stop-${platform}`);
+    const pid = platform === 'win32' ? 41001 : 41002;
+    fs.mkdirSync(path.join(homeDir, '.media-bridge'), { recursive: true });
+    fs.writeFileSync(processApi.statePath(homeDir), JSON.stringify({
+      pid,
+      command: platform === 'win32' ? 'C:\\Runtime\\python.exe' : '/opt/runtime/bin/python',
+      identity: {
+        executable: platform === 'win32' ? 'C:\\Runtime\\python.exe' : '/opt/runtime/bin/python',
+        startMarker: `${platform}:recorded-start`,
+      },
+    }));
+    let killCalls = 0;
+    const result = await processApi.stopProcess({
+      homeDir,
+      platform,
+      isAliveImpl: () => true,
+      inspectIdentity: () => ({
+        executable: platform === 'win32' ? 'C:\\Runtime\\python.exe' : '/opt/runtime/bin/python',
+        startMarker: `${platform}:different-start`,
+      }),
+      killImpl: () => { killCalls += 1; },
+    });
+    assert.equal(result.ownershipMismatch, true);
+    assert.equal(killCalls, 0);
+    assert.equal(fs.existsSync(processApi.statePath(homeDir)), false);
+    fs.rmSync(homeDir, { recursive: true, force: true });
+  });
+
+  test(`status rejects a mismatched ${platform} process and removes its state`, () => {
+    const homeDir = home(`synthetic-status-${platform}`);
+    const pid = platform === 'win32' ? 42001 : 42002;
+    fs.mkdirSync(path.join(homeDir, '.media-bridge'), { recursive: true });
+    fs.writeFileSync(processApi.statePath(homeDir), JSON.stringify({
+      pid,
+      command: platform === 'win32' ? 'C:\\Runtime\\python.exe' : '/opt/runtime/bin/python',
+      identity: {
+        executable: platform === 'win32' ? 'C:\\Runtime\\python.exe' : '/opt/runtime/bin/python',
+        startMarker: `${platform}:recorded-start`,
+      },
+    }));
+    const result = processApi.readStatus({
+      homeDir,
+      platform,
+      isAliveImpl: () => true,
+      inspectIdentity: () => ({
+        executable: platform === 'win32' ? 'C:\\Runtime\\python.exe' : '/opt/runtime/bin/python',
+        startMarker: `${platform}:different-start`,
+      }),
+    });
+    assert.deepEqual(result, { running: false, ownershipMismatch: true });
+    assert.equal(fs.existsSync(processApi.statePath(homeDir)), false);
+    fs.rmSync(homeDir, { recursive: true, force: true });
+  });
+}
+
 test('lifecycle removes stale state without killing an unrelated process', async () => {
   const homeDir = home('stale');
   fs.mkdirSync(path.join(homeDir, '.media-bridge'), { recursive: true });

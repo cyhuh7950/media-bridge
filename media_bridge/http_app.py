@@ -33,6 +33,9 @@ class BearerTenantMiddleware:
         if scope["type"] != "http":
             await self._app(scope, receive, send)
             return
+        if scope.get("path") == "/health":
+            await self._app(scope, receive, send)
+            return
         headers = {
             key.decode("latin-1").lower(): value.decode("latin-1")
             for key, value in scope.get("headers", [])
@@ -82,6 +85,9 @@ def build_http_app(
             },
             status_code=status_code,
         )
+
+    async def health(_request: Request) -> JSONResponse:
+        return JSONResponse({"status": "ok"})
 
     async def upload_asset(request: Request) -> JSONResponse:
         body = bytearray()
@@ -149,7 +155,10 @@ def build_http_app(
         stateless_http=True,
         max_request_body_size=4 * 1024 * 1024,
     )
-    routes: list[Route | Mount] = [Route("/assets", upload_asset, methods=["POST"])]
+    routes: list[Route | Mount] = [
+        Route("/health", health, methods=["GET"]),
+        Route("/assets", upload_asset, methods=["POST"]),
+    ]
     if responses_gateway is not None:
         routes.append(Route("/v1/responses", responses, methods=["POST"]))
     routes.append(Mount("/", app=mcp_app))

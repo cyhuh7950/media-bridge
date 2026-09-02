@@ -123,29 +123,40 @@ async function startProcess({ config, runtime, homeDir = os.homedir(), portOverr
   }
 }
 
-async function stopProcess({ homeDir = os.homedir() } = {}) {
+async function stopProcess({
+  homeDir = os.homedir(),
+  platform = process.platform,
+  isAliveImpl = isAlive,
+  inspectIdentity = inspectProcessIdentity,
+  killImpl = process.kill,
+} = {}) {
   const state = readState(homeDir);
   if (!state) return { running: false };
-  if (isAlive(state.pid)) {
-    const currentIdentity = inspectProcessIdentity(state.pid);
-    if (!identityMatches(state.identity, currentIdentity)) {
+  if (isAliveImpl(state.pid)) {
+    const currentIdentity = inspectIdentity(state.pid, platform);
+    if (!identityMatches(state.identity, currentIdentity, platform)) {
       await fsp.rm(statePath(homeDir), { force: true });
       return { running: false, pid: state.pid, ownershipMismatch: true };
     }
-    try { process.kill(state.pid); } catch { /* process exited between checks */ }
+    try { killImpl(state.pid); } catch { /* process exited between checks */ }
   }
   await fsp.rm(statePath(homeDir), { force: true });
   return { running: false, pid: state.pid };
 }
 
-function readStatus({ homeDir = os.homedir() } = {}) {
+function readStatus({
+  homeDir = os.homedir(),
+  platform = process.platform,
+  isAliveImpl = isAlive,
+  inspectIdentity = inspectProcessIdentity,
+} = {}) {
   const state = readState(homeDir);
   if (!state) return { running: false };
-  const running = isAlive(state.pid);
+  const running = isAliveImpl(state.pid);
   if (!running) fs.rmSync(statePath(homeDir), { force: true });
   if (!running) return { running: false };
-  const currentIdentity = inspectProcessIdentity(state.pid);
-  if (!identityMatches(state.identity, currentIdentity)) {
+  const currentIdentity = inspectIdentity(state.pid, platform);
+  if (!identityMatches(state.identity, currentIdentity, platform)) {
     fs.rmSync(statePath(homeDir), { force: true });
     return { running: false, ownershipMismatch: true };
   }
