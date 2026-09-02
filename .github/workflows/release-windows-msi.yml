@@ -1,0 +1,69 @@
+name: Build Windows MSI
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  msi:
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Build Windows payload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}'.TrimStart('v') } else { '0.0.0' }
+          New-Item -ItemType Directory -Force -Path build\payload\app, build\payload\runtime | Out-Null
+          python -m venv build\payload\runtime
+          build\payload\runtime\Scripts\python.exe -m pip install --upgrade pip
+          build\payload\runtime\Scripts\pip.exe install -r requirements.lock
+          build\payload\runtime\Scripts\pip.exe install -e . --no-deps
+          Copy-Item media_bridge build\payload\app -Recurse
+          Copy-Item packaging\windows\MediaBridge.cmd build\payload\MediaBridge.cmd
+          Set-Content build\payload\version.txt $version
+
+      - name: Install WiX
+        shell: pwsh
+        run: dotnet tool install --global wix --version 5.0.2
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = Get-Content build\payload\version.txt
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          wix build packaging\windows\MediaBridge.wxs `
+            -d ProductVersion=$version `
+            -d PayloadDir="$((Resolve-Path build\payload).Path)" `
+            -o "dist\Media-Bridge-$version-x64.msi"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-bridge-msi-${{ github.sha }}
+          path: dist/*.msi
+
+      - name: Publish tagged QA MSI
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = '${{ github.ref_name }}'
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) { gh release create $tag --title "Media Bridge $tag" --generate-notes }
+          gh release upload $tag dist\*.msi --clobber

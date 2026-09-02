@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "packageVersion": "0.1.0",
+  "artifacts": {
+    "win32-x64": {
+      "version": "0.1.0",
+      "published": false,
+      "url": null,
+      "sha256": null,
+      "archive": "tar.gz",
+      "command": "bin/media-bridge-runtime.exe",
+      "python": false
+    }
+  }
+}

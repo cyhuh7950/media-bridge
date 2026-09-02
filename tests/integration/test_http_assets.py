@@ -15,6 +15,26 @@ class UnusedService:
 
 
 @pytest.mark.asyncio
+async def test_http_health_is_available_without_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("MEDIA_BRIDGE_SERVICE_TOKEN", "service-secret")
+    store = AssetStore(tmp_path / "assets", max_bytes=16)
+    server = build_mcp_server(UnusedService(), tenant_provider=lambda: "tenant-a")
+    app = build_http_app(server=server, asset_store=store, max_upload_bytes=16)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+@pytest.mark.asyncio
 async def test_http_upload_requires_bearer_and_tenant(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

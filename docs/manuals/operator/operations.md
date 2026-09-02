@@ -1,6 +1,25 @@
-# Media Bridge 운영자 매뉴얼
+# Media Bridge 관리 매뉴얼
 
-운영자는 DB→Control→onboarding/snapshot→Data 순서를 지킨다. Control 중단 중 Data는 마지막 정상 signed
-snapshot으로 계속 ready일 수 있지만 새 policy나 revoke는 반영되지 않으므로 outage를 장기 정상 상태로
-간주하지 않는다. health, audit, volume 여유, snapshot version을 관찰하고 실제 provider body나 media를
-운영 로그에 저장하지 않는다.
+## 시작·중지
+
+```bash
+systemctl --user enable --now media-bridge-web.service media-bridge-data.service
+systemctl --user stop media-bridge-web.service media-bridge-data.service
+systemctl --user restart media-bridge-web.service media-bridge-data.service
+```
+
+## 상태 확인
+
+```bash
+systemctl --user --no-pager status media-bridge-web.service media-bridge-data.service
+curl --fail http://127.0.0.1:8765/
+curl --fail http://127.0.0.1:8766/status
+```
+
+## 로그 확인
+
+```bash
+journalctl --user -u media-bridge-web.service -u media-bridge-data.service --since "10 minutes ago" --no-pager
+```
+
+설정은 Web 화면에서 변경합니다. key 원문, 화면 원문, 요청 본문을 로그나 문서에 복사하지 않습니다.

@@ -1,0 +1,76 @@
+name: Build Linux package
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to build, for example 0.1.0'
+        required: true
+        default: '0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install -r requirements.lock
+          .venv/bin/pip install -e . --no-deps
+
+      - name: Run product checks
+        shell: bash
+        run: |
+          .venv/bin/pytest -q tests/unit tests/security tests/contracts_v2 tests/adapters tests/interop_v2 tests/gateway tests/integration tests/conformance tests/packaging --ignore=tests/packaging/test_a1_staging_config.py
+          .venv/bin/ruff check media_bridge media_bridge_control migrations tests
+          .venv/bin/mypy media_bridge media_bridge_control
+
+      - name: Build and inspect Debian package
+        shell: bash
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="0.0.0+${GITHUB_SHA::12}"
+          fi
+          mkdir -p dist
+          DEB="dist/media-bridge_${VERSION}_amd64.deb"
+          bash packaging/deb/build.sh "$PWD" "$DEB" "$VERSION"
+          dpkg-deb --info "$DEB"
+          dpkg-deb --contents "$DEB" > /dev/null
+          (cd dist && sha256sum "$(basename "$DEB")" > "$(basename "$DEB").sha256")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Publish tagged release
+        if: github.ref_type == 'tag' || inputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="v${VERSION}"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Media Bridge $TAG" --generate-notes
+          gh release upload "$TAG" dist/media-bridge_*.deb dist/media-bridge_*.deb.sha256 --clobber
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-bridge-deb-${{ github.sha }}
+          path: dist/media-bridge_*

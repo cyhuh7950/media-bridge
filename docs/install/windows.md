@@ -1,31 +1,46 @@
-# Windows 설치 안내
+# Windows에서 Media Bridge 설치·중지·제거
 
-이 문서는 개인용 Media Bridge Windows 설치 경계를 정의한다. 공식 배포물은 신뢰 가능한
-Authenticode 인증서와 RFC3161 timestamp가 있는 WiX per-user MSI여야 한다. 서명이 없는
-내부 산출물은 `QA/UNSIGNED`로만 취급하며 일반 사용자 설치나 제품 완료 증거로 승격하지 않는다.
+일반 사용자의 Windows 설치 경로는 npm CLI입니다. MSI는 현재 내부 QA·복구용
+artifact이며, 이 문서는 MSI에 웹 화면·트레이·시작 메뉴가 있다고 가정하지 않습니다.
 
-## 설치 전 확인
+## 1. 설치
 
-- 기존 Codex Desktop/OpenCodex 설정과 profile의 hash를 보존한다.
-- Media Bridge가 사용할 사용자 profile과 loopback 포트를 확인한다.
-- API key 원문을 파일·명령행·로그에 넣지 않고 환경변수 또는 OS credential reference만 준비한다.
-- Docker, PostgreSQL, Redis, Python, Node를 별도로 설치하지 않는다.
+```powershell
+npm install -g @bitkyc08/media-bridge
+mb init
+```
 
-## 설치와 첫 실행
+현재 npm registry 공개와 Windows runtime artifact가 준비되지 않았다면 이 명령은
+외부 설치 PASS가 아닙니다. 그 경우 Python, Docker 또는 MSI를 사용자 우회 경로로
+요구하지 말고 release 준비 상태를 확인합니다.
 
-서명된 release MSI를 받으면 서명·checksum·출처를 확인한 뒤 per-user 설치를 실행한다. 설치
-후 Media Bridge Web UI가 `127.0.0.1`에서 열리고, 첫 실행 화면에서 OpenCodex 감지, Solar
-model ID/endpoint, credential reference와 안전한 기본 rate(2,000 RPM / 750,000 TPM)를
-확인한다. 설정 저장 전 preview와 backup/hash가 표시되어야 한다.
+## 2. 최초 설정
 
-## QA/UNSIGNED 경계
+`mb init`에서 OpenCodex 주소, Media Bridge 포트(기본 `8765`), Solar 모델·HTTPS
+endpoint·Secret 참조, OCR/Vision 변환 기본값과 변환 실패 시 Solar 전송 차단 정책을
+입력합니다. Secret 원문은 저장하지 않습니다.
 
-unsigned MSI 또는 압축된 실행 파일은 자동 설치·제거와 설정 rollback 시험에만 사용한다.
-현재 저장소에는 Windows MSI build/signing 및 실제 Windows UAT 증거가 없다. 이 문서는 신산님
-UAT 인계 후 `docs/manuals/user/windows-uat-checklist.md`의 절차를 그대로 수행한다.
+## 3. 시작·상태·중지
 
-## 제거와 복구
+```powershell
+mb start
+mb status
+mb health --json
+mb service restart
+mb stop
+```
 
-제거 전 보존할 local state를 선택한다. Media Bridge가 소유한 marker block만 rollback하고,
-소유하지 않은 Codex Desktop/OpenCodex 설정은 삭제하지 않는다. 설치 실패 또는 중단 시 이전
-binary/config snapshot으로 복구하고 Web UI·process·loopback listener가 남지 않는지 확인한다.
+`mb gui`는 현재 설정된 주소를 출력합니다. 현재 CLI에는 트레이 아이콘, 시작 메뉴
+바로가기 또는 별도 `8766/status` 웹 화면이 없습니다.
+
+## 4. 제거
+
+```powershell
+mb service uninstall
+npm uninstall -g @bitkyc08/media-bridge
+```
+
+CLI 설정까지 삭제할 때는 `mb uninstall`을 사용합니다.
+
+MSI를 내부 복구 목적으로 사용하는 경우에도 이 문서의 CLI 사용자 경험과 혼동하지
+않으며, MSI의 실제 payload·runtime·실행 경로를 별도 운영 기록으로 남깁니다.

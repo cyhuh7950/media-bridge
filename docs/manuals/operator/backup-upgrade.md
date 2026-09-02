@@ -1,14 +1,34 @@
-# Media Bridge backup과 upgrade 운영
+# Media Bridge 업데이트·복구
 
-backup은 verify 성공 전 사용하지 않고 별도 빈 DB restore drill로 복구 가능성을 확인한다. upgrade 전
-현재 schema, target support, image digest, rollback image 보존을 점검한다. application rollback은 동일
-schema에서만 기본 지원하며 DB downgrade는 지원 pair가 없으면 차단한다. 운영 migration과 무중단
-upgrade는 아직 검증되지 않았다.
+## 업데이트 전
 
-## 개인용 package update/rollback 경계
+현재 사용 중인 package와 이전 package 파일을 함께 보관합니다. Web 설정값은 local state에 저장됩니다.
 
-업데이트 전에는 현재 package checksum과 사용자 상태 디렉터리를 별도 백업하고, 새 package의
-서명/체크섬을 확인한 뒤 적용한다. 설치 중단·health 실패 시 이전 package와 상태 snapshot을
-복원한다. 소유하지 않은 OpenCodex 설정 block은 삭제하거나 덮어쓰지 않는다. 현재 커밋의
-`.deb`는 QA/UNSIGNED build script와 smoke evidence만 제공하며, 자동 update/rollback과
-공식 signing은 아직 미검증이다.
+```bash
+systemctl --user stop media-bridge-web.service media-bridge-data.service
+```
+
+## 업데이트
+
+```bash
+cd "$HOME/Downloads/media-bridge-0.1.0"
+sudo dpkg -i ./media-bridge_0.1.0_amd64.deb
+systemctl --user daemon-reload
+systemctl --user start media-bridge-web.service media-bridge-data.service
+```
+
+Web 화면을 새로 열어 기존 설정을 확인합니다.
+
+## 복구
+
+문제가 생기면 service를 중지하고 이전 package를 다시 설치합니다.
+
+```bash
+systemctl --user stop media-bridge-web.service media-bridge-data.service
+cd "$HOME/Downloads/media-bridge-0.1.0"
+sudo dpkg -i ./media-bridge_0.1.0_amd64.deb
+systemctl --user daemon-reload
+systemctl --user start media-bridge-web.service media-bridge-data.service
+```
+
+복구 후 Web 설정과 `http://127.0.0.1:8766/status`를 확인합니다.
