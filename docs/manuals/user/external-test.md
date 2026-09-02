@@ -29,7 +29,12 @@ mb ready --wait --timeout 30
 mb gui
 ```
 
-runtime artifact가 없거나 checksum 검증에 실패하면 `mb start`가 중단되어야 합니다.
+지원 플랫폼의 첫 `mb start`는 npm package에 포함된 manifest를 기준으로 runtime artifact를 자동으로
+선택·다운로드하고 SHA-256을 검증합니다. 사용자가 runtime URL, checksum 또는 Python 경로를 입력하지
+않아야 합니다. 설치된 runtime의 플랫폼·version·SHA-256이 공개 release manifest와 일치하는지 기록합니다.
+
+runtime artifact가 없거나 checksum 검증에 실패하면 `mb start`가 중단되어야 하며, 기존에 검증된
+runtime이 있으면 그대로 보존되어야 합니다.
 이 경우 테스트를 PASS로 기록하지 말고 runtime release 부족으로 기록합니다.
 
 ## 종료와 정리
@@ -51,6 +56,7 @@ npm uninstall -g @bitkyc08/media-bridge
 - 운영체제·아키텍처
 - `mb init`, `start`, `status`, `health`, `ready`, `stop` 결과
 - runtime artifact 이름과 SHA-256
+- 실제 실행 command가 관리 runtime인지와 Python 직접 호출 여부
 - 실제 OpenCodex/Solar 호출 여부
 - 실패 원인과 재현 명령
 

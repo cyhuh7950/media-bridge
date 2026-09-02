@@ -10,6 +10,9 @@ mb health --json
 runtime artifact가 없다는 오류가 나오면 현재 플랫폼용 runtime release가 없는
 것입니다. Python, Docker 또는 `.deb`를 직접 설치하는 것으로 우회하지 않습니다.
 
+checksum 또는 압축 해제 오류가 나오면 `mb start`를 반복하거나 다른 `tar.exe`를 PATH에 추가하지
+말고 오류 문구, OS·아키텍처, npm package version을 기록합니다. 기존 검증 runtime은 보존됩니다.
+
 ## 설정이 적용되지 않음
 
 ```bash

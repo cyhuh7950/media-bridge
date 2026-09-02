@@ -28,7 +28,11 @@ mb health --json
 mb gui
 ```
 
-관리된 runtime artifact가 없는 플랫폼에서는 Python이나 `.deb`를 직접 설치하지 말고
+첫 `mb start`는 현재 OS·아키텍처에 맞는 관리 runtime을 자동으로 선택하고 다운로드한 뒤
+SHA-256과 실행 파일을 검증합니다. URL, checksum 또는 Python 경로를 사용자가 입력하지 않습니다.
+검증이 끝나기 전에는 기존 runtime을 교체하지 않으며, 실패하면 시작을 중단합니다.
+
+관리된 runtime artifact가 공개되지 않은 플랫폼에서는 Python이나 `.deb`를 직접 설치하지 말고
 설치 불가 사유를 확인합니다.
 
 ## lifecycle
