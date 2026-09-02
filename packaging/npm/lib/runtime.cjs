@@ -7,6 +7,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 
 const execFileAsync = promisify(execFile);
+const defaultManifestPath = path.join(__dirname, '..', 'runtime-manifest.json');
 
 function platformKey(platform = process.platform, arch = process.arch) {
   const supported = new Set(['linux-x64', 'linux-arm64', 'win32-x64', 'darwin-x64', 'darwin-arm64']);
@@ -27,6 +28,48 @@ function isAllowedArtifactUrl(raw) {
   let parsed;
   try { parsed = new URL(raw); } catch { return false; }
   return parsed.protocol === 'https:' || (parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname));
+}
+
+function loadRuntimeManifest({ manifestPath = defaultManifestPath, packageVersion } = {}) {
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch (error) {
+    throw new Error(`runtime manifest is unavailable or invalid: ${error.message}`);
+  }
+  if (manifest?.schemaVersion !== 1) throw new Error('runtime manifest schema is unsupported');
+  if (packageVersion && manifest.packageVersion !== packageVersion) {
+    throw new Error('runtime manifest package version does not match the npm package');
+  }
+  if (!manifest.artifacts || typeof manifest.artifacts !== 'object') {
+    throw new Error('runtime manifest artifacts are missing');
+  }
+  return manifest;
+}
+
+function isSafeRelativeCommand(command) {
+  if (typeof command !== 'string' || command.length === 0) return false;
+  if (path.posix.isAbsolute(command) || path.win32.isAbsolute(command)) return false;
+  const segments = command.replaceAll('\\', '/').split('/');
+  return !segments.includes('..') && !segments.includes('') && !segments.includes('.');
+}
+
+function selectArtifact({ manifest, packageVersion, platform = process.platform, arch = process.arch }) {
+  if (manifest?.schemaVersion !== 1) throw new Error('runtime manifest schema is unsupported');
+  if (packageVersion && manifest.packageVersion !== packageVersion) {
+    throw new Error('runtime manifest package version does not match the npm package');
+  }
+  const key = platformKey(platform, arch);
+  const artifact = manifest?.artifacts?.[key];
+  if (!artifact) throw new Error(`runtime artifact is not available for ${key}`);
+  if (!artifact.published) throw new Error(`runtime artifact is not published for ${key}`);
+  if (artifact.version !== manifest.packageVersion) throw new Error('runtime artifact version does not match manifest');
+  if (!isAllowedArtifactUrl(artifact.url)) throw new Error('runtime artifact URL must use HTTPS or loopback HTTP');
+  if (!/^[a-f0-9]{64}$/i.test(artifact.sha256 || '')) throw new Error('runtime artifact SHA-256 is required');
+  if (artifact.archive !== 'tar.gz') throw new Error('runtime artifact archive must be tar.gz');
+  if (!isSafeRelativeCommand(artifact.command)) throw new Error('runtime artifact command must be a safe relative path');
+  if (typeof artifact.python !== 'boolean') throw new Error('runtime artifact python mode is required');
+  return { key, ...artifact };
 }
 
 async function downloadArtifact(url, destination) {
@@ -93,7 +136,9 @@ async function resolveRuntime({ homeDir = os.homedir(), env = process.env, platf
 }
 
 module.exports = {
+  loadRuntimeManifest,
   platformKey,
   resolveRuntime,
   runtimeDir,
+  selectArtifact,
 };

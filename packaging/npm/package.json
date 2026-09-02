@@ -6,7 +6,7 @@
     "media-bridge": "bin/mb.cjs",
     "mb": "bin/mb.cjs"
   },
-  "files": ["bin", "lib", "README.md"],
+  "files": ["bin", "lib", "README.md", "runtime-manifest.json"],
   "engines": {
     "node": ">=18"
   },
