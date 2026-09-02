@@ -1,23 +1,23 @@
 # Media Bridge 문제 해결
 
-## Web이 열리지 않음
+## Media Bridge가 시작되지 않음
 
 ```bash
-systemctl --user restart media-bridge-web.service
-systemctl --user --no-pager status media-bridge-web.service
+mb status
+mb health --json
 ```
 
-주소는 `http://127.0.0.1:8765/`인지 확인합니다.
+runtime artifact가 없다는 오류가 나오면 현재 플랫폼용 runtime release가 없는
+것입니다. Python, Docker 또는 `.deb`를 직접 설치하는 것으로 우회하지 않습니다.
 
-## Data 상태가 정상적이지 않음
+## 설정이 적용되지 않음
 
 ```bash
-systemctl --user restart media-bridge-data.service
-systemctl --user --no-pager status media-bridge-data.service
-curl http://127.0.0.1:8766/status
+mb init
+mb status --json
 ```
 
-최초 설정이 저장되지 않았거나 유효한 snapshot이 없으면 요청이 차단될 수 있습니다.
+설정은 `$HOME/.media-bridge/config.json`에 저장됩니다.
 
 ## 설정 저장 실패
 
@@ -32,7 +32,8 @@ endpoint에 사용자명·비밀번호·query를 넣지 않습니다. model ID�
 ## 로그 확인
 
 ```bash
-journalctl --user -u media-bridge-web.service -u media-bridge-data.service --since "10 minutes ago" --no-pager
+mb status --json
+mb health --json
 ```
 
 로그와 오류 보고에는 key 원문, 화면 원문, OCR 원문을 넣지 않습니다.

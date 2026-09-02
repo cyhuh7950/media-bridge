@@ -2,9 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const cli = path.resolve(__dirname, '../../packaging/npm/bin/mb.cjs');
+const testRoot = process.env.MEDIA_BRIDGE_TEST_TMP || os.tmpdir();
 
 test('mb help exposes the user install command surface', () => {
   const result = spawnSync(process.execPath, [cli, 'help'], { encoding: 'utf8' });
@@ -17,7 +19,7 @@ test('mb help exposes the user install command surface', () => {
 });
 
 test('mb init creates a local configuration without requiring a provider secret', () => {
-  const tempHome = path.join(__dirname, '../../.tmp-npm-cli-home');
+  const tempHome = path.join(testRoot, 'media-bridge-npm-cli-home');
   fs.rmSync(tempHome, { recursive: true, force: true });
   const result = spawnSync(process.execPath, [cli, 'init'], {
     encoding: 'utf8',
@@ -34,7 +36,7 @@ test('mb init creates a local configuration without requiring a provider secret'
 });
 
 test('mb service install and uninstall manage only the Media Bridge service marker', () => {
-  const tempHome = path.join(__dirname, '../../.tmp-npm-cli-service-home');
+  const tempHome = path.join(testRoot, 'media-bridge-npm-cli-service-home');
   fs.rmSync(tempHome, { recursive: true, force: true });
   const env = { ...process.env, HOME: tempHome, USERPROFILE: tempHome };
   const run = (command) => spawnSync(process.execPath, [cli, ...command], { encoding: 'utf8', env });
@@ -53,4 +55,10 @@ test('mb service install and uninstall manage only the Media Bridge service mark
   assert.match(uninstall.stdout, /uninstalled/i);
   assert.equal(fs.existsSync(path.join(tempHome, '.media-bridge', 'service.json')), false);
   fs.rmSync(tempHome, { recursive: true, force: true });
+});
+
+test('mb update prints the installed public package name', () => {
+  const result = spawnSync(process.execPath, [cli, 'update'], { encoding: 'utf8' });
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, 'npm update -g @bitkyc08/media-bridge 를 실행하십시오.\n');
 });

@@ -180,7 +180,7 @@ async function main(argv) {
     return service(rest[0]);
   }
   if (command === 'update') {
-    process.stdout.write('npm update -g @cyhuh/media-bridge 를 실행하십시오.\n');
+    process.stdout.write('npm update -g @bitkyc08/media-bridge 를 실행하십시오.\n');
     return;
   }
   if (command === 'uninstall') {
