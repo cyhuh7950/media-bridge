@@ -20,12 +20,12 @@ const {
 function publishedManifest(overrides = {}) {
   return {
     schemaVersion: 1,
-    packageVersion: '0.1.0',
+    packageVersion: '0.1.2',
     artifacts: {
       'win32-x64': {
-        version: '0.1.0',
+        version: '0.1.2',
         published: true,
-        url: 'http://127.0.0.1:18080/media-bridge-runtime-0.1.0-win32-x64.tar.gz',
+        url: 'http://127.0.0.1:18080/media-bridge-runtime-0.1.2-win32-x64.tar.gz',
         sha256: 'a'.repeat(64),
         archive: 'tar.gz',
         command: 'bin/media-bridge-runtime.exe',
@@ -42,6 +42,7 @@ function createArtifact(root, { command = 'bin/media-bridge-runtime.exe', conten
   fs.rmSync(payload, { recursive: true, force: true });
   fs.mkdirSync(path.dirname(path.join(payload, command)), { recursive: true });
   fs.writeFileSync(path.join(payload, command), contents);
+  fs.chmodSync(path.join(payload, command), 0o755);
   const tarCommand = process.platform === 'win32'
     ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')
     : 'tar';
@@ -128,14 +129,14 @@ test('npm package includes the runtime support modules', () => {
 test('manifest selects the exact published win32-x64 artifact', () => {
   assert.deepEqual(selectArtifact({
     manifest: publishedManifest(),
-    packageVersion: '0.1.0',
+    packageVersion: '0.1.2',
     platform: 'win32',
     arch: 'x64',
   }), {
     key: 'win32-x64',
-    version: '0.1.0',
+    version: '0.1.2',
     published: true,
-    url: 'http://127.0.0.1:18080/media-bridge-runtime-0.1.0-win32-x64.tar.gz',
+    url: 'http://127.0.0.1:18080/media-bridge-runtime-0.1.2-win32-x64.tar.gz',
     sha256: 'a'.repeat(64),
     archive: 'tar.gz',
     command: 'bin/media-bridge-runtime.exe',
@@ -149,35 +150,35 @@ test('manifest loader rejects schema and package version mismatches', () => {
   fs.mkdirSync(tempRoot, { recursive: true });
   const manifestPath = path.join(tempRoot, 'runtime-manifest.json');
   fs.writeFileSync(manifestPath, JSON.stringify({ ...publishedManifest(), schemaVersion: 2 }));
-  assert.throws(() => loadRuntimeManifest({ manifestPath, packageVersion: '0.1.0' }), /schema/i);
+  assert.throws(() => loadRuntimeManifest({ manifestPath, packageVersion: '0.1.2' }), /schema/i);
   fs.writeFileSync(manifestPath, JSON.stringify({ ...publishedManifest(), packageVersion: '0.2.0' }));
-  assert.throws(() => loadRuntimeManifest({ manifestPath, packageVersion: '0.1.0' }), /package.*version/i);
+  assert.throws(() => loadRuntimeManifest({ manifestPath, packageVersion: '0.1.2' }), /package.*version/i);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
 test('manifest fails closed for unpublished, missing, or unsafe artifacts', () => {
   assert.throws(() => selectArtifact({
     manifest: publishedManifest({ published: false, url: null, sha256: null }),
-    packageVersion: '0.1.0', platform: 'win32', arch: 'x64',
+    packageVersion: '0.1.2', platform: 'win32', arch: 'x64',
   }), /not published/i);
   assert.throws(() => selectArtifact({
-    manifest: publishedManifest(), packageVersion: '0.1.0', platform: 'linux', arch: 'x64',
+    manifest: publishedManifest(), packageVersion: '0.1.2', platform: 'linux', arch: 'x64',
   }), /not available/i);
   assert.throws(() => selectArtifact({
     manifest: publishedManifest({ sha256: 'bad' }),
-    packageVersion: '0.1.0', platform: 'win32', arch: 'x64',
+    packageVersion: '0.1.2', platform: 'win32', arch: 'x64',
   }), /sha-256/i);
   assert.throws(() => selectArtifact({
     manifest: publishedManifest({ command: '../escape.exe' }),
-    packageVersion: '0.1.0', platform: 'win32', arch: 'x64',
+    packageVersion: '0.1.2', platform: 'win32', arch: 'x64',
   }), /command/i);
   assert.throws(() => selectArtifact({
     manifest: publishedManifest({ command: 'C:\\escape.exe' }),
-    packageVersion: '0.1.0', platform: 'win32', arch: 'x64',
+    packageVersion: '0.1.2', platform: 'win32', arch: 'x64',
   }), /command/i);
   assert.throws(() => selectArtifact({
     manifest: publishedManifest({ archive: 'zip' }),
-    packageVersion: '0.1.0', platform: 'win32', arch: 'x64',
+    packageVersion: '0.1.2', platform: 'win32', arch: 'x64',
   }), /archive/i);
 });
 
@@ -198,7 +199,7 @@ test('runtime resolver fails closed when no managed artifact is available', asyn
   await assert.rejects(() => resolveRuntime({
     homeDir: tempHome,
     env: {},
-    platform: 'linux',
+    platform: 'win32',
     arch: 'x64',
   }), /runtime.*(available|artifact)|artifact.*(available|configured)/i);
   assert.equal(fs.existsSync(runtimeDir(tempHome)), false);
@@ -222,7 +223,7 @@ test('runtime resolver downloads the selected artifact and reuses verified metad
     )), {
       schemaVersion: 1,
       platform: 'win32-x64',
-      version: '0.1.0',
+      version: '0.1.2',
       sha256: fixture.sha256,
       command: 'bin/media-bridge-runtime.exe',
       python: false,

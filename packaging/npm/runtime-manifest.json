@@ -1,14 +1,23 @@
 {
   "schemaVersion": 1,
-  "packageVersion": "0.1.0",
+  "packageVersion": "0.1.2",
   "artifacts": {
     "win32-x64": {
-      "version": "0.1.0",
+      "version": "0.1.2",
       "published": false,
       "url": null,
       "sha256": null,
       "archive": "tar.gz",
       "command": "bin/media-bridge-runtime.exe",
+      "python": false
+    },
+    "linux-x64": {
+      "version": "0.1.2",
+      "published": true,
+      "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.2/media-bridge-runtime-0.1.2-linux-x64.tar.gz",
+      "sha256": "78bcc2bf1a962842c957c9dc9c239c3eb38ff599ef3e4eb3c20f042a6865dd6b",
+      "archive": "tar.gz",
+      "command": "bin/media-bridge-runtime",
       "python": false
     }
   }

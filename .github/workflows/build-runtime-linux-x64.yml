@@ -1,0 +1,64 @@
+name: Build linux-x64 runtime artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Runtime version in x.y.z format
+        required: true
+        default: 0.1.2
+
+permissions:
+  contents: read
+
+jobs:
+  build-runtime:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Create isolated build environment
+        run: |
+          python -m venv "$RUNNER_TEMP/media-bridge-runtime-venv"
+          "$RUNNER_TEMP/media-bridge-runtime-venv/bin/python" -m pip install -r packaging/runtime/requirements-build.lock
+          "$RUNNER_TEMP/media-bridge-runtime-venv/bin/python" -m pip install .
+          echo "RUNTIME_BUILD_PYTHON=$RUNNER_TEMP/media-bridge-runtime-venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Build private workflow artifact
+        run: |
+          packaging/runtime/build-linux-x64.sh \
+            --python "$RUNTIME_BUILD_PYTHON" \
+            --version '${{ inputs.version }}' \
+            --output-dir "$RUNNER_TEMP/media-bridge-runtime-output" \
+            --work-dir "$RUNNER_TEMP/media-bridge-runtime-work" \
+            --base-url 'http://127.0.0.1:18080'
+          echo "RUNTIME_OUTPUT=$RUNNER_TEMP/media-bridge-runtime-output" >> "$GITHUB_ENV"
+
+      - name: Run artifact contract tests
+        run: node --test tests/npm/media-bridge-linux-runtime-release.test.cjs
+
+      - name: Verify actual runtime artifact
+        run: |
+          packaging/runtime/verify-linux-x64.sh \
+            --artifact-dir "$RUNTIME_OUTPUT" \
+            --test-root "$RUNNER_TEMP/media-bridge-runtime-verification" \
+            --source-commit '${{ github.sha }}'
+
+      - name: Retain private workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-bridge-runtime-linux-x64-${{ github.sha }}
+          path: ${{ env.RUNTIME_OUTPUT }}/*
+          if-no-files-found: error
+          retention-days: 14

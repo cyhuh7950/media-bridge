@@ -4,17 +4,18 @@
 
 ## 공개 전 runtime artifact 독립 재검증
 
-공개 전 QA에서는 원격 `main`의 정확한 source commit에서
-`Build win32-x64 runtime artifact` workflow를 실행합니다. `gh` CLI는 사용하지 않으며 GitHub Actions
+공개 전 QA에서는 원격 `main`의 정확한 source commit에서 대상 플랫폼의
+`Build linux-x64 runtime artifact` 또는 `Build win32-x64 runtime artifact` workflow를 실행합니다.
+`gh` CLI는 사용하지 않으며 GitHub Actions
 화면에서 실행·다운로드합니다. 다운로드한 private workflow artifact에 다음 네 파일이 있어야 합니다.
 
-- `media-bridge-runtime-<version>-win32-x64.tar.gz`
+- `media-bridge-runtime-<version>-<platform>.tar.gz`
 - 동일 이름의 `.sha256`
 - `runtime-manifest.json`
 - `verification-result.json`
 
 `verification-result.json`의 `sourceCommit`이 시험 대상 commit과 같고, `sha256`이 archive 및 manifest와
-일치하며, `platform=win32-x64`, `python=false`, `pythonDirectCall=false`, `forbiddenEntries=0`,
+일치하며, 대상 `platform`, `python=false`, `pythonDirectCall=false`, `forbiddenEntries=0`,
 `healthStatus=200`, `managedInstall=true`, `checksumMismatchRejected=true`,
 `managedRollbackPreserved=true`인지 확인합니다. workflow가 실패하거나 이 증거가 없으면 실제 artifact E2E는
 `PASS`가 아니라 `FAIL` 또는 `NOT RUN`으로 기록합니다. 이 private artifact 검증은 npm registry 공개

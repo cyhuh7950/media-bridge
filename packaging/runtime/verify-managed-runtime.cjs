@@ -23,11 +23,12 @@ async function main() {
   const [artifactDirectoryArg, testRootArg] = process.argv.slice(2);
   const artifactDirectory = requireAbsolute(artifactDirectoryArg, 'ArtifactDirectory');
   const testRoot = requireAbsolute(testRootArg, 'TestRoot');
+  const platformKey = runtimeApi.platformKey();
   const manifestPath = path.join(artifactDirectory, 'runtime-manifest.json');
   const sourceManifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
   const archives = (await fsp.readdir(artifactDirectory))
-    .filter((name) => /^media-bridge-runtime-.+-win32-x64\.tar\.gz$/.test(name));
-  if (archives.length !== 1) throw new Error('expected exactly one win32-x64 runtime archive');
+    .filter((name) => name.startsWith('media-bridge-runtime-') && name.endsWith(`-${platformKey}.tar.gz`));
+  if (archives.length !== 1) throw new Error(`expected exactly one ${platformKey} runtime archive`);
   const artifactPath = path.join(artifactDirectory, archives[0]);
   const artifactSha = await sha256(artifactPath);
 
@@ -48,7 +49,7 @@ async function main() {
   try {
     const port = server.address().port;
     const validManifest = structuredClone(sourceManifest);
-    const validArtifact = validManifest.artifacts['win32-x64'];
+    const validArtifact = validManifest.artifacts[platformKey];
     validArtifact.url = `http://127.0.0.1:${port}/${archives[0]}`;
     validArtifact.sha256 = artifactSha;
     validArtifact.published = true;
@@ -57,8 +58,8 @@ async function main() {
     const runtime = await runtimeApi.resolveRuntime({
       homeDir,
       env: { MEDIA_BRIDGE_RUNTIME_MANIFEST: qaManifestPath },
-      platform: 'win32',
-      arch: 'x64',
+      platform: process.platform,
+      arch: process.arch,
     });
     if (runtime.python !== false) throw new Error('managed runtime unexpectedly requires Python');
     const installedShaBefore = await sha256(runtime.command);
@@ -66,7 +67,7 @@ async function main() {
     const verifiedBefore = await fsp.readFile(verifiedPath, 'utf8');
 
     const badManifest = structuredClone(validManifest);
-    badManifest.artifacts['win32-x64'].sha256 = '0'.repeat(64);
+    badManifest.artifacts[platformKey].sha256 = '0'.repeat(64);
     await fsp.writeFile(qaManifestPath, `${JSON.stringify(badManifest, null, 2)}\n`);
 
     let rollbackRejected = false;
@@ -74,8 +75,8 @@ async function main() {
       await runtimeApi.resolveRuntime({
         homeDir,
         env: { MEDIA_BRIDGE_RUNTIME_MANIFEST: qaManifestPath },
-        platform: 'win32',
-        arch: 'x64',
+        platform: process.platform,
+        arch: process.arch,
       });
     } catch (error) {
       rollbackRejected = String(error?.message || error).includes('checksum mismatch');
