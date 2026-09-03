@@ -39,6 +39,12 @@ mb gui
 mb stop
 mb service restart
 mb service uninstall
+mb uninstall
+npm uninstall -g @bitkyc08/media-bridge
 ```
+
+`mb service uninstall`은 service marker만 제거합니다. `mb uninstall`은 관리 runtime까지 제거하고
+설정은 기본적으로 보존하며, 마지막 npm 명령이 전역 CLI 패키지를 제거합니다. 설정도 삭제하려면
+`mb uninstall --delete-config`를 사용합니다.
 
 전체 명령과 설정 항목은 [npm CLI 사용법](npm-cli.md)을 참고합니다.

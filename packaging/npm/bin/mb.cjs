@@ -22,7 +22,7 @@ const serviceFile = path.join(configDir, 'service.json');
 const pidFile = path.join(configDir, 'service.pid');
 
 function help() {
-  process.stdout.write(`Media Bridge\n\nCommands:\n  media-bridge init\n  media-bridge start [--port 8765]\n  media-bridge stop\n  media-bridge status\n  media-bridge health [--json]\n  media-bridge ready [--json] [--wait] [--timeout <seconds>]\n  media-bridge gui\n  media-bridge service <install|repair|restart|start|stop|status|uninstall|remove>\n  media-bridge update\n  media-bridge uninstall\n\nCompatibility alias: mb\n`);
+  process.stdout.write(`Media Bridge\n\nCommands:\n  media-bridge init\n  media-bridge start [--port 8765]\n  media-bridge stop\n  media-bridge status\n  media-bridge health [--json]\n  media-bridge ready [--json] [--wait] [--timeout <seconds>]\n  media-bridge gui\n  media-bridge service <install|repair|restart|start|stop|status|uninstall|remove>\n  media-bridge update\n  media-bridge uninstall [--keep-config|--delete-config]\n\nCompatibility alias: mb\n`);
 }
 
 function detectExecutable(names) {
@@ -165,6 +165,40 @@ async function service(action) {
   throw new Error(`알 수 없는 service 명령입니다: ${action}`);
 }
 
+async function shouldDeleteConfig(argv) {
+  const keepConfig = argv.includes('--keep-config');
+  const deleteConfig = argv.includes('--delete-config');
+  if (keepConfig && deleteConfig) {
+    throw new Error('--keep-config과 --delete-config은 함께 사용할 수 없습니다.');
+  }
+  if (deleteConfig) return true;
+  if (keepConfig || !process.stdin.isTTY || !process.stdout.isTTY) return false;
+
+  const interfaceRef = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = await new Promise((resolve) => {
+      interfaceRef.question('Media Bridge 설정도 삭제하시겠습니까? [y/N]: ', resolve);
+    });
+    return /^(y|yes|예)$/i.test(answer.trim());
+  } finally {
+    interfaceRef.close();
+  }
+}
+
+async function uninstall(argv) {
+  const deleteConfig = await shouldDeleteConfig(argv);
+  await service('uninstall');
+  fs.rmSync(path.join(configDir, 'runtime'), { recursive: true, force: true });
+  if (deleteConfig) fs.rmSync(configFile, { force: true });
+  try {
+    fs.rmdirSync(configDir);
+  } catch (error) {
+    if (error.code !== 'ENOENT' && error.code !== 'ENOTEMPTY') throw error;
+  }
+  process.stdout.write(`Media Bridge runtime을 제거하고 설정을 ${deleteConfig ? '삭제했습니다' : '보존했습니다'}.\n`);
+  process.stdout.write('CLI 패키지 제거: npm uninstall -g @bitkyc08/media-bridge\n');
+}
+
 async function main(argv) {
   const [command, ...rest] = argv;
   if (!command || command === 'help' || command === '--help' || command === '-h') return help();
@@ -184,10 +218,7 @@ async function main(argv) {
     return;
   }
   if (command === 'uninstall') {
-    await service('stop');
-    if (fs.existsSync(configDir)) fs.rmSync(configDir, { recursive: true });
-    process.stdout.write('Media Bridge uninstalled\n');
-    return;
+    return uninstall(rest);
   }
   throw new Error(`알 수 없는 명령입니다: ${command}`);
 }

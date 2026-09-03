@@ -49,3 +49,24 @@ mb update
 
 `service`는 현재 CLI-managed lifecycle입니다. systemd 또는 Windows 서비스 등록은
 별도 운영 배포 범위입니다.
+
+## 제거
+
+```bash
+mb uninstall
+npm uninstall -g @bitkyc08/media-bridge
+```
+
+`mb uninstall`은 Media Bridge 프로세스를 중지하고 service marker, PID state와 관리 runtime을
+제거합니다. 터미널에서 직접 실행하면 설정 삭제 여부를 물으며 기본값은 보존입니다.
+
+자동화나 스크립트에서는 다음 중 하나를 명시합니다.
+
+```bash
+mb uninstall --keep-config
+mb uninstall --delete-config
+```
+
+플래그가 없는 비대화형 실행은 설정을 보존합니다. 두 플래그를 동시에 사용할 수 없습니다.
+설정 삭제를 선택해도 Media Bridge가 소유하지 않은 파일은 삭제하지 않습니다. 마지막
+`npm uninstall -g` 명령은 `mb`와 `media-bridge` 전역 CLI를 제거합니다.

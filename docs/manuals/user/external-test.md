@@ -61,9 +61,14 @@ runtime이 있으면 그대로 보존되어야 합니다.
 mb service restart
 mb stop
 mb service uninstall
+mb uninstall --keep-config
+mb uninstall --delete-config
 npm uninstall -g @bitkyc08/media-bridge
 ```
 
+`--keep-config` 후에는 config가 남고 관리 runtime·service/PID state가 제거됐는지 확인합니다.
+이어서 `--delete-config` 후에는 config가 제거되되 Media Bridge가 소유하지 않은 파일은 보존되는지
+확인합니다. 마지막 npm 명령 후 `mb`와 `media-bridge` 명령이 사라졌는지 확인합니다.
 종료 후 process, PID/state 파일, 테스트 포트가 남지 않았는지 확인합니다.
 
 ## 증거 기록
@@ -74,6 +79,7 @@ npm uninstall -g @bitkyc08/media-bridge
 - source commit, GitHub Actions workflow run URL/ID와 private artifact 이름
 - 운영체제·아키텍처
 - `mb init`, `start`, `status`, `health`, `ready`, `stop` 결과
+- `mb uninstall` 설정 보존·삭제 선택, 비소유 파일 보호와 npm package 제거 결과
 - runtime artifact 이름과 SHA-256
 - 실제 실행 command가 관리 runtime인지와 Python 직접 호출 여부
 - 실제 OpenCodex/Solar 호출 여부

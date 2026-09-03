@@ -20,6 +20,18 @@ runtime artifact 배포는 별도 release 검증 대상입니다.
 일반 사용자의 설치·실행은 npm 경로를 사용합니다. `.deb`는 내부 배포·복구용으로만
 유지하며, 운영자 절차는 [Linux 설치 매뉴얼](docs/install/linux.md)의 내부 배포 절을 따릅니다.
 
+## 제거
+
+```bash
+mb uninstall
+npm uninstall -g @bitkyc08/media-bridge
+```
+
+`mb uninstall`은 실행 중인 Media Bridge를 중지하고 관리 runtime과 service 상태를 제거합니다.
+대화형 실행에서는 설정 삭제 여부를 물으며 기본값은 설정 보존입니다. 자동화에서는
+`--keep-config` 또는 `--delete-config`를 명시할 수 있고, 플래그가 없으면 안전하게 설정을 보존합니다.
+Media Bridge가 소유하지 않은 파일은 삭제하지 않습니다. 마지막 npm 명령은 전역 CLI 패키지를 제거합니다.
+
 이미지·PDF가 포함된 요청을 모델 호출 전에 판정하고, Non-Vision 모델에는 OCR·Vision 설명과
 sanitizer를 통과한 텍스트만 전달하는 fail-closed MCP 제품입니다. Solar는 교체 가능한 텍스트
 분석 backend 중 하나입니다.
