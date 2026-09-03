@@ -6,7 +6,7 @@
       "version": "0.1.4",
       "published": true,
       "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.4/media-bridge-runtime-0.1.4-win32-x64.tar.gz",
-      "sha256": "b00a09f5cc4acb309df4a41a0f4d3b16a7c8314502e37b410d437073be5ff703",
+      "sha256": "7b98d7eb48947a3ab81a0d72bbfd9d9d6bdbba596508b3bb15aaee1ba36ca63a",
       "archive": "tar.gz",
       "command": "bin/media-bridge-runtime.exe",
       "python": false
