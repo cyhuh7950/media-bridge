@@ -68,9 +68,11 @@ function uninstallHome(name) {
   fs.rmSync(tempHome, { recursive: true, force: true });
   const appDir = path.join(tempHome, '.media-bridge');
   fs.mkdirSync(path.join(appDir, 'runtime', 'bin'), { recursive: true });
+  fs.mkdirSync(path.join(appDir, 'runtime-config'), { recursive: true });
   fs.writeFileSync(path.join(appDir, 'config.json'), '{"port":8765}\n');
   fs.writeFileSync(path.join(appDir, 'service.json'), '{"version":1}\n');
   fs.writeFileSync(path.join(appDir, 'runtime', 'bin', 'runtime.exe'), 'managed');
+  fs.writeFileSync(path.join(appDir, 'runtime-config', 'service-token'), 'managed-secret');
   fs.writeFileSync(path.join(appDir, 'user-notes.txt'), 'not-owned-by-media-bridge');
   return { tempHome, appDir };
 }
@@ -85,6 +87,7 @@ test('mb uninstall preserves config by default and removes only managed runtime 
   assert.equal(result.status, 0);
   assert.equal(fs.existsSync(path.join(appDir, 'config.json')), true);
   assert.equal(fs.existsSync(path.join(appDir, 'runtime')), false);
+  assert.equal(fs.existsSync(path.join(appDir, 'runtime-config')), true);
   assert.equal(fs.existsSync(path.join(appDir, 'service.json')), false);
   assert.equal(fs.readFileSync(path.join(appDir, 'user-notes.txt'), 'utf8'), 'not-owned-by-media-bridge');
   assert.match(result.stdout, /설정을 보존했습니다/);
@@ -102,6 +105,7 @@ test('mb uninstall --keep-config explicitly preserves config', () => {
   assert.equal(result.status, 0);
   assert.equal(fs.existsSync(path.join(appDir, 'config.json')), true);
   assert.equal(fs.existsSync(path.join(appDir, 'runtime')), false);
+  assert.equal(fs.existsSync(path.join(appDir, 'runtime-config')), true);
   assert.equal(fs.readFileSync(path.join(appDir, 'user-notes.txt'), 'utf8'), 'not-owned-by-media-bridge');
   assert.match(result.stdout, /설정을 보존했습니다/);
   fs.rmSync(tempHome, { recursive: true, force: true });
@@ -117,6 +121,7 @@ test('mb uninstall --delete-config deletes config but preserves unowned files', 
   assert.equal(result.status, 0);
   assert.equal(fs.existsSync(path.join(appDir, 'config.json')), false);
   assert.equal(fs.existsSync(path.join(appDir, 'runtime')), false);
+  assert.equal(fs.existsSync(path.join(appDir, 'runtime-config')), false);
   assert.equal(fs.existsSync(path.join(appDir, 'service.json')), false);
   assert.equal(fs.readFileSync(path.join(appDir, 'user-notes.txt'), 'utf8'), 'not-owned-by-media-bridge');
   assert.match(result.stdout, /설정을 삭제했습니다/);

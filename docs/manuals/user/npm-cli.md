@@ -31,6 +31,8 @@ mb gui
 첫 `mb start`는 현재 OS·아키텍처에 맞는 관리 runtime을 자동으로 선택하고 다운로드한 뒤
 SHA-256과 실행 파일을 검증합니다. URL, checksum 또는 Python 경로를 사용자가 입력하지 않습니다.
 검증이 끝나기 전에는 기존 runtime을 교체하지 않으며, 실패하면 시작을 중단합니다.
+첫 시작에 필요한 model registry, asset 디렉터리와 내부 인증 secret은 `~/.media-bridge` 아래에
+자동 생성되며 Secret 원문은 `config.json`에 저장되지 않습니다.
 
 관리된 runtime artifact가 공개되지 않은 플랫폼에서는 Python이나 `.deb`를 직접 설치하지 말고
 설치 불가 사유를 확인합니다.
@@ -68,5 +70,6 @@ mb uninstall --delete-config
 ```
 
 플래그가 없는 비대화형 실행은 설정을 보존합니다. 두 플래그를 동시에 사용할 수 없습니다.
-설정 삭제를 선택해도 Media Bridge가 소유하지 않은 파일은 삭제하지 않습니다. 마지막
+설정 삭제를 선택하면 CLI가 생성한 내부 runtime 설정도 제거하지만 asset과 Media Bridge가
+소유하지 않은 파일은 삭제하지 않습니다. 마지막
 `npm uninstall -g` 명령은 `mb`와 `media-bridge` 전역 CLI를 제거합니다.

@@ -12,8 +12,11 @@ mb start
 artifact가 없는 경우에는 사용자에게 Python, Docker 또는 `.deb` 설치를 요구하지 않고
 설치 불가 사유를 표시합니다.
 
-공개된 `0.1.4` 패키지는 Windows x64와 Linux x64에서 관리 runtime을 자동으로 다운로드하고
+`0.1.5`부터 Windows x64와 Linux x64에서 관리 runtime을 자동으로 다운로드하고
 SHA-256을 검증합니다. manifest에 공개 산출물이 없는 플랫폼은 fail-closed로 중단합니다.
+
+첫 시작 시 runtime 구동에 필요한 model registry, asset 디렉터리와 내부 인증 secret을
+`~/.media-bridge` 아래에 자동 생성합니다. Secret 원문은 `config.json`에 저장하지 않습니다.
 
 ## 제거
 
@@ -24,4 +27,5 @@ npm uninstall -g @cyhuh/media-bridge
 
 첫 명령은 관리 runtime과 service 상태를 제거하고 설정은 기본적으로 보존합니다. 설정까지 삭제하려면
 대화형 질문에서 동의하거나 `mb uninstall --delete-config`를 사용합니다. 비대화형 기본값과
-`--keep-config`는 설정을 보존합니다. 두 번째 명령은 전역 CLI 패키지를 제거합니다.
+`--keep-config`는 설정과 내부 runtime 설정을 보존합니다. `--delete-config`는 CLI가 생성한 내부
+runtime 설정도 제거하지만 asset과 비소유 파일은 보존합니다. 두 번째 명령은 전역 CLI 패키지를 제거합니다.

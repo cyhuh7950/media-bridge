@@ -12,6 +12,7 @@ const { resolveRuntime } = require('../lib/runtime.cjs');
 const {
   checkHealth,
   readStatus,
+  removeManagedTree,
   startProcess,
   stopProcess,
 } = require('../lib/process.cjs');
@@ -188,8 +189,11 @@ async function shouldDeleteConfig(argv) {
 async function uninstall(argv) {
   const deleteConfig = await shouldDeleteConfig(argv);
   await service('uninstall');
-  fs.rmSync(path.join(configDir, 'runtime'), { recursive: true, force: true });
-  if (deleteConfig) fs.rmSync(configFile, { force: true });
+  await removeManagedTree(path.join(configDir, 'runtime'));
+  if (deleteConfig) {
+    fs.rmSync(configFile, { force: true });
+    await removeManagedTree(path.join(configDir, 'runtime-config'));
+  }
   try {
     fs.rmdirSync(configDir);
   } catch (error) {

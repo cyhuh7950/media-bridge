@@ -1,6 +1,6 @@
 {
   "name": "@cyhuh/media-bridge",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Media Bridge command-line launcher",
   "bin": {
     "media-bridge": "bin/mb.cjs",

@@ -32,6 +32,8 @@ mb gui
 관리된 runtime artifact가 준비되지 않은 경우 `mb start`는 fail-closed로 중단됩니다.
 이때 Python, Docker 또는 `.deb`를 직접 설치하지 말고 해당 플랫폼용 npm runtime release가
 준비되었는지 확인합니다.
+지원 플랫폼에서는 첫 시작에 필요한 내부 runtime 설정과 secret 파일을 자동 생성하므로
+사용자가 별도 Python 환경이나 runtime 설정 파일을 만들지 않습니다.
 
 ## 4. 중지·재시작·제거
 

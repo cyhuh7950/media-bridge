@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const fsp = fs.promises;
+const crypto = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawn } = require('node:child_process');
@@ -10,6 +11,90 @@ function statePath(homeDir = os.homedir()) {
 
 function stateDirectory(homeDir) {
   return path.dirname(statePath(homeDir));
+}
+
+async function removeManagedTree(target, {
+  rmImpl = fsp.rm,
+  sleepImpl = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  maxRetries = 100,
+  retryDelay = 50,
+} = {}) {
+  const transientCodes = new Set(['EBUSY', 'EMFILE', 'ENFILE', 'ENOTEMPTY', 'EPERM']);
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rmImpl(target, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (!transientCodes.has(error.code) || attempt >= maxRetries) throw error;
+      await sleepImpl(retryDelay);
+    }
+  }
+}
+
+function writePrivateFileIfMissing(target, contents) {
+  fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+  try {
+    fs.writeFileSync(target, contents, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+  }
+  if (process.platform !== 'win32') fs.chmodSync(target, 0o600);
+}
+
+function prepareRuntimeEnvironment({ config, homeDir = os.homedir(), env = process.env } = {}) {
+  const runtimeEnv = { ...env };
+  const configRoot = path.join(stateDirectory(homeDir), 'runtime-config');
+  const model = config?.solar?.model || 'solar-pro4';
+  const solarEndpoint = config?.solar?.endpoint || 'https://api.upstage.ai/v1/chat/completions';
+
+  if (!runtimeEnv.MEDIA_BRIDGE_MODEL_REGISTRY) {
+    const registryPath = path.join(configRoot, 'model-registry.yaml');
+    fs.mkdirSync(configRoot, { recursive: true, mode: 0o700 });
+    const temporary = `${registryPath}.${process.pid}.tmp`;
+    const registry = [
+      'version: "npm-personal-1"',
+      'models:',
+      `  - id: ${JSON.stringify(model)}`,
+      '    input_modalities: [text]',
+      '    expires_at: 2099-01-01T00:00:00Z',
+      '    pdf_passthrough_verified: false',
+      '',
+    ].join('\n');
+    fs.writeFileSync(temporary, registry, { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(temporary, registryPath);
+    if (process.platform !== 'win32') fs.chmodSync(registryPath, 0o600);
+    runtimeEnv.MEDIA_BRIDGE_MODEL_REGISTRY = registryPath;
+  }
+
+  if (!runtimeEnv.MEDIA_BRIDGE_ASSET_ROOT) {
+    runtimeEnv.MEDIA_BRIDGE_ASSET_ROOT = path.join(stateDirectory(homeDir), 'assets');
+  }
+  fs.mkdirSync(runtimeEnv.MEDIA_BRIDGE_ASSET_ROOT, { recursive: true, mode: 0o700 });
+
+  if (!runtimeEnv.MEDIA_BRIDGE_RECEIPT_SECRET && !runtimeEnv.MEDIA_BRIDGE_RECEIPT_SECRET_FILE) {
+    const secretFile = path.join(configRoot, 'receipt-secret');
+    writePrivateFileIfMissing(secretFile, `${crypto.randomBytes(32).toString('base64')}\n`);
+    runtimeEnv.MEDIA_BRIDGE_RECEIPT_SECRET_FILE = secretFile;
+  }
+  if (!runtimeEnv.MEDIA_BRIDGE_SERVICE_TOKEN && !runtimeEnv.MEDIA_BRIDGE_SERVICE_TOKEN_FILE) {
+    const tokenFile = path.join(configRoot, 'service-token');
+    writePrivateFileIfMissing(tokenFile, `${crypto.randomBytes(32).toString('base64url')}\n`);
+    runtimeEnv.MEDIA_BRIDGE_SERVICE_TOKEN_FILE = tokenFile;
+  }
+
+  runtimeEnv.MEDIA_BRIDGE_OCR_ENDPOINT ||= 'https://api.upstage.ai/v1/document-digitization';
+  runtimeEnv.MEDIA_BRIDGE_VISION_ENDPOINT ||= solarEndpoint;
+  runtimeEnv.MEDIA_BRIDGE_VISION_MODEL ||= model;
+  runtimeEnv.MEDIA_BRIDGE_SOLAR_ENDPOINT ||= solarEndpoint;
+  runtimeEnv.MEDIA_BRIDGE_SOLAR_MODEL ||= model;
+
+  const configuredKey = runtimeEnv[config?.solar?.apiKeyEnv || 'SOLAR_API_KEY'];
+  if (configuredKey) {
+    runtimeEnv.SOLAR_API_KEY ||= configuredKey;
+    runtimeEnv.MEDIA_BRIDGE_VISION_API_KEY ||= configuredKey;
+    runtimeEnv.UPSTAGE_API_KEY ||= configuredKey;
+  }
+  return runtimeEnv;
 }
 
 function isAlive(pid) {
@@ -100,7 +185,7 @@ async function startProcess({ config, runtime, homeDir = os.homedir(), portOverr
     detached: true,
     stdio: 'ignore',
     env: {
-      ...runtime.env,
+      ...prepareRuntimeEnvironment({ config, homeDir, env: runtime.env }),
       MEDIA_BRIDGE_HTTP_HOST: config.host,
       MEDIA_BRIDGE_HTTP_PORT: String(port),
     },
@@ -129,6 +214,8 @@ async function stopProcess({
   isAliveImpl = isAlive,
   inspectIdentity = inspectProcessIdentity,
   killImpl = process.kill,
+  sleepImpl = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  stopTimeoutMs = 5000,
 } = {}) {
   const state = readState(homeDir);
   if (!state) return { running: false };
@@ -139,6 +226,13 @@ async function stopProcess({
       return { running: false, pid: state.pid, ownershipMismatch: true };
     }
     try { killImpl(state.pid); } catch { /* process exited between checks */ }
+    const deadline = Date.now() + stopTimeoutMs;
+    while (isAliveImpl(state.pid) && Date.now() < deadline) {
+      await sleepImpl(50);
+    }
+    if (isAliveImpl(state.pid)) {
+      throw new Error(`Media Bridge process did not stop within ${stopTimeoutMs}ms: ${state.pid}`);
+    }
   }
   await fsp.rm(statePath(homeDir), { force: true });
   return { running: false, pid: state.pid };
@@ -178,7 +272,9 @@ module.exports = {
   identityMatches,
   inspectProcessIdentity,
   isAlive,
+  prepareRuntimeEnvironment,
   readStatus,
+  removeManagedTree,
   startProcess,
   statePath,
   stopProcess,

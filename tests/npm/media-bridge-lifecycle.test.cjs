@@ -140,3 +140,151 @@ test('health returns stable JSON for success and network failure', async () => {
   });
   assert.deepEqual(failed, { healthy: false, status: null, url: 'http://127.0.0.1:8878/health' });
 });
+
+test('lifecycle provisions the required packaged-runtime environment from mb config', () => {
+  const homeDir = home('runtime-environment');
+  const config = {
+    host: '127.0.0.1',
+    port: 8878,
+    solar: {
+      model: 'solar-pro4',
+      endpoint: 'https://api.upstage.ai/v1/chat/completions',
+      apiKeyEnv: 'CUSTOM_SOLAR_KEY',
+    },
+  };
+  const runtimeEnv = processApi.prepareRuntimeEnvironment({
+    config,
+    homeDir,
+    env: { CUSTOM_SOLAR_KEY: 'not-written-to-disk' },
+  });
+
+  assert.equal(path.isAbsolute(runtimeEnv.MEDIA_BRIDGE_MODEL_REGISTRY), true);
+  assert.equal(path.isAbsolute(runtimeEnv.MEDIA_BRIDGE_ASSET_ROOT), true);
+  assert.equal(fs.existsSync(runtimeEnv.MEDIA_BRIDGE_MODEL_REGISTRY), true);
+  assert.equal(fs.existsSync(runtimeEnv.MEDIA_BRIDGE_ASSET_ROOT), true);
+  assert.match(fs.readFileSync(runtimeEnv.MEDIA_BRIDGE_MODEL_REGISTRY, 'utf8'), /solar-pro4/);
+  assert.equal(fs.existsSync(runtimeEnv.MEDIA_BRIDGE_RECEIPT_SECRET_FILE), true);
+  assert.equal(fs.existsSync(runtimeEnv.MEDIA_BRIDGE_SERVICE_TOKEN_FILE), true);
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_RECEIPT_SECRET, undefined);
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_SERVICE_TOKEN, undefined);
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_SOLAR_ENDPOINT, config.solar.endpoint);
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_SOLAR_MODEL, config.solar.model);
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_VISION_ENDPOINT, config.solar.endpoint);
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_VISION_MODEL, config.solar.model);
+  assert.equal(runtimeEnv.SOLAR_API_KEY, 'not-written-to-disk');
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_VISION_API_KEY, 'not-written-to-disk');
+  assert.equal(runtimeEnv.UPSTAGE_API_KEY, 'not-written-to-disk');
+  assert.doesNotMatch(
+    fs.readFileSync(runtimeEnv.MEDIA_BRIDGE_MODEL_REGISTRY, 'utf8'),
+    /not-written-to-disk/,
+  );
+  fs.rmSync(homeDir, { recursive: true, force: true });
+});
+
+test('stop waits for an owned process to exit after sending the termination signal', async () => {
+  const homeDir = home('wait-for-exit');
+  const pid = 43001;
+  fs.mkdirSync(path.join(homeDir, '.media-bridge'), { recursive: true });
+  fs.writeFileSync(processApi.statePath(homeDir), JSON.stringify({
+    pid,
+    command: 'C:\\Runtime\\media-bridge-runtime.exe',
+    identity: {
+      executable: 'C:\\Runtime\\media-bridge-runtime.exe',
+      startMarker: 'win32:owned-start',
+    },
+  }));
+  let killed = false;
+  let postKillChecks = 0;
+  const result = await processApi.stopProcess({
+    homeDir,
+    platform: 'win32',
+    isAliveImpl: () => {
+      if (!killed) return true;
+      postKillChecks += 1;
+      return postKillChecks < 3;
+    },
+    inspectIdentity: () => ({
+      executable: 'C:\\Runtime\\media-bridge-runtime.exe',
+      startMarker: 'win32:owned-start',
+    }),
+    killImpl: () => { killed = true; },
+    sleepImpl: async () => {},
+  });
+  assert.equal(killed, true);
+  assert.ok(postKillChecks >= 3);
+  assert.equal(result.running, false);
+  assert.equal(fs.existsSync(processApi.statePath(homeDir)), false);
+  fs.rmSync(homeDir, { recursive: true, force: true });
+});
+
+test('managed runtime removal retries transient Windows lock errors', async () => {
+  let attempts = 0;
+  let observed;
+  await processApi.removeManagedTree('C:\\isolated\\runtime', {
+    rmImpl: async (target, options) => {
+      attempts += 1;
+      observed = { target, options };
+      if (attempts < 3) {
+        const error = new Error('temporarily locked');
+        error.code = 'EPERM';
+        throw error;
+      }
+    },
+    sleepImpl: async () => {},
+  });
+  assert.equal(attempts, 3);
+  assert.equal(observed.target, 'C:\\isolated\\runtime');
+  assert.deepEqual(observed.options, { recursive: true, force: true });
+});
+
+test('start passes the provisioned environment to the packaged runtime process', async () => {
+  const homeDir = home('runtime-child-environment');
+  const capturedPath = path.join(homeDir, 'child-environment.json');
+  const captureScript = [
+    `require('node:fs').writeFileSync(${JSON.stringify(capturedPath)}, JSON.stringify({`,
+    'registry: process.env.MEDIA_BRIDGE_MODEL_REGISTRY,',
+    'assets: process.env.MEDIA_BRIDGE_ASSET_ROOT,',
+    'receiptFile: process.env.MEDIA_BRIDGE_RECEIPT_SECRET_FILE,',
+    'serviceTokenFile: process.env.MEDIA_BRIDGE_SERVICE_TOKEN_FILE,',
+    'ocrEndpoint: process.env.MEDIA_BRIDGE_OCR_ENDPOINT,',
+    'visionEndpoint: process.env.MEDIA_BRIDGE_VISION_ENDPOINT,',
+    'visionModel: process.env.MEDIA_BRIDGE_VISION_MODEL,',
+    'solarEndpoint: process.env.MEDIA_BRIDGE_SOLAR_ENDPOINT,',
+    'solarModel: process.env.MEDIA_BRIDGE_SOLAR_MODEL,',
+    '})); setInterval(() => {}, 1000);',
+  ].join('');
+  const runtime = {
+    command: process.execPath,
+    args: ['-e', captureScript],
+    env: {},
+    python: false,
+  };
+  try {
+    await processApi.startProcess({
+      config: {
+        host: '127.0.0.1',
+        port: 8878,
+        solar: {
+          model: 'solar-pro4',
+          endpoint: 'https://api.upstage.ai/v1/chat/completions',
+          apiKeyEnv: 'SOLAR_API_KEY',
+        },
+      },
+      runtime,
+      homeDir,
+    });
+    const deadline = Date.now() + 2000;
+    while (!fs.existsSync(capturedPath) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    const captured = JSON.parse(fs.readFileSync(capturedPath, 'utf8'));
+    assert.deepEqual(Object.keys(captured).sort(), [
+      'assets', 'ocrEndpoint', 'receiptFile', 'registry', 'serviceTokenFile',
+      'solarEndpoint', 'solarModel', 'visionEndpoint', 'visionModel',
+    ]);
+    for (const value of Object.values(captured)) assert.equal(typeof value, 'string');
+  } finally {
+    await processApi.stopProcess({ homeDir });
+    fs.rmSync(homeDir, { recursive: true, force: true });
+  }
+});
