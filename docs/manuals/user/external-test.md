@@ -24,14 +24,14 @@
 ## 사전 조건
 
 - Node.js 18 이상
-- npm registry에서 `@bitkyc08/media-bridge` 조회 가능
+- npm registry에서 `@cyhuh/media-bridge` 조회 가능
 - 테스트 중 사용할 포트가 비어 있음
 - OpenCodex·Solar credential 원문을 문서나 로그에 기록하지 않음
 
 ## 설치와 최초 설정
 
 ```bash
-npm install -g @bitkyc08/media-bridge
+npm install -g @cyhuh/media-bridge
 mb init
 ```
 
@@ -64,7 +64,7 @@ mb stop
 mb service uninstall
 mb uninstall --keep-config
 mb uninstall --delete-config
-npm uninstall -g @bitkyc08/media-bridge
+npm uninstall -g @cyhuh/media-bridge
 ```
 
 `--keep-config` 후에는 config가 남고 관리 runtime·service/PID state가 제거됐는지 확인합니다.

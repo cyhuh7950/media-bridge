@@ -60,7 +60,7 @@ test('mb service install and uninstall manage only the Media Bridge service mark
 test('mb update prints the installed public package name', () => {
   const result = spawnSync(process.execPath, [cli, 'update'], { encoding: 'utf8' });
   assert.equal(result.status, 0);
-  assert.equal(result.stdout, 'npm update -g @bitkyc08/media-bridge 를 실행하십시오.\n');
+  assert.equal(result.stdout, 'npm update -g @cyhuh/media-bridge 를 실행하십시오.\n');
 });
 
 function uninstallHome(name) {
@@ -88,7 +88,7 @@ test('mb uninstall preserves config by default and removes only managed runtime 
   assert.equal(fs.existsSync(path.join(appDir, 'service.json')), false);
   assert.equal(fs.readFileSync(path.join(appDir, 'user-notes.txt'), 'utf8'), 'not-owned-by-media-bridge');
   assert.match(result.stdout, /설정을 보존했습니다/);
-  assert.match(result.stdout, /npm uninstall -g @bitkyc08\/media-bridge/);
+  assert.match(result.stdout, /npm uninstall -g @cyhuh\/media-bridge/);
   fs.rmSync(tempHome, { recursive: true, force: true });
 });
 
@@ -120,7 +120,7 @@ test('mb uninstall --delete-config deletes config but preserves unowned files', 
   assert.equal(fs.existsSync(path.join(appDir, 'service.json')), false);
   assert.equal(fs.readFileSync(path.join(appDir, 'user-notes.txt'), 'utf8'), 'not-owned-by-media-bridge');
   assert.match(result.stdout, /설정을 삭제했습니다/);
-  assert.match(result.stdout, /npm uninstall -g @bitkyc08\/media-bridge/);
+  assert.match(result.stdout, /npm uninstall -g @cyhuh\/media-bridge/);
   fs.rmSync(tempHome, { recursive: true, force: true });
 });
 

@@ -5,7 +5,7 @@
 ## 1. 설치
 
 ```bash
-npm install -g @bitkyc08/media-bridge
+npm install -g @cyhuh/media-bridge
 ```
 
 현재 npm registry 공개와 플랫폼별 runtime artifact 배포는 release 검증 대상입니다.
@@ -40,7 +40,7 @@ mb stop
 mb service restart
 mb service uninstall
 mb uninstall
-npm uninstall -g @bitkyc08/media-bridge
+npm uninstall -g @cyhuh/media-bridge
 ```
 
 `mb service uninstall`은 service marker만 제거합니다. `mb uninstall`은 관리 runtime까지 제거하고

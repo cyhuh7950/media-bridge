@@ -3,7 +3,7 @@
 ## 설치
 
 ```bash
-npm install -g @bitkyc08/media-bridge
+npm install -g @cyhuh/media-bridge
 ```
 
 현재 패키지 공개와 플랫폼별 runtime artifact 배포는 별도 release 검증 대상입니다.
@@ -54,7 +54,7 @@ mb update
 
 ```bash
 mb uninstall
-npm uninstall -g @bitkyc08/media-bridge
+npm uninstall -g @cyhuh/media-bridge
 ```
 
 `mb uninstall`은 Media Bridge 프로세스를 중지하고 service marker, PID state와 관리 runtime을

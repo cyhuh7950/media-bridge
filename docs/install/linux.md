@@ -5,7 +5,7 @@
 일반 사용자는 npm 패키지만 설치합니다.
 
 ```bash
-npm install -g @bitkyc08/media-bridge
+npm install -g @cyhuh/media-bridge
 mb init
 mb start
 ```

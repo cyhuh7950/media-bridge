@@ -12,12 +12,15 @@ test('user-facing docs use the approved npm package and lifecycle surface', () =
     'packaging/npm/README.md',
     'docs/manuals/user/getting-started.md',
     'docs/manuals/user/npm-cli.md',
+    'docs/manuals/user/external-test.md',
+    'docs/manuals/user/windows-uat-checklist.md',
     'docs/install/linux.md',
+    'docs/install/windows.md',
   ];
   for (const file of files) {
     const content = read(file);
-    assert.match(content, /@bitkyc08\/media-bridge/, file);
-    assert.doesNotMatch(content, /@cyhuh\/media-bridge/, file);
+    assert.match(content, /@cyhuh\/media-bridge/, file);
+    assert.doesNotMatch(content, /@bitkyc08\/media-bridge/, file);
   }
   const linux = read('docs/install/linux.md');
   for (const command of [

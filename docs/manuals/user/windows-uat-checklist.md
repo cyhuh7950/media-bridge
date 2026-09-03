@@ -4,11 +4,11 @@
 
 - [ ] 기존 Media Bridge가 실행 중이지 않다.
 - [ ] Node.js 18 이상과 npm이 준비되어 있다.
-- [ ] npm registry의 `@bitkyc08/media-bridge` 공개 여부를 확인했다.
+- [ ] npm registry의 `@cyhuh/media-bridge` 공개 여부를 확인했다.
 
 ## 설치·최초 설정
 
-- [ ] `npm install -g @bitkyc08/media-bridge`가 성공했다.
+- [ ] `npm install -g @cyhuh/media-bridge`가 성공했다.
 - [ ] `mb init`이 완료됐다.
 - [ ] OpenCodex·Solar endpoint와 정확한 model ID를 설정했다.
 - [ ] credential 원문을 입력하지 않았다.
@@ -25,7 +25,7 @@
 - [ ] `mb service restart` 후 상태가 유지된다.
 - [ ] `mb stop` 후 process와 port가 정리된다.
 - [ ] `mb service uninstall` 후 service marker가 사라진다.
-- [ ] `npm uninstall -g @bitkyc08/media-bridge`가 성공한다.
+- [ ] `npm uninstall -g @cyhuh/media-bridge`가 성공한다.
 
 ## 외부 종속 검증
 

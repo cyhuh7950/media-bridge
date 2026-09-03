@@ -5,7 +5,7 @@
 일반 사용자는 Python, Docker, PostgreSQL 또는 `.deb` 명령을 직접 입력하지 않습니다.
 
 ```bash
-npm install -g @bitkyc08/media-bridge
+npm install -g @cyhuh/media-bridge
 mb init
 mb start
 ```
@@ -24,7 +24,7 @@ runtime artifact 배포는 별도 release 검증 대상입니다.
 
 ```bash
 mb uninstall
-npm uninstall -g @bitkyc08/media-bridge
+npm uninstall -g @cyhuh/media-bridge
 ```
 
 `mb uninstall`은 실행 중인 Media Bridge를 중지하고 관리 runtime과 service 상태를 제거합니다.

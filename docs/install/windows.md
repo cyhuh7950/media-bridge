@@ -6,7 +6,7 @@ artifact이며, 이 문서는 MSI에 웹 화면·트레이·시작 메뉴가 있
 ## 1. 설치
 
 ```powershell
-npm install -g @bitkyc08/media-bridge
+npm install -g @cyhuh/media-bridge
 mb init
 ```
 
@@ -37,7 +37,7 @@ mb stop
 
 ```powershell
 mb service uninstall
-npm uninstall -g @bitkyc08/media-bridge
+npm uninstall -g @cyhuh/media-bridge
 ```
 
 CLI 설정까지 삭제할 때는 `mb uninstall`을 사용합니다.

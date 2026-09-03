@@ -196,7 +196,7 @@ async function uninstall(argv) {
     if (error.code !== 'ENOENT' && error.code !== 'ENOTEMPTY') throw error;
   }
   process.stdout.write(`Media Bridge runtime을 제거하고 설정을 ${deleteConfig ? '삭제했습니다' : '보존했습니다'}.\n`);
-  process.stdout.write('CLI 패키지 제거: npm uninstall -g @bitkyc08/media-bridge\n');
+  process.stdout.write('CLI 패키지 제거: npm uninstall -g @cyhuh/media-bridge\n');
 }
 
 async function main(argv) {
@@ -214,7 +214,7 @@ async function main(argv) {
     return service(rest[0]);
   }
   if (command === 'update') {
-    process.stdout.write('npm update -g @bitkyc08/media-bridge 를 실행하십시오.\n');
+    process.stdout.write('npm update -g @cyhuh/media-bridge 를 실행하십시오.\n');
     return;
   }
   if (command === 'uninstall') {
