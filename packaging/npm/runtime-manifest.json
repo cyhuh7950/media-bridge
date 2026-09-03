@@ -1,21 +1,30 @@
 {
   "schemaVersion": 1,
-  "packageVersion": "0.1.5",
+  "packageVersion": "0.1.6",
   "artifacts": {
     "win32-x64": {
-      "version": "0.1.5",
-      "published": true,
-      "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.5/media-bridge-runtime-0.1.5-win32-x64.tar.gz",
-      "sha256": "94b7e55b0c0c6195e175b042cc5892b05f3d5ddecc83a47154501ebc295162da",
+      "version": "0.1.6",
+      "published": false,
+      "url": null,
+      "sha256": null,
       "archive": "tar.gz",
       "command": "bin/media-bridge-runtime.exe",
       "python": false
     },
     "linux-x64": {
-      "version": "0.1.5",
-      "published": true,
-      "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.5/media-bridge-runtime-0.1.5-linux-x64.tar.gz",
-      "sha256": "f4c391f0f8b55eaf4e63acd606cb0b02cde160c3a0fcbe53acedb7f42a2efdb8",
+      "version": "0.1.6",
+      "published": false,
+      "url": null,
+      "sha256": null,
+      "archive": "tar.gz",
+      "command": "bin/media-bridge-runtime",
+      "python": false
+    },
+    "linux-arm64": {
+      "version": "0.1.6",
+      "published": false,
+      "url": null,
+      "sha256": null,
       "archive": "tar.gz",
       "command": "bin/media-bridge-runtime",
       "python": false

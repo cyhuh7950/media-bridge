@@ -12,7 +12,7 @@ mb start
 artifact가 없는 경우에는 사용자에게 Python, Docker 또는 `.deb` 설치를 요구하지 않고
 설치 불가 사유를 표시합니다.
 
-`0.1.5`부터 Windows x64와 Linux x64에서 관리 runtime을 자동으로 다운로드하고
+`0.1.6`부터 Windows x64, Linux x64와 Linux ARM64에서 관리 runtime을 자동으로 다운로드하고
 SHA-256을 검증합니다. manifest에 공개 산출물이 없는 플랫폼은 fail-closed로 중단합니다.
 
 첫 시작 시 runtime 구동에 필요한 model registry, asset 디렉터리와 내부 인증 secret을

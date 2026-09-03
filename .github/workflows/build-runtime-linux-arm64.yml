@@ -1,4 +1,4 @@
-name: Build linux-x64 runtime artifact
+name: Build linux-arm64 runtime artifact
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build-runtime:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -37,7 +37,7 @@ jobs:
 
       - name: Build private workflow artifact
         run: |
-          packaging/runtime/build-linux-x64.sh \
+          packaging/runtime/build-linux-arm64.sh \
             --python "$RUNTIME_BUILD_PYTHON" \
             --version '${{ inputs.version }}' \
             --output-dir "$RUNNER_TEMP/media-bridge-runtime-output" \
@@ -50,7 +50,7 @@ jobs:
 
       - name: Verify actual runtime artifact
         run: |
-          packaging/runtime/verify-linux-x64.sh \
+          packaging/runtime/verify-linux-arm64.sh \
             --artifact-dir "$RUNTIME_OUTPUT" \
             --test-root "$RUNNER_TEMP/media-bridge-runtime-verification" \
             --source-commit '${{ github.sha }}'
@@ -58,7 +58,7 @@ jobs:
       - name: Retain private workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: media-bridge-runtime-linux-x64-${{ github.sha }}
+          name: media-bridge-runtime-linux-arm64-${{ github.sha }}
           path: ${{ env.RUNTIME_OUTPUT }}/*
           if-no-files-found: error
           retention-days: 14
