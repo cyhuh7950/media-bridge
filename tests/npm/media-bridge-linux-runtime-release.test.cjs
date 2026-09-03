@@ -11,7 +11,7 @@ const buildScript = path.join(root, 'packaging', 'runtime', 'build-linux-x64.sh'
 const verifyScript = path.join(root, 'packaging', 'runtime', 'verify-linux-x64.sh');
 const { loadRuntimeManifest, selectArtifact } = require('../../packaging/npm/lib/runtime.cjs');
 
-test('published package selects the exact linux-x64 v0.1.2 runtime', () => {
+test('published package selects the exact linux-x64 v0.1.3 runtime', () => {
   const packageMetadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
   const manifest = loadRuntimeManifest({
     manifestPath: path.join(packageRoot, 'runtime-manifest.json'),
@@ -24,7 +24,7 @@ test('published package selects the exact linux-x64 v0.1.2 runtime', () => {
     arch: 'x64',
   });
 
-  assert.equal(packageMetadata.version, '0.1.2');
+  assert.equal(packageMetadata.version, '0.1.3');
   assert.deepEqual(
     {
       key: artifact.key,
@@ -37,9 +37,9 @@ test('published package selects the exact linux-x64 v0.1.2 runtime', () => {
     },
     {
       key: 'linux-x64',
-      version: '0.1.2',
+      version: '0.1.3',
       published: true,
-      url: 'https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.2/media-bridge-runtime-0.1.2-linux-x64.tar.gz',
+      url: 'https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.3/media-bridge-runtime-0.1.3-linux-x64.tar.gz',
       archive: 'tar.gz',
       command: 'bin/media-bridge-runtime',
       python: false,

@@ -62,16 +62,22 @@ foreach ($target in @($pyInstallerDist, $pyInstallerWork, $pyInstallerSpec, $pay
 }
 New-Item -ItemType Directory -Force -Path $outputPath, $workPath | Out-Null
 
-& $pythonPath -m PyInstaller `
-    --noconfirm `
-    --clean `
-    --onedir `
-    --name media-bridge-runtime `
-    --distpath $pyInstallerDist `
-    --workpath $pyInstallerWork `
-    --specpath $pyInstallerSpec `
-    $entrypointPath
-if ($LASTEXITCODE -ne 0) {
+Push-Location -LiteralPath $workPath
+try {
+    & $pythonPath -m PyInstaller `
+        --noconfirm `
+        --clean `
+        --onedir `
+        --name media-bridge-runtime `
+        --distpath $pyInstallerDist `
+        --workpath $pyInstallerWork `
+        --specpath $pyInstallerSpec `
+        $entrypointPath
+    $pyInstallerExitCode = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
+if ($pyInstallerExitCode -ne 0) {
     throw 'PyInstaller runtime build failed.'
 }
 
