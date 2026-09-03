@@ -4,27 +4,27 @@
   "artifacts": {
     "win32-x64": {
       "version": "0.1.6",
-      "published": false,
-      "url": null,
-      "sha256": null,
+      "published": true,
+      "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.6/media-bridge-runtime-0.1.6-win32-x64.tar.gz",
+      "sha256": "fe1f79f7e30ff42f4ad74fc45ef4a2400b89a26914e0baa58318183807526028",
       "archive": "tar.gz",
       "command": "bin/media-bridge-runtime.exe",
       "python": false
     },
     "linux-x64": {
       "version": "0.1.6",
-      "published": false,
-      "url": null,
-      "sha256": null,
+      "published": true,
+      "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.6/media-bridge-runtime-0.1.6-linux-x64.tar.gz",
+      "sha256": "4b34a095fc103f7f0825f96d3fe5c637f7f62b0cd7ae9e886ad901588d12eab7",
       "archive": "tar.gz",
       "command": "bin/media-bridge-runtime",
       "python": false
     },
     "linux-arm64": {
       "version": "0.1.6",
-      "published": false,
-      "url": null,
-      "sha256": null,
+      "published": true,
+      "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.6/media-bridge-runtime-0.1.6-linux-arm64.tar.gz",
+      "sha256": "48db5d35def9b768d4bee125a464576aed763ed7beb0c01ae3a03bcc14312e98",
       "archive": "tar.gz",
       "command": "bin/media-bridge-runtime",
       "python": false

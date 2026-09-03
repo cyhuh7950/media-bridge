@@ -215,14 +215,19 @@ test('runtime resolver honors an explicit local runtime command for QA', async (
 
 test('runtime resolver fails closed when no managed artifact is available', async () => {
   const tempHome = path.join(testRoot, 'media-bridge-runtime-missing');
+  const manifestRoot = path.join(testRoot, 'media-bridge-runtime-missing-manifest');
   fs.rmSync(tempHome, { recursive: true, force: true });
+  fs.rmSync(manifestRoot, { recursive: true, force: true });
+  fs.mkdirSync(manifestRoot, { recursive: true });
+  const manifestPath = writeManifest(manifestRoot, {});
   await assert.rejects(() => resolveRuntime({
     homeDir: tempHome,
-    env: {},
+    env: { MEDIA_BRIDGE_RUNTIME_MANIFEST: manifestPath },
     platform: 'linux',
     arch: 'arm64',
   }), /runtime.*(available|artifact)|artifact.*(available|configured)/i);
   assert.equal(fs.existsSync(runtimeDir(tempHome)), false);
+  fs.rmSync(manifestRoot, { recursive: true, force: true });
 });
 
 test('runtime resolver downloads the selected artifact and reuses verified metadata', async () => {
