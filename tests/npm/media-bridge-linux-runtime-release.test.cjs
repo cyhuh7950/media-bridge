@@ -48,6 +48,43 @@ test('published package selects the exact linux-x64 v0.1.3 runtime', () => {
   assert.match(artifact.sha256, /^[a-f0-9]{64}$/);
 });
 
+test('published package selects the exact win32-x64 v0.1.3 runtime', () => {
+  const packageMetadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
+  const manifest = loadRuntimeManifest({
+    manifestPath: path.join(packageRoot, 'runtime-manifest.json'),
+    packageVersion: packageMetadata.version,
+  });
+  const artifact = selectArtifact({
+    manifest,
+    packageVersion: packageMetadata.version,
+    platform: 'win32',
+    arch: 'x64',
+  });
+
+  assert.deepEqual(
+    {
+      key: artifact.key,
+      version: artifact.version,
+      published: artifact.published,
+      url: artifact.url,
+      sha256: artifact.sha256,
+      archive: artifact.archive,
+      command: artifact.command,
+      python: artifact.python,
+    },
+    {
+      key: 'win32-x64',
+      version: '0.1.3',
+      published: true,
+      url: 'https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.3/media-bridge-runtime-0.1.3-win32-x64.tar.gz',
+      sha256: 'b00a09f5cc4acb309df4a41a0f4d3b16a7c8314502e37b410d437073be5ff703',
+      archive: 'tar.gz',
+      command: 'bin/media-bridge-runtime.exe',
+      python: false,
+    },
+  );
+});
+
 test('linux runtime build rejects an invalid version before creating output', {
   skip: process.platform !== 'linux',
 }, () => {

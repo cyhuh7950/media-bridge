@@ -219,8 +219,8 @@ test('runtime resolver fails closed when no managed artifact is available', asyn
   await assert.rejects(() => resolveRuntime({
     homeDir: tempHome,
     env: {},
-    platform: 'win32',
-    arch: 'x64',
+    platform: 'linux',
+    arch: 'arm64',
   }), /runtime.*(available|artifact)|artifact.*(available|configured)/i);
   assert.equal(fs.existsSync(runtimeDir(tempHome)), false);
 });
