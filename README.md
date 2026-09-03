@@ -161,8 +161,8 @@ OmniRoute 직접 inference endpoint가 caller에서 계속 접근 가능하면 i
 ```
 
 실제 provider 자격증명을 사용하는 OCR·Vision·Solar 호출, PCWSL Codex→실제 OmniRoute E2E,
-운영 배포는 자동 테스트 범위가 아닙니다. 상세 증거는 `docs/testing/media-bridge.tdd.md`를
-확인합니다.
+운영 배포는 자동 테스트 범위가 아닙니다. 공개 매뉴얼에 기록된 검증 절차와 실제 배포 환경의
+결과를 별도로 확인해야 합니다.
 
 ## 기존 Solar 코드
 

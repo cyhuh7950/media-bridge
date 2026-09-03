@@ -4,7 +4,7 @@
 
 ## 공개 전 runtime artifact 독립 재검증
 
-공개 전 QA에서는 원격 `codex/media-bridge`의 정확한 source commit에서
+공개 전 QA에서는 원격 `main`의 정확한 source commit에서
 `Build win32-x64 runtime artifact` workflow를 실행합니다. `gh` CLI는 사용하지 않으며 GitHub Actions
 화면에서 실행·다운로드합니다. 다운로드한 private workflow artifact에 다음 네 파일이 있어야 합니다.
 
