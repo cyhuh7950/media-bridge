@@ -1,6 +1,9 @@
 name: Publish npm runtime release
 
 on:
+  push:
+    tags:
+      - 'release-v*'
   workflow_dispatch:
 
 permissions:
@@ -17,6 +20,14 @@ jobs:
     steps:
       - name: Check out release metadata
         uses: actions/checkout@v4
+
+      - name: Verify release trigger
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "release-v$VERSION" ]]; then
+            echo "release tag/version mismatch: $GITHUB_REF_NAME != release-v$VERSION" >&2
+            exit 2
+          fi
 
       - name: Download verified Linux ARM64 artifact
         uses: actions/download-artifact@v4

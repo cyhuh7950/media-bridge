@@ -184,6 +184,8 @@ def test_runtime_workflow_builds_without_public_release_commands() -> None:
 def test_runtime_release_workflow_uses_verified_run_artifacts_without_local_gh() -> None:
     workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
 
+    assert "release-v*" in workflow
+    assert "GITHUB_REF_NAME" in workflow
     assert "33856725335" in workflow
     assert "33856725267" in workflow
     assert "33856725275" in workflow
