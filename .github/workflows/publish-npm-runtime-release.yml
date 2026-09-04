@@ -173,3 +173,56 @@ jobs:
                 data,
               });
             }
+
+  publish-npm-package:
+    needs: publish-runtime-release
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out release metadata
+        uses: actions/checkout@v6
+
+      - name: Set up Node for npm Trusted Publishing
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Verify npm package and release tag
+        working-directory: packaging/npm
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_name="$(node -p "require('./package.json').name")"
+          package_version="$(node -p "require('./package.json').version")"
+          npm_version="$(npm --version)"
+          if [[ "$package_name" != "@cyhuh/media-bridge" ]]; then
+            echo "unexpected npm package: $package_name" >&2
+            exit 2
+          fi
+          if [[ "$GITHUB_REF_NAME" != "release-v$package_version" ]]; then
+            echo "release tag/package version mismatch: $GITHUB_REF_NAME != release-v$package_version" >&2
+            exit 2
+          fi
+          node - "$npm_version" <<'NODE'
+          const version = process.argv[2];
+          const [major, minor, patch] = version.split('.').map(Number);
+          if (![major, minor, patch].every(Number.isInteger)
+              || major < 11
+              || (major === 11 && minor < 5)
+              || (major === 11 && minor === 5 && patch < 1)) {
+            throw new Error(`npm ${version} is unsupported; Trusted Publishing requires npm >= 11.5.1`);
+          }
+          NODE
+
+      - name: Verify package contents
+        working-directory: packaging/npm
+        run: npm pack --dry-run
+
+      - name: Publish npm package with OIDC
+        working-directory: packaging/npm
+        run: npm publish --access public
