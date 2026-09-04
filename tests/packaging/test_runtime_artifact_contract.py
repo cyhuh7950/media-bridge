@@ -69,6 +69,8 @@ def test_all_runtime_builds_add_the_repository_source_root_to_pyinstaller() -> N
 def test_win32_verifier_provisions_the_personal_runtime_contract() -> None:
     verifier = VERIFY_SCRIPT.read_text(encoding="utf-8")
 
+    assert "MEDIA_BRIDGE_CONFIG_FILE" in verifier
+    assert "config.json" in verifier
     assert "MEDIA_BRIDGE_RUNTIME_MODE" in verifier
     assert "MEDIA_BRIDGE_SOLAR_MODEL" in verifier
     assert "MEDIA_BRIDGE_SOLAR_ENDPOINT" in verifier
@@ -82,6 +84,8 @@ def test_win32_verifier_provisions_the_personal_runtime_contract() -> None:
 def test_linux_verifiers_provision_the_personal_runtime_contract() -> None:
     for verifier_path in (LINUX_X64_VERIFY_SCRIPT, LINUX_ARM64_VERIFY_SCRIPT):
         verifier = verifier_path.read_text(encoding="utf-8")
+        assert "MEDIA_BRIDGE_CONFIG_FILE" in verifier
+        assert "config.json" in verifier
         assert "MEDIA_BRIDGE_RUNTIME_MODE='personal'" in verifier
         assert "MEDIA_BRIDGE_SOLAR_MODEL='solar-pro4'" in verifier
         assert "MEDIA_BRIDGE_SOLAR_ENDPOINT='https://127.0.0.1:9/v1/chat/completions'" in verifier

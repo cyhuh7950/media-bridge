@@ -79,6 +79,7 @@ if (( port == 0 )); then
   port="$(node -e "const n=require('node:net');const s=n.createServer();s.listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})")"
 fi
 registry_path="$test_root/model-registry.yaml"
+config_path="$test_root/config.json"
 printf '%s\n' \
   'version: "external-retest"' \
   'models:' \
@@ -86,9 +87,31 @@ printf '%s\n' \
   '    input_modalities: [text]' \
   '    expires_at: 2099-01-01T00:00:00Z' \
   '    pdf_passthrough_verified: false' > "$registry_path"
+cat > "$config_path" <<JSON
+{
+  "runtimeMode": "personal",
+  "host": "127.0.0.1",
+  "port": $port,
+  "opencodex": {"baseUrl": "http://127.0.0.1:$port/v1"},
+  "solar": {
+    "model": "solar-pro4",
+    "endpoint": "https://127.0.0.1:9/v1/chat/completions",
+    "apiKeyEnv": "SOLAR_API_KEY"
+  },
+  "ocr": {
+    "model": "document-parse",
+    "endpoint": "https://127.0.0.1:9/v1/document-digitization",
+    "apiKeyEnv": "SOLAR_API_KEY"
+  },
+  "conversion": {"maxBytes": 8388608, "ocrEnabled": true, "visionEnabled": true},
+  "failurePolicy": {"blockSolarOnPreparationFailure": true}
+}
+JSON
+chmod 600 "$config_path"
 
 env -i \
   PATH="$test_root/no-python-path" \
+  MEDIA_BRIDGE_CONFIG_FILE="$config_path" \
   MEDIA_BRIDGE_MODEL_REGISTRY="$registry_path" \
   MEDIA_BRIDGE_ASSET_ROOT="$test_root/assets" \
   MEDIA_BRIDGE_RECEIPT_SECRET='external-retest-receipt-secret-0001' \

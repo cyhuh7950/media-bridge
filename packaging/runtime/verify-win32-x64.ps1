@@ -134,6 +134,7 @@ try {
     }
 
     $registryPath = Join-Path $testPath 'model-registry.yaml'
+    $configPath = Join-Path $testPath 'config.json'
     @"
 version: "external-retest"
 models:
@@ -142,6 +143,24 @@ models:
     expires_at: 2099-01-01T00:00:00Z
     pdf_passthrough_verified: false
 "@ | Set-Content -LiteralPath $registryPath -Encoding utf8NoBOM
+    [ordered]@{
+        runtimeMode = 'personal'
+        host = '127.0.0.1'
+        port = $selectedPort
+        opencodex = [ordered]@{ baseUrl = "http://127.0.0.1:$selectedPort/v1" }
+        solar = [ordered]@{
+            model = 'solar-pro4'
+            endpoint = 'https://127.0.0.1:9/v1/chat/completions'
+            apiKeyEnv = 'SOLAR_API_KEY'
+        }
+        ocr = [ordered]@{
+            model = 'document-parse'
+            endpoint = 'https://127.0.0.1:9/v1/document-digitization'
+            apiKeyEnv = 'SOLAR_API_KEY'
+        }
+        conversion = [ordered]@{ maxBytes = 8388608; ocrEnabled = $true; visionEnabled = $true }
+        failurePolicy = [ordered]@{ blockSolarOnPreparationFailure = $true }
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $configPath -Encoding utf8NoBOM
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $runtimeCommand
@@ -149,6 +168,7 @@ models:
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
+    $startInfo.Environment['MEDIA_BRIDGE_CONFIG_FILE'] = $configPath
     $startInfo.Environment['MEDIA_BRIDGE_MODEL_REGISTRY'] = $registryPath
     $startInfo.Environment['MEDIA_BRIDGE_ASSET_ROOT'] = $assetPath
     $startInfo.Environment['MEDIA_BRIDGE_RECEIPT_SECRET'] = 'external-retest-receipt-secret-0001'
