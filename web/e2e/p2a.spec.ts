@@ -193,11 +193,11 @@ test.describe.serial("P2a and P2b actual Admin API browser boundary", () => {
       await page.getByRole("link", { name: "Connections" }).click();
       await page.getByLabel("이름", { exact: true }).fill("gateway-local");
       await page.getByLabel("Gateway HTTPS URL").fill("https://gateway.invalid");
-      await page.getByLabel("Credential 환경변수 이름").fill(gatewaySecretReference);
+      await page.getByLabel("Secret 식별자").fill(gatewaySecretReference);
       await page.getByRole("button", { name: "Connection 추가" }).click();
       await expect(page.getByText("gateway-local")).toBeVisible();
       await expect(page.getByText(/MED.*IAL/)).toBeVisible();
-      await expect(page.getByLabel("Credential 환경변수 이름")).toHaveValue("");
+      await expect(page.getByLabel("Secret 식별자")).toHaveValue("");
       await page.getByRole("button", { name: "연결 시험" }).click();
       await expect(page.getByText("ready")).toBeVisible();
 
