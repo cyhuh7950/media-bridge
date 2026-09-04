@@ -41,6 +41,13 @@ class FakeOcr:
         return OcrResult(BackendStatus.SUCCESS, text="ERROR 104 from screenshot")
 
 
+def test_settings_script_warns_when_port_change_requires_restart() -> None:
+    script = npm_runtime_module._settings_script()
+
+    assert "saved.restartRequired" in script
+    assert "mb service restart" in script
+
+
 def test_process_entrypoint_applies_configured_request_limit(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
