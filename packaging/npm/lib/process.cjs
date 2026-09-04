@@ -82,11 +82,18 @@ function prepareRuntimeEnvironment({ config, homeDir = os.homedir(), env = proce
     runtimeEnv.MEDIA_BRIDGE_SERVICE_TOKEN_FILE = tokenFile;
   }
 
-  runtimeEnv.MEDIA_BRIDGE_OCR_ENDPOINT ||= 'https://api.upstage.ai/v1/document-digitization';
-  runtimeEnv.MEDIA_BRIDGE_VISION_ENDPOINT ||= solarEndpoint;
-  runtimeEnv.MEDIA_BRIDGE_VISION_MODEL ||= model;
+  runtimeEnv.MEDIA_BRIDGE_RUNTIME_MODE = 'personal';
+  runtimeEnv.MEDIA_BRIDGE_OCR_ENDPOINT ||= config?.ocr?.endpoint || 'https://api.upstage.ai/v1/document-digitization';
+  runtimeEnv.MEDIA_BRIDGE_OCR_CREDENTIAL_ENV ||= config?.ocr?.apiKeyEnv || config?.solar?.apiKeyEnv || 'SOLAR_API_KEY';
   runtimeEnv.MEDIA_BRIDGE_SOLAR_ENDPOINT ||= solarEndpoint;
   runtimeEnv.MEDIA_BRIDGE_SOLAR_MODEL ||= model;
+  runtimeEnv.MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV ||= config?.solar?.apiKeyEnv || 'SOLAR_API_KEY';
+  runtimeEnv.MEDIA_BRIDGE_MAX_REQUEST_BYTES ||= String(config?.conversion?.maxBytes || 8388608);
+  runtimeEnv.MEDIA_BRIDGE_OCR_ENABLED ||= String(config?.conversion?.ocrEnabled !== false);
+  runtimeEnv.MEDIA_BRIDGE_VISION_ENABLED ||= String(config?.conversion?.visionEnabled !== false);
+  runtimeEnv.MEDIA_BRIDGE_BLOCK_SOLAR_ON_FAILURE ||= String(
+    config?.failurePolicy?.blockSolarOnPreparationFailure !== false,
+  );
 
   const configuredKey = runtimeEnv[config?.solar?.apiKeyEnv || 'SOLAR_API_KEY'];
   if (configuredKey) {
@@ -95,6 +102,16 @@ function prepareRuntimeEnvironment({ config, homeDir = os.homedir(), env = proce
     runtimeEnv.UPSTAGE_API_KEY ||= configuredKey;
   }
   return runtimeEnv;
+}
+
+function buildRuntimeArgs(runtime) {
+  return runtime.python
+    ? [
+      ...(runtime.args || []),
+      '-c',
+      'from media_bridge_personal.npm_runtime import run_personal_npm_runtime; run_personal_npm_runtime()',
+    ]
+    : [...(runtime.args || [])];
 }
 
 function isAlive(pid) {
@@ -178,9 +195,7 @@ async function startProcess({ config, runtime, homeDir = os.homedir(), portOverr
   const current = readStatus({ homeDir });
   if (current.running) throw new Error(`Media Bridge is already running: ${current.pid}`);
   const port = portOverride ?? config.port;
-  const args = runtime.python
-    ? [...(runtime.args || []), '-c', 'from media_bridge.entrypoints import run_http; run_http()']
-    : [...(runtime.args || [])];
+  const args = buildRuntimeArgs(runtime);
   const child = spawn(runtime.command, args, {
     detached: true,
     stdio: 'ignore',
@@ -268,6 +283,7 @@ async function checkHealth({ config, fetchImpl = fetch } = {}) {
 }
 
 module.exports = {
+  buildRuntimeArgs,
   checkHealth,
   identityMatches,
   inspectProcessIdentity,

@@ -6,7 +6,7 @@ import json
 import os
 import secrets
 from contextlib import suppress
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 _FORBIDDEN_FIELD_NAMES = frozenset(
@@ -107,7 +107,10 @@ class PersonalStateStore:
             if (
                 field_name is not None
                 and field_name.lower().endswith("_path")
-                and os.path.isabs(value)
+                and (
+                    PurePosixPath(value).is_absolute()
+                    or PureWindowsPath(value).is_absolute()
+                )
             ):
                 raise LocalStateError("snapshot_sensitive_value")
             return
@@ -140,11 +143,12 @@ class PersonalStateStore:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, destination)
-            directory = os.open(self._root, os.O_RDONLY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
+            if os.name != "nt":
+                directory = os.open(self._root, os.O_RDONLY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
         except OSError as error:
             with suppress(OSError):
                 temporary.unlink(missing_ok=True)

@@ -153,9 +153,14 @@ models:
     $startInfo.Environment['MEDIA_BRIDGE_ASSET_ROOT'] = $assetPath
     $startInfo.Environment['MEDIA_BRIDGE_RECEIPT_SECRET'] = 'external-retest-receipt-secret-0001'
     $startInfo.Environment['MEDIA_BRIDGE_SERVICE_TOKEN'] = 'external-retest-service-token-0001'
-    $startInfo.Environment['MEDIA_BRIDGE_OCR_ENDPOINT'] = 'https://127.0.0.1:9/ocr'
-    $startInfo.Environment['MEDIA_BRIDGE_VISION_ENDPOINT'] = 'https://127.0.0.1:9/vision'
-    $startInfo.Environment['MEDIA_BRIDGE_VISION_MODEL'] = 'qa-vision-model'
+    $startInfo.Environment['MEDIA_BRIDGE_RUNTIME_MODE'] = 'personal'
+    $startInfo.Environment['MEDIA_BRIDGE_SOLAR_MODEL'] = 'solar-pro4'
+    $startInfo.Environment['MEDIA_BRIDGE_SOLAR_ENDPOINT'] = 'https://127.0.0.1:9/v1/chat/completions'
+    $startInfo.Environment['MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV'] = 'SOLAR_API_KEY'
+    $startInfo.Environment['MEDIA_BRIDGE_OCR_ENDPOINT'] = 'https://127.0.0.1:9/v1/document-digitization'
+    $startInfo.Environment['MEDIA_BRIDGE_OCR_CREDENTIAL_ENV'] = 'SOLAR_API_KEY'
+    $startInfo.Environment['SOLAR_API_KEY'] = 'external-retest-provider-key-0001'
+    $startInfo.Environment['MEDIA_BRIDGE_MAX_REQUEST_BYTES'] = '8388608'
     $startInfo.Environment['MEDIA_BRIDGE_HTTP_HOST'] = '127.0.0.1'
     $startInfo.Environment['MEDIA_BRIDGE_HTTP_PORT'] = [string]$selectedPort
 

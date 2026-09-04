@@ -211,6 +211,20 @@ test('runtime resolver honors an explicit local runtime command for QA', async (
   });
   assert.equal(result.command, process.execPath);
   assert.deepEqual(result.args, []);
+  assert.equal(result.python, true);
+});
+
+test('runtime resolver can mark an explicit packaged binary as non-Python for QA', async () => {
+  const result = await resolveRuntime({
+    homeDir: path.join(testRoot, 'media-bridge-runtime-binary-override'),
+    env: {
+      MEDIA_BRIDGE_RUNTIME_COMMAND: 'C:\\qa\\media-bridge-runtime.exe',
+      MEDIA_BRIDGE_RUNTIME_PYTHON: 'false',
+    },
+    platform: 'win32',
+    arch: 'x64',
+  });
+  assert.equal(result.python, false);
 });
 
 test('runtime resolver fails closed when no managed artifact is available', async () => {

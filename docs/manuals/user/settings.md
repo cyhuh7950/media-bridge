@@ -7,14 +7,17 @@
 
 ## 변경할 수 있는 값
 
-- OpenCodex endpoint
+- OpenCodex에 설정할 Media Bridge provider base URL
 - Solar endpoint
 - Solar model ID
 - Solar credential 환경변수 이름 또는 OS credential reference 이름
-- OCR/Vision endpoint와 model ID
+- Upstage Document Parse endpoint와 credential 환경변수 이름
+- 변환 최대 요청 크기
 - 변환 실패 시 Solar 전송 차단 정책
 
-API key 원문은 입력하지 않습니다. 기본 rate는 RPM 2000, TPM 750000입니다.
+API key 원문은 입력하지 않습니다. npm `personal` 모드의 1차 이미지 처리는 OCR 기반이며,
+일반적인 장면 이해용 Vision 엔진 선택은 후속 확장 범위입니다. 기존 서버용 `managed` 모드의
+PostgreSQL·서명 snapshot·Control Plane 설정은 변경되지 않습니다.
 
 ## 저장
 

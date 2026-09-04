@@ -4,14 +4,20 @@ const path = require('node:path');
 
 function defaultConfig() {
   return {
+    runtimeMode: 'personal',
     host: '127.0.0.1',
     port: 8765,
     opencodex: {
-      baseUrl: 'http://127.0.0.1:10100/v1',
+      baseUrl: 'http://127.0.0.1:8765/v1',
     },
     solar: {
       model: 'solar-pro4',
       endpoint: 'https://api.upstage.ai/v1/chat/completions',
+      apiKeyEnv: 'SOLAR_API_KEY',
+    },
+    ocr: {
+      endpoint: 'https://api.upstage.ai/v1/document-digitization',
+      model: 'document-parse',
       apiKeyEnv: 'SOLAR_API_KEY',
     },
     conversion: {
@@ -59,15 +65,26 @@ function validateConfig(input) {
   }
   config.opencodex ??= {};
   config.solar ??= {};
+  config.ocr ??= {};
   config.conversion ??= {};
   config.failurePolicy ??= {};
   config.opencodex.baseUrl = validateEndpoint(config.opencodex.baseUrl, 'OpenCodex');
   config.solar.endpoint = validateEndpoint(config.solar.endpoint, 'Solar');
+  config.ocr.endpoint = validateEndpoint(config.ocr.endpoint, 'OCR');
+  if (config.runtimeMode !== 'personal') {
+    throw new Error('npm runtime mode must be personal');
+  }
   if (typeof config.solar.model !== 'string' || config.solar.model.trim() === '') {
     throw new Error('Solar model is required');
   }
   if (typeof config.solar.apiKeyEnv !== 'string' || config.solar.apiKeyEnv.trim() === '') {
     throw new Error('Solar API key environment reference is required');
+  }
+  if (config.ocr.model !== 'document-parse') {
+    throw new Error('OCR model must be document-parse');
+  }
+  if (typeof config.ocr.apiKeyEnv !== 'string' || config.ocr.apiKeyEnv.trim() === '') {
+    throw new Error('OCR API key environment reference is required');
   }
   if (!Number.isInteger(config.conversion.maxBytes) || config.conversion.maxBytes < 1) {
     throw new Error('conversion maxBytes must be a positive integer');
@@ -89,7 +106,20 @@ function loadConfig({ homeDir = os.homedir() } = {}) {
   } catch {
     throw new Error(`config file is not valid JSON: ${target}`);
   }
-  return validateConfig({ ...defaultConfig(), ...parsed });
+  const defaults = defaultConfig();
+  const merged = {
+    ...defaults,
+    ...parsed,
+    opencodex: { ...defaults.opencodex, ...parsed.opencodex },
+    solar: { ...defaults.solar, ...parsed.solar },
+    ocr: { ...defaults.ocr, ...parsed.ocr },
+    conversion: { ...defaults.conversion, ...parsed.conversion },
+    failurePolicy: { ...defaults.failurePolicy, ...parsed.failurePolicy },
+  };
+  if (merged.opencodex.baseUrl === 'http://127.0.0.1:10100/v1') {
+    merged.opencodex.baseUrl = `http://${merged.host}:${merged.port}/v1`;
+  }
+  return validateConfig(merged);
 }
 
 function saveConfig({ homeDir = os.homedir(), config }) {

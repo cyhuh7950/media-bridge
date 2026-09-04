@@ -47,6 +47,7 @@ if (pathlib.Path(sys.base_prefix) / "conda-meta").is_dir():
 PY
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+source_root="$(cd "$script_dir/../.." && pwd -P)"
 pyinstaller_dist="$work_dir/pyinstaller-dist"
 pyinstaller_work="$work_dir/pyinstaller-work"
 pyinstaller_spec="$work_dir/pyinstaller-spec"
@@ -62,6 +63,7 @@ cd "$work_dir"
   --clean \
   --onedir \
   --name media-bridge-runtime \
+  --paths "$source_root" \
   --distpath "$pyinstaller_dist" \
   --workpath "$pyinstaller_work" \
   --specpath "$pyinstaller_spec" \

@@ -6,7 +6,7 @@ import json
 import os
 import secrets
 from contextlib import suppress
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 _FORBIDDEN_FIELD_NAMES = frozenset(
@@ -68,7 +68,13 @@ class PersonalEventLog:
                 raise PersonalEventLogError("event_invalid")
             if isinstance(value, str) and (
                 len(value.encode("utf-8")) > 256
-                or (lowered.endswith("_path") and os.path.isabs(value))
+                or (
+                    lowered.endswith("_path")
+                    and (
+                        PurePosixPath(value).is_absolute()
+                        or PureWindowsPath(value).is_absolute()
+                    )
+                )
             ):
                 raise PersonalEventLogError("event_sensitive_value")
             safe[key] = value

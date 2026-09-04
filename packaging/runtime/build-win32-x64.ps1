@@ -54,6 +54,7 @@ $pyInstallerWork = Join-Path $workPath 'pyinstaller-work'
 $pyInstallerSpec = Join-Path $workPath 'pyinstaller-spec'
 $payloadPath = Join-Path $workPath 'payload'
 $entrypointPath = Join-Path $PSScriptRoot 'entrypoint.py'
+$sourceRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 
 foreach ($target in @($pyInstallerDist, $pyInstallerWork, $pyInstallerSpec, $payloadPath)) {
     if (Test-Path -LiteralPath $target) {
@@ -69,6 +70,7 @@ try {
         --clean `
         --onedir `
         --name media-bridge-runtime `
+        --paths $sourceRoot `
         --distpath $pyInstallerDist `
         --workpath $pyInstallerWork `
         --specpath $pyInstallerSpec `

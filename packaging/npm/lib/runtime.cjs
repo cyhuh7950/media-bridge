@@ -189,15 +189,27 @@ async function resolveRuntime({
   arch = process.arch,
   fetchImpl = fetch,
   execFileImpl = execFileAsync,
+  packageVersion = packageMetadata.version,
 } = {}) {
   const key = platformKey(platform, arch);
-  if (env.MEDIA_BRIDGE_RUNTIME_COMMAND) return { command: env.MEDIA_BRIDGE_RUNTIME_COMMAND, args: [], env: { ...env }, python: true };
+  if (env.MEDIA_BRIDGE_RUNTIME_COMMAND) {
+    const pythonSetting = env.MEDIA_BRIDGE_RUNTIME_PYTHON;
+    if (pythonSetting !== undefined && !['true', 'false'].includes(pythonSetting)) {
+      throw new Error('MEDIA_BRIDGE_RUNTIME_PYTHON must be true or false');
+    }
+    return {
+      command: env.MEDIA_BRIDGE_RUNTIME_COMMAND,
+      args: [],
+      env: { ...env },
+      python: pythonSetting === undefined ? true : pythonSetting === 'true',
+    };
+  }
   const root = env.MEDIA_BRIDGE_RUNTIME_DIR || runtimeDir(homeDir);
   let artifact;
   if (env.MEDIA_BRIDGE_RUNTIME_URL) {
     artifact = {
       key,
-      version: packageMetadata.version,
+      version: packageVersion,
       published: true,
       url: env.MEDIA_BRIDGE_RUNTIME_URL,
       sha256: env.MEDIA_BRIDGE_RUNTIME_SHA256,
@@ -210,9 +222,9 @@ async function resolveRuntime({
   } else {
     const manifest = loadRuntimeManifest({
       manifestPath: env.MEDIA_BRIDGE_RUNTIME_MANIFEST || defaultManifestPath,
-      packageVersion: packageMetadata.version,
+      packageVersion,
     });
-    artifact = selectArtifact({ manifest, packageVersion: packageMetadata.version, platform, arch });
+    artifact = selectArtifact({ manifest, packageVersion, platform, arch });
   }
   const expectedMetadata = verifiedMetadata(artifact);
   let command = artifactCommand(root, artifact);

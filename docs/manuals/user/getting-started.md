@@ -17,9 +17,18 @@ npm install -g @cyhuh/media-bridge
 mb init
 ```
 
-질문에 OpenCodex 주소, Media Bridge 포트, Solar 모델·endpoint·Secret 참조명,
-OCR/Vision 변환 기본값과 변환 실패 시 Solar 전송 차단 정책을 입력합니다.
+첫 질문에는 OpenCodex에 설정할 Media Bridge provider 주소를 입력합니다. 기본값은
+`http://127.0.0.1:8765/v1`입니다. 이어서 Media Bridge 포트, Solar 모델·endpoint·Secret
+참조명, Upstage Document Parse endpoint·Secret 참조명과 변환 정책을 입력합니다.
 Secret 원문은 입력하거나 저장하지 않습니다.
+
+기본 Secret 참조명이 `SOLAR_API_KEY`라면 같은 터미널 환경에 Upstage API key를 설정한 뒤
+시작합니다.
+
+```bash
+export SOLAR_API_KEY='발급받은-key'
+mb start
+```
 
 ## 3. 시작
 
@@ -34,6 +43,9 @@ mb gui
 준비되었는지 확인합니다.
 지원 플랫폼에서는 첫 시작에 필요한 내부 runtime 설정과 secret 파일을 자동 생성하므로
 사용자가 별도 Python 환경이나 runtime 설정 파일을 만들지 않습니다.
+
+npm 설치는 단일 사용자용 `personal` 모드입니다. PostgreSQL·서명 snapshot·Control Plane을
+사용하는 `managed` 모드는 서버 운영용으로 그대로 유지되며 npm 기본 실행과 섞이지 않습니다.
 
 ## 4. 중지·재시작·제거
 

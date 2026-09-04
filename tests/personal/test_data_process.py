@@ -37,6 +37,16 @@ def _wait_for_status(url: str) -> httpx.Response:
     raise AssertionError("personal data process did not become ready")
 
 
+def _wait_for_port_closed(port: int) -> None:
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as socket_handle:
+            if socket_handle.connect_ex(("127.0.0.1", port)) != 0:
+                return
+        time.sleep(0.02)
+    raise AssertionError("personal data process port remained open")
+
+
 def test_data_process_binds_loopback_serves_lkg_and_exits_cleanly(tmp_path: Path) -> None:
     """Catches an entrypoint that cannot serve local LKG without legacy infrastructure."""
 
@@ -67,8 +77,7 @@ def test_data_process_binds_loopback_serves_lkg_and_exits_cleanly(tmp_path: Path
         process.terminate()
         process.wait(timeout=2.0)
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as socket_handle:
-        assert socket_handle.connect_ex(("127.0.0.1", port)) != 0
+    _wait_for_port_closed(port)
 
 
 def test_connection_metadata_maps_to_process_configuration(monkeypatch, tmp_path: Path) -> None:

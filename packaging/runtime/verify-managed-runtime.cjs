@@ -60,6 +60,7 @@ async function main() {
       env: { MEDIA_BRIDGE_RUNTIME_MANIFEST: qaManifestPath },
       platform: process.platform,
       arch: process.arch,
+      packageVersion: sourceManifest.packageVersion,
     });
     if (runtime.python !== false) throw new Error('managed runtime unexpectedly requires Python');
     const installedShaBefore = await sha256(runtime.command);
@@ -77,6 +78,7 @@ async function main() {
         env: { MEDIA_BRIDGE_RUNTIME_MANIFEST: qaManifestPath },
         platform: process.platform,
         arch: process.arch,
+        packageVersion: sourceManifest.packageVersion,
       });
     } catch (error) {
       rollbackRejected = String(error?.message || error).includes('checksum mismatch');

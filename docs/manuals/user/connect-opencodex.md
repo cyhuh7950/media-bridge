@@ -5,12 +5,14 @@
 
 ## 연결 주소
 
-`mb init`에서 OpenCodex endpoint를 설정합니다. 기본 Media Bridge 주소는 다음과 같습니다.
+`mb init`의 첫 주소는 Media Bridge가 OpenCodex를 호출할 주소가 아닙니다. OpenCodex의
+provider 설정에 넣을 Media Bridge 주소입니다.
 
-`http://127.0.0.1:8765`
+`http://127.0.0.1:8765/v1`
 
-OpenCodex 설정에서는 Responses API와 Media Bridge credential reference를 선택합니다. API key 원문은
-입력하지 않습니다. 기존 설정을 덮어쓰지 말고 별도 profile에서 먼저 연결을 확인합니다.
+OpenCodex 설정에서는 이 값을 provider base URL로 지정하고 wire API는 `responses`를 선택합니다.
+npm `personal` 모드는 loopback 전용이므로 별도 Media Bridge bearer key는 사용하지 않습니다.
+기존 OpenCodex 설정을 덮어쓰지 말고 별도 profile에서 먼저 연결을 확인합니다.
 
 ## 연결 확인
 
@@ -19,7 +21,10 @@ OpenCodex 설정에서는 Responses API와 Media Bridge credential reference를 
 3. OpenCodex에서 text-only 요청을 보냅니다.
 4. 실제 media 요청은 provider·비용·downstream 호출 증거를 별도로 기록합니다.
 
-인식 결과가 부족하면 요청은 정상 안내 응답으로 끝나며 Solar 호출은 0회입니다.
+1차 지원 범위는 text 및 image 입력입니다. 이미지는 Upstage Document Parse가 텍스트를 추출하며,
+원본 이미지가 제거된 뒤 Solar-4가 응답합니다. OCR이나 정규화가 실패하면 요청은 차단되고
+Solar 호출은 0회입니다. tool/file/shell 변환과 토큰 단위 실시간 streaming은 아직 지원 완료로
+간주하지 않습니다.
 
 ## 연결 해제
 

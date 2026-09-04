@@ -29,6 +29,16 @@ def _wait_for_web(url: str) -> httpx.Response:
     raise AssertionError("personal web process did not become ready")
 
 
+def _wait_for_port_closed(port: int) -> None:
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        with socket.socket() as handle:
+            if handle.connect_ex(("127.0.0.1", port)) != 0:
+                return
+        time.sleep(0.02)
+    raise AssertionError("personal web process port remained open")
+
+
 def test_web_process_serves_first_run_and_persists_settings(tmp_path: Path) -> None:
     port = _free_port()
     process = subprocess.Popen(  # noqa: S603 - fixed local test command, no shell.
@@ -59,5 +69,4 @@ def test_web_process_serves_first_run_and_persists_settings(tmp_path: Path) -> N
         process.terminate()
         process.wait(timeout=2)
 
-    with socket.socket() as handle:
-        assert handle.connect_ex(("127.0.0.1", port)) != 0
+    _wait_for_port_closed(port)

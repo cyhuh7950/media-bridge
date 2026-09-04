@@ -151,6 +151,19 @@ test('lifecycle provisions the required packaged-runtime environment from mb con
       endpoint: 'https://api.upstage.ai/v1/chat/completions',
       apiKeyEnv: 'CUSTOM_SOLAR_KEY',
     },
+    ocr: {
+      endpoint: 'https://api.upstage.ai/v1/document-digitization',
+      model: 'document-parse',
+      apiKeyEnv: 'CUSTOM_SOLAR_KEY',
+    },
+    conversion: {
+      maxBytes: 4194304,
+      ocrEnabled: true,
+      visionEnabled: false,
+    },
+    failurePolicy: {
+      blockSolarOnPreparationFailure: true,
+    },
   };
   const runtimeEnv = processApi.prepareRuntimeEnvironment({
     config,
@@ -169,8 +182,16 @@ test('lifecycle provisions the required packaged-runtime environment from mb con
   assert.equal(runtimeEnv.MEDIA_BRIDGE_SERVICE_TOKEN, undefined);
   assert.equal(runtimeEnv.MEDIA_BRIDGE_SOLAR_ENDPOINT, config.solar.endpoint);
   assert.equal(runtimeEnv.MEDIA_BRIDGE_SOLAR_MODEL, config.solar.model);
-  assert.equal(runtimeEnv.MEDIA_BRIDGE_VISION_ENDPOINT, config.solar.endpoint);
-  assert.equal(runtimeEnv.MEDIA_BRIDGE_VISION_MODEL, config.solar.model);
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_RUNTIME_MODE, 'personal');
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_OCR_ENDPOINT, config.ocr.endpoint);
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_OCR_CREDENTIAL_ENV, 'CUSTOM_SOLAR_KEY');
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV, 'CUSTOM_SOLAR_KEY');
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_MAX_REQUEST_BYTES, '4194304');
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_OCR_ENABLED, 'true');
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_VISION_ENABLED, 'false');
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_BLOCK_SOLAR_ON_FAILURE, 'true');
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_VISION_ENDPOINT, undefined);
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_VISION_MODEL, undefined);
   assert.equal(runtimeEnv.SOLAR_API_KEY, 'not-written-to-disk');
   assert.equal(runtimeEnv.MEDIA_BRIDGE_VISION_API_KEY, 'not-written-to-disk');
   assert.equal(runtimeEnv.UPSTAGE_API_KEY, 'not-written-to-disk');
@@ -245,10 +266,11 @@ test('start passes the provisioned environment to the packaged runtime process',
     'registry: process.env.MEDIA_BRIDGE_MODEL_REGISTRY,',
     'assets: process.env.MEDIA_BRIDGE_ASSET_ROOT,',
     'receiptFile: process.env.MEDIA_BRIDGE_RECEIPT_SECRET_FILE,',
+    'runtimeMode: process.env.MEDIA_BRIDGE_RUNTIME_MODE,',
     'serviceTokenFile: process.env.MEDIA_BRIDGE_SERVICE_TOKEN_FILE,',
     'ocrEndpoint: process.env.MEDIA_BRIDGE_OCR_ENDPOINT,',
-    'visionEndpoint: process.env.MEDIA_BRIDGE_VISION_ENDPOINT,',
-    'visionModel: process.env.MEDIA_BRIDGE_VISION_MODEL,',
+    'ocrCredentialEnv: process.env.MEDIA_BRIDGE_OCR_CREDENTIAL_ENV,',
+    'solarCredentialEnv: process.env.MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV,',
     'solarEndpoint: process.env.MEDIA_BRIDGE_SOLAR_ENDPOINT,',
     'solarModel: process.env.MEDIA_BRIDGE_SOLAR_MODEL,',
     '})); setInterval(() => {}, 1000);',
@@ -269,6 +291,11 @@ test('start passes the provisioned environment to the packaged runtime process',
           endpoint: 'https://api.upstage.ai/v1/chat/completions',
           apiKeyEnv: 'SOLAR_API_KEY',
         },
+        ocr: {
+          endpoint: 'https://api.upstage.ai/v1/document-digitization',
+          model: 'document-parse',
+          apiKeyEnv: 'SOLAR_API_KEY',
+        },
       },
       runtime,
       homeDir,
@@ -279,12 +306,20 @@ test('start passes the provisioned environment to the packaged runtime process',
     }
     const captured = JSON.parse(fs.readFileSync(capturedPath, 'utf8'));
     assert.deepEqual(Object.keys(captured).sort(), [
-      'assets', 'ocrEndpoint', 'receiptFile', 'registry', 'serviceTokenFile',
-      'solarEndpoint', 'solarModel', 'visionEndpoint', 'visionModel',
+      'assets', 'ocrCredentialEnv', 'ocrEndpoint', 'receiptFile', 'registry', 'runtimeMode',
+      'serviceTokenFile', 'solarCredentialEnv', 'solarEndpoint', 'solarModel',
     ]);
     for (const value of Object.values(captured)) assert.equal(typeof value, 'string');
   } finally {
     await processApi.stopProcess({ homeDir });
     fs.rmSync(homeDir, { recursive: true, force: true });
   }
+});
+
+test('python QA fallback selects the personal npm runtime entrypoint', () => {
+  assert.deepEqual(processApi.buildRuntimeArgs({ args: ['-I'], python: true }), [
+    '-I',
+    '-c',
+    'from media_bridge_personal.npm_runtime import run_personal_npm_runtime; run_personal_npm_runtime()',
+  ]);
 });

@@ -1,0 +1,216 @@
+from __future__ import annotations
+
+import json
+from collections.abc import Callable
+from typing import Any
+
+import httpx
+import pytest
+
+from media_bridge.receipts import GateReceiptSigner, ReceiptBinding
+from media_bridge_gateway.contracts import (
+    DownstreamError,
+    DownstreamGuardError,
+    SealedGatewayRequest,
+)
+from media_bridge_gateway.normalizer import digest_gateway_payload
+from media_bridge_personal.solar_responses import SolarResponsesDownstream
+
+
+def _sealed(
+    signer: GateReceiptSigner,
+    payload: dict[str, Any],
+    *,
+    nonce: str = "personal-request-nonce-1",
+) -> SealedGatewayRequest:
+    output_digest = digest_gateway_payload({"payload": payload, "request_nonce": nonce})
+    binding = ReceiptBinding(
+        target_id="solar-pro4",
+        capability="non_vision",
+        input_digest="a" * 64,
+        output_digest=output_digest,
+        action="passthrough",
+    )
+    return SealedGatewayRequest(
+        target_id=binding.target_id,
+        capability=binding.capability,
+        action=binding.action,
+        payload=payload,
+        input_digest=binding.input_digest,
+        output_digest=binding.output_digest,
+        receipt=signer.sign(binding),
+        request_nonce=nonce,
+    )
+
+
+def _downstream(
+    monkeypatch: pytest.MonkeyPatch,
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> tuple[SolarResponsesDownstream, GateReceiptSigner]:
+    monkeypatch.setenv("TEST_SOLAR_API_KEY", "test-secret-not-logged")
+    signer = GateReceiptSigner(secret=b"r" * 32)
+    return (
+        SolarResponsesDownstream(
+            endpoint="https://api.example.test/v1/chat/completions",
+            model="solar-pro4",
+            receipt_signer=signer,
+            api_key_env="TEST_SOLAR_API_KEY",
+            transport=httpx.MockTransport(handler),
+        ),
+        signer,
+    )
+
+
+@pytest.mark.asyncio
+async def test_translates_text_only_responses_to_solar_chat_and_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded.append(json.loads(request.content))
+        assert request.headers["authorization"] == "Bearer test-secret-not-logged"
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={
+                "id": "chatcmpl-personal-1",
+                "choices": [{"message": {"role": "assistant", "content": "Solar answer"}}],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
+            },
+        )
+
+    downstream, signer = _downstream(monkeypatch, handler)
+    try:
+        response = await downstream.invoke(
+            _sealed(
+                signer,
+                {
+                    "model": "solar-pro4",
+                    "input": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "input_text", "text": "hello"}],
+                        }
+                    ],
+                },
+            )
+        )
+    finally:
+        await downstream.close()
+
+    assert recorded == [
+        {
+            "model": "solar-pro4",
+            "messages": [{"role": "user", "content": "hello"}],
+            "stream": False,
+        }
+    ]
+    body = json.loads(response.body)
+    assert response.status_code == 200
+    assert response.content_type == "application/json"
+    assert body["status"] == "completed"
+    assert body["model"] == "solar-pro4"
+    assert body["output"][0]["content"][0]["text"] == "Solar answer"
+    assert body["usage"] == {"input_tokens": 4, "output_tokens": 2, "total_tokens": 6}
+
+
+@pytest.mark.asyncio
+async def test_rejects_remaining_media_before_solar_socket_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(500)
+
+    downstream, signer = _downstream(monkeypatch, handler)
+    try:
+        with pytest.raises(DownstreamGuardError, match="media"):
+            await downstream.invoke(
+                _sealed(
+                    signer,
+                    {
+                        "model": "solar-pro4",
+                        "input": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "input_image",
+                                        "image_url": "data:image/png;base64,aW1hZ2U=",
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                )
+            )
+    finally:
+        await downstream.close()
+
+    assert calls == 0
+
+
+@pytest.mark.asyncio
+async def test_stream_request_returns_buffered_responses_sse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={
+                "id": "chatcmpl-personal-stream",
+                "choices": [{"message": {"role": "assistant", "content": "streamed answer"}}],
+            },
+        )
+
+    downstream, signer = _downstream(monkeypatch, handler)
+    try:
+        response = await downstream.invoke(
+            _sealed(
+                signer,
+                {"model": "solar-pro4", "input": "hello", "stream": True},
+            )
+        )
+        assert response.stream is not None
+        body = b"".join([chunk async for chunk in response.stream])
+    finally:
+        await downstream.close()
+
+    assert response.content_type == "text/event-stream"
+    assert b"response.created" in body
+    assert b"response.output_text.delta" in body
+    assert b"response.content_part.done" in body
+    assert b"response.output_item.done" in body
+    assert b"streamed answer" in body
+    assert body.endswith(b"data: [DONE]\n\n")
+
+
+@pytest.mark.asyncio
+async def test_rejects_malformed_solar_usage_as_an_upstream_response_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={
+                "choices": [{"message": {"content": "answer"}}],
+                "usage": "not-an-object",
+            },
+        )
+
+    downstream, signer = _downstream(monkeypatch, handler)
+    try:
+        with pytest.raises(DownstreamError) as captured:
+            await downstream.invoke(
+                _sealed(signer, {"model": "solar-pro4", "input": "hello"})
+            )
+    finally:
+        await downstream.close()
+
+    assert captured.value.code == "solar_response_invalid"

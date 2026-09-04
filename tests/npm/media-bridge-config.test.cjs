@@ -21,6 +21,11 @@ test('default config contains fail-closed conversion settings', () => {
   const config = defaultConfig();
   assert.equal(config.host, '127.0.0.1');
   assert.equal(config.port, 8765);
+  assert.equal(config.opencodex.baseUrl, 'http://127.0.0.1:8765/v1');
+  assert.equal(config.runtimeMode, 'personal');
+  assert.equal(config.ocr.endpoint, 'https://api.upstage.ai/v1/document-digitization');
+  assert.equal(config.ocr.model, 'document-parse');
+  assert.equal(config.ocr.apiKeyEnv, 'SOLAR_API_KEY');
   assert.equal(config.failurePolicy.blockSolarOnPreparationFailure, true);
   assert.equal(config.conversion.ocrEnabled, true);
   assert.equal(config.conversion.visionEnabled, true);
@@ -53,12 +58,49 @@ test('validation rejects non-loopback HTTP and invalid ports', () => {
 test('save config writes atomically and preserves full configuration fields', () => {
   const tempHome = home('round-trip');
   const config = defaultConfig();
-  config.opencodex.baseUrl = 'http://127.0.0.1:10100/v1';
+  config.opencodex.baseUrl = 'http://127.0.0.1:8876/v1';
   config.solar.model = 'solar-pro4';
   config.solar.endpoint = 'https://solar.example.invalid/v1';
+  config.ocr.endpoint = 'https://ocr.example.invalid/v1/document-digitization';
   const configPath = saveConfig({ homeDir: tempHome, config });
   const loaded = loadConfig({ homeDir: tempHome });
   assert.deepEqual(loaded, config);
   assert.equal(fs.existsSync(`${configPath}.tmp`), false);
+  fs.rmSync(tempHome, { recursive: true, force: true });
+});
+
+test('loading migrates the legacy OpenCodex server address to the Media Bridge provider URL', () => {
+  const tempHome = home('legacy-opencodex-address');
+  const legacy = defaultConfig();
+  legacy.opencodex.baseUrl = 'http://127.0.0.1:10100/v1';
+  fs.mkdirSync(path.dirname(path.join(tempHome, '.media-bridge', 'config.json')), { recursive: true });
+  fs.writeFileSync(
+    path.join(tempHome, '.media-bridge', 'config.json'),
+    `${JSON.stringify(legacy)}\n`,
+  );
+
+  const loaded = loadConfig({ homeDir: tempHome });
+
+  assert.equal(loaded.opencodex.baseUrl, 'http://127.0.0.1:8765/v1');
+  fs.rmSync(tempHome, { recursive: true, force: true });
+});
+
+test('loading an older partial config fills the new personal runtime defaults', () => {
+  const tempHome = home('legacy-partial');
+  const target = path.join(tempHome, '.media-bridge', 'config.json');
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, JSON.stringify({
+    host: '127.0.0.1',
+    port: 8877,
+    opencodex: { baseUrl: 'http://127.0.0.1:10100/v1' },
+    solar: { model: 'solar-pro4' },
+  }));
+
+  const loaded = loadConfig({ homeDir: tempHome });
+
+  assert.equal(loaded.opencodex.baseUrl, 'http://127.0.0.1:8877/v1');
+  assert.equal(loaded.solar.endpoint, 'https://api.upstage.ai/v1/chat/completions');
+  assert.equal(loaded.ocr.model, 'document-parse');
+  assert.equal(loaded.failurePolicy.blockSolarOnPreparationFailure, true);
   fs.rmSync(tempHome, { recursive: true, force: true });
 });

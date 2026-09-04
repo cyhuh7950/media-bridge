@@ -6,26 +6,31 @@ import subprocess
 import sys
 from pathlib import Path
 
-import media_bridge.entrypoints
-
+import media_bridge_personal.npm_runtime
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_DIR = ROOT / "packaging" / "runtime"
 ENTRYPOINT = RUNTIME_DIR / "entrypoint.py"
 BUILD_SCRIPT = RUNTIME_DIR / "build-win32-x64.ps1"
+LINUX_X64_BUILD_SCRIPT = RUNTIME_DIR / "build-linux-x64.sh"
+LINUX_ARM64_BUILD_SCRIPT = RUNTIME_DIR / "build-linux-arm64.sh"
 BUILD_LOCK = RUNTIME_DIR / "requirements-build.lock"
 VERIFY_SCRIPT = RUNTIME_DIR / "verify-win32-x64.ps1"
 MANAGED_VERIFY_SCRIPT = RUNTIME_DIR / "verify-managed-runtime.cjs"
 WORKFLOW = ROOT / ".github" / "workflows" / "build-runtime-win32-x64.yml"
 
 
-def test_runtime_entrypoint_calls_http_server(monkeypatch) -> None:
+def test_runtime_entrypoint_calls_personal_server(monkeypatch) -> None:
     calls: list[str] = []
-    monkeypatch.setattr(media_bridge.entrypoints, "run_http", lambda: calls.append("run_http"))
+    monkeypatch.setattr(
+        media_bridge_personal.npm_runtime,
+        "run_personal_npm_runtime",
+        lambda: calls.append("run_personal_npm_runtime"),
+    )
 
     runpy.run_path(str(ENTRYPOINT), run_name="__main__")
 
-    assert calls == ["run_http"]
+    assert calls == ["run_personal_npm_runtime"]
 
 
 def test_runtime_build_dependency_is_exactly_pinned() -> None:
@@ -36,6 +41,31 @@ def test_runtime_build_dependency_is_exactly_pinned() -> None:
     ]
 
     assert requirements == ["pyinstaller==6.22.2"]
+
+
+def test_all_runtime_builds_add_the_repository_source_root_to_pyinstaller() -> None:
+    windows = BUILD_SCRIPT.read_text(encoding="utf-8")
+    linux_x64 = LINUX_X64_BUILD_SCRIPT.read_text(encoding="utf-8")
+    linux_arm64 = LINUX_ARM64_BUILD_SCRIPT.read_text(encoding="utf-8")
+
+    assert "$sourceRoot" in windows
+    assert "--paths $sourceRoot" in windows
+    for script in (linux_x64, linux_arm64):
+        assert 'source_root="$(cd "$script_dir/../.."' in script
+        assert '--paths "$source_root"' in script
+
+
+def test_win32_verifier_provisions_the_personal_runtime_contract() -> None:
+    verifier = VERIFY_SCRIPT.read_text(encoding="utf-8")
+
+    assert "MEDIA_BRIDGE_RUNTIME_MODE" in verifier
+    assert "MEDIA_BRIDGE_SOLAR_MODEL" in verifier
+    assert "MEDIA_BRIDGE_SOLAR_ENDPOINT" in verifier
+    assert "MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV" in verifier
+    assert "MEDIA_BRIDGE_OCR_CREDENTIAL_ENV" in verifier
+    assert "/v1/document-digitization" in verifier
+    managed_verifier = MANAGED_VERIFY_SCRIPT.read_text(encoding="utf-8")
+    assert "packageVersion: sourceManifest.packageVersion" in managed_verifier
 
 
 def test_runtime_build_script_rejects_invalid_version_before_build(tmp_path: Path) -> None:

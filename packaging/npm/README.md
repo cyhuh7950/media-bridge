@@ -8,7 +8,9 @@ mb init
 mb start
 ```
 
-현재 실행기는 관리된 Media Bridge runtime을 사용합니다. 지원 플랫폼용 runtime
+npm 패키지는 단일 사용자용 `personal` 모드로 실행됩니다. OpenCodex의 Responses 요청을
+Media Bridge가 받고, 이미지에서는 Upstage Document Parse로 텍스트를 추출한 뒤 원본 이미지를
+제거하여 Solar-4에 전달합니다. 지원 플랫폼용 runtime
 artifact가 없는 경우에는 사용자에게 Python, Docker 또는 `.deb` 설치를 요구하지 않고
 설치 불가 사유를 표시합니다.
 
@@ -17,6 +19,11 @@ SHA-256을 검증합니다. manifest에 공개 산출물이 없는 플랫폼은 
 
 첫 시작 시 runtime 구동에 필요한 model registry, asset 디렉터리와 내부 인증 secret을
 `~/.media-bridge` 아래에 자동 생성합니다. Secret 원문은 `config.json`에 저장하지 않습니다.
+
+시작 전 `mb init`에서 지정한 환경변수 이름(기본 `SOLAR_API_KEY`)에 Upstage API key를
+설정해야 합니다. OpenCodex provider의 base URL은 기본
+`http://127.0.0.1:8765/v1`, wire API는 `responses`입니다. PostgreSQL과 서명 snapshot을
+사용하는 다중 사용자 `managed` 모드는 기존 서버 배포 entrypoint로 별도 유지됩니다.
 
 ## 제거
 
