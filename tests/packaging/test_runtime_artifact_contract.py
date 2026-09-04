@@ -20,6 +20,12 @@ MANAGED_VERIFY_SCRIPT = RUNTIME_DIR / "verify-managed-runtime.cjs"
 WORKFLOW = ROOT / ".github" / "workflows" / "build-runtime-win32-x64.yml"
 
 
+def test_shell_build_scripts_are_pinned_to_lf_in_git() -> None:
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+
+    assert "*.sh text eol=lf" in attributes.splitlines()
+
+
 def test_runtime_entrypoint_calls_personal_server(monkeypatch) -> None:
     calls: list[str] = []
     monkeypatch.setattr(
