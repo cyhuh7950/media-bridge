@@ -186,9 +186,9 @@ def test_runtime_release_workflow_uses_verified_run_artifacts_without_local_gh()
 
     assert "release-v*" in workflow
     assert "GITHUB_REF_NAME" in workflow
-    assert "33875592901" in workflow
-    assert "33875592987" in workflow
-    assert "33875592959" in workflow
+    assert "33889036552" in workflow
+    assert "33889039442" in workflow
+    assert "33889041728" in workflow
     assert workflow.count("actions/download-artifact@v4") == 3
     assert "runtime-manifest.json" in workflow
     assert "manifest.packageVersion !== version" in workflow
@@ -196,7 +196,12 @@ def test_runtime_release_workflow_uses_verified_run_artifacts_without_local_gh()
     assert "createRelease" in workflow
     assert "uploadReleaseAsset" in workflow
     assert "gh release" not in workflow
-    assert "npm publish" not in workflow
+    assert "publish-npm-package:" in workflow
+    assert "id-token: write" in workflow
+    assert "npm publish --access public" in workflow
+    assert "NPM_TOKEN" not in workflow
+    assert "NODE_AUTH_TOKEN" not in workflow
+    assert "_authToken" not in workflow
 
 
 def test_runtime_verifier_is_wired_to_private_workflow_evidence() -> None:
