@@ -189,6 +189,8 @@ def test_runtime_release_workflow_uses_verified_run_artifacts_without_local_gh()
     assert "33838897611" in workflow
     assert workflow.count("actions/download-artifact@v4") == 3
     assert "runtime-manifest.json" in workflow
+    assert "manifest.packageVersion !== version" in workflow
+    assert "manifest.version !== version" not in workflow
     assert "createRelease" in workflow
     assert "uploadReleaseAsset" in workflow
     assert "gh release" not in workflow

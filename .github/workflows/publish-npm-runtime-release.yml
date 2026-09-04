@@ -67,7 +67,7 @@ jobs:
           const crypto = require('node:crypto');
           const [root, version, sourceCommit] = process.argv.slice(2);
           const manifest = JSON.parse(fs.readFileSync(path.join(root, 'runtime-manifest.json'), 'utf8'));
-          if (manifest.version !== version) throw new Error('runtime manifest version mismatch');
+          if (manifest.packageVersion !== version) throw new Error('runtime manifest version mismatch');
           for (const platform of ['linux-arm64', 'linux-x64', 'win32-x64']) {
             const entry = manifest.artifacts?.[platform];
             const archive = path.join(root, `media-bridge-runtime-${version}-${platform}.tar.gz`);
