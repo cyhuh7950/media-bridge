@@ -528,10 +528,12 @@ def _settings_page(config: dict[str, Any], *, saved: bool = False) -> str:
 <style>
 :root{{color-scheme:dark;--bg:#0b1020;--panel:#151c31;--line:#2a3555;--text:#edf2ff;--muted:#a8b3cf;--accent:#65d6b5;--danger:#ff8b8b}}
 *{{box-sizing:border-box}} body{{margin:0;background:linear-gradient(145deg,#080d19,#111a30);color:var(--text);font:15px/1.5 system-ui,sans-serif}}
-main{{max-width:1120px;margin:auto;padding:32px 20px 64px}} header{{display:flex;justify-content:space-between;gap:24px;align-items:end;margin-bottom:24px}}
+main{{max-width:1600px;margin:auto;padding:32px 20px 64px}} header{{display:flex;justify-content:space-between;gap:24px;align-items:end;margin-bottom:24px}}
 h1{{margin:0;font-size:clamp(28px,5vw,44px)}} h2{{margin-top:0;font-size:20px}} p{{color:var(--muted)}}
 .badge{{padding:7px 12px;border:1px solid #315e58;border-radius:999px;color:var(--accent);white-space:nowrap}}
-.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:16px}} section{{background:rgba(21,28,49,.96);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 14px 36px #0005}}
+.grid{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-items:start}} section{{min-width:0;background:rgba(21,28,49,.96);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 14px 36px #0005}}
+@media(max-width:1000px){{.grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}} @media(max-width:620px){{.grid{{grid-template-columns:minmax(0,1fr)}}}}
+.result{{overflow-wrap:anywhere}} .pipeline-input{{display:grid;grid-template-columns:minmax(220px,1fr) minmax(0,3fr);gap:20px;align-items:start}} @media(max-width:620px){{.pipeline-input{{grid-template-columns:minmax(0,1fr)}}}}
 label{{display:block;margin:12px 0;color:var(--muted)}} input,select,textarea{{display:block;width:100%;margin-top:5px;padding:10px 12px;border:1px solid #3a486e;border-radius:9px;background:#0c1326;color:var(--text)}}
 input[type=checkbox]{{display:inline;width:auto;margin-right:8px}} button{{border:0;border-radius:9px;padding:10px 15px;background:var(--accent);color:#06251d;font-weight:700;cursor:pointer;margin:5px 6px 5px 0}} button.secondary{{background:#283553;color:var(--text)}}
 .wide{{grid-column:1/-1}} .result{{min-height:72px;white-space:pre-wrap;background:#080d19;border:1px solid var(--line);border-radius:10px;padding:12px;color:#cfe3ff}} .notice{{color:var(--accent)}} .secret-state{{font-size:13px;color:var(--muted)}} code{{color:#9debd5}} @media(max-width:620px){{header{{display:block}}.badge{{display:inline-block;margin-top:12px}}}}
@@ -567,7 +569,9 @@ input[type=checkbox]{{display:inline;width:auto;margin-right:8px}} button{{borde
 <label>시험 이미지/PDF<input name="media_test_file" type="file" accept="image/*,application/pdf"></label>
 <p class="secret-state" data-secret="media-processor">저장 상태를 확인하는 중…</p><button class="secondary" type="button" data-action="media-processor">OCR 연결 시험</button><div id="media-processor-result" class="result" aria-live="polite"></div></section>
 <section class="wide"><h2>전체 흐름 시험</h2><p>선택한 파일을 OCR 처리하고 원본 미디어를 제거한 텍스트만 Non-Vision LLM에 보냅니다.</p>
+<div class="pipeline-input"><label>질문에 첨부할 이미지/PDF<input name="pipeline_test_file" type="file" accept="image/*,application/pdf"></label>
 <label>질문<textarea name="pipeline_question" rows="3">이 이미지 또는 문서의 내용을 한국어로 설명해 주세요.</textarea></label>
+</div>
 <button class="secondary" type="button" data-action="pipeline">전체 파이프라인 시험</button><div id="pipeline-result" class="result" aria-live="polite"></div></section>
 </div><p><button type="submit">설정 저장</button></p></form>
 <script src="/assets/settings.js" defer></script></main></body></html>"""
@@ -587,9 +591,9 @@ const payload=()=>({
  failurePolicy:{blockSolarOnPreparationFailure:field('block_solar_on_failure').checked}
 });
 async function call(url,body){const response=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw new Error(data.message||data.error||`HTTP ${response.status}`);return data}
-async function filePayload(){const file=field('media_test_file').files[0];if(!file)throw new Error('시험 이미지 또는 PDF를 선택하세요.');const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));return {filename:file.name,mimeType:file.type||'application/octet-stream',dataBase64:btoa(binary)}}
+async function filePayload(name){const file=field(name).files[0];if(!file)throw new Error('시험 이미지 또는 PDF를 선택하세요.');const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));return {filename:file.name,mimeType:file.type||'application/octet-stream',dataBase64:btoa(binary)}}
 form.addEventListener('submit',async(event)=>{event.preventDefault();try{const saved=await call('/api/settings',payload());field('text_llm_api_key').value='';field('media_processor_api_key').value='';show('agent-result',saved.restartRequired?'설정을 저장했습니다. 포트 변경을 적용하려면 mb service restart를 실행하세요.':'설정을 저장했습니다. 현재 실행에 적용했으며 Provider 연결 시험을 실행할 수 있습니다.');await load()}catch(error){show('agent-result',`저장 실패: ${error.message}`)}});
-document.querySelectorAll('[data-action]').forEach(button=>button.addEventListener('click',async()=>{const action=button.dataset.action;const id=`${action}-result`;try{if(action==='agent'){const response=await fetch('/api/coding-agent');show(id,await response.json());return}if(action==='text-llm'){show(id,await call('/api/test/text-llm',{prompt:'Media Bridge 연결 시험입니다. 한국어로 짧게 응답해 주세요.'}));return}const file=await filePayload();if(action==='media-processor'){show(id,await call('/api/test/media-processor',file));return}show(id,await call('/api/test/pipeline',{...file,question:field('pipeline_question').value}))}catch(error){show(id,`시험 실패: ${error.message}`)}}));
+document.querySelectorAll('[data-action]').forEach(button=>button.addEventListener('click',async()=>{const action=button.dataset.action;const id=`${action}-result`;try{if(action==='agent'){const response=await fetch('/api/coding-agent');show(id,await response.json());return}if(action==='text-llm'){show(id,await call('/api/test/text-llm',{prompt:'Media Bridge 연결 시험입니다. 한국어로 짧게 응답해 주세요.'}));return}const file=await filePayload(action==='pipeline'?'pipeline_test_file':'media_test_file');if(action==='media-processor'){show(id,await call('/api/test/media-processor',file));return}show(id,await call('/api/test/pipeline',{...file,question:field('pipeline_question').value}))}catch(error){show(id,`시험 실패: ${error.message}`)}}));
 async function load(){const response=await fetch('/api/settings');const data=await response.json();document.querySelectorAll('[data-secret]').forEach(node=>{node.textContent=data.credentials[node.dataset.secret]?'API Key 저장됨':'API Key 미저장 (환경변수 대체 가능)'})}load();
 """
 
