@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
 const fs = require('node:fs');
+const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -13,6 +14,66 @@ function home(name) {
   fs.mkdirSync(value, { recursive: true });
   return value;
 }
+
+test('start orchestration checks the tracked service before resolving a runtime update', async () => {
+  let resolved = false;
+  await assert.rejects(() => processApi.startManagedRuntime({
+    config: { host: '127.0.0.1', port: 8878 },
+    homeDir: home('pre-resolve-running'),
+    readStatusImpl: () => ({ running: true, pid: 44001 }),
+    resolveRuntimeImpl: async () => {
+      resolved = true;
+      throw new Error('runtime resolver must not run');
+    },
+  }), /already running.*44001/i);
+  assert.equal(resolved, false);
+});
+
+test('start rejects a port already owned by an unmanaged listener', async () => {
+  const homeDir = home('unmanaged-listener');
+  const server = net.createServer();
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  let state;
+  try {
+    await assert.rejects(async () => {
+      state = await processApi.startProcess({
+        config: { host: '127.0.0.1', port },
+        runtime: {
+          command: process.execPath,
+          args: ['-e', 'setInterval(() => {}, 1000)'],
+          env: process.env,
+          python: false,
+        },
+        homeDir,
+      });
+    }, /port.*already in use|already.*port/i);
+  } finally {
+    if (state) await processApi.stopProcess({ homeDir });
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    fs.rmSync(homeDir, { recursive: true, force: true });
+  }
+});
+
+test('start rejects a child that exits during the startup grace period', async () => {
+  const homeDir = home('startup-exit');
+  try {
+    await assert.rejects(() => processApi.startProcess({
+      config: { host: '127.0.0.1', port: 18876 },
+      runtime: {
+        command: process.execPath,
+        args: ['-e', 'setTimeout(() => process.exit(23), 700)'],
+        env: process.env,
+        python: false,
+      },
+      homeDir,
+    }), /exited during startup/i);
+    assert.equal(fs.existsSync(processApi.statePath(homeDir)), false);
+  } finally {
+    await processApi.stopProcess({ homeDir });
+    fs.rmSync(homeDir, { recursive: true, force: true });
+  }
+});
 
 test('lifecycle starts a managed child and removes its state on stop', async () => {
   const homeDir = home('start-stop');

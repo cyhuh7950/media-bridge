@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const fsp = fs.promises;
 const crypto = require('node:crypto');
+const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawn } = require('node:child_process');
@@ -193,10 +194,34 @@ async function writeState(homeDir, state) {
   await fsp.rename(temporary, target);
 }
 
-async function startProcess({ config, runtime, homeDir = os.homedir(), portOverride } = {}) {
+async function assertPortAvailable({ host, port, netImpl = net } = {}) {
+  await new Promise((resolve, reject) => {
+    const probe = netImpl.createServer();
+    probe.once('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        reject(new Error(`Media Bridge port ${host}:${port} is already in use by another process`));
+        return;
+      }
+      reject(error);
+    });
+    probe.listen({ host, port, exclusive: true }, () => {
+      probe.close((error) => error ? reject(error) : resolve());
+    });
+  });
+}
+
+async function startProcess({
+  config,
+  runtime,
+  homeDir = os.homedir(),
+  portOverride,
+  startupGraceMs = 1000,
+  sleepImpl = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+} = {}) {
   const current = readStatus({ homeDir });
   if (current.running) throw new Error(`Media Bridge is already running: ${current.pid}`);
   const port = portOverride ?? config.port;
+  await assertPortAvailable({ host: config.host, port });
   const args = buildRuntimeArgs(runtime);
   const child = spawn(runtime.command, args, {
     detached: true,
@@ -216,6 +241,10 @@ async function startProcess({ config, runtime, homeDir = os.homedir(), portOverr
     if (!identity) throw new Error('Media Bridge child identity could not be verified');
     const state = { pid: child.pid, command: runtime.command, identity, host: config.host, port };
     await writeState(homeDir, state);
+    await sleepImpl(startupGraceMs);
+    if (!identityMatches(identity, inspectProcessIdentity(child.pid))) {
+      throw new Error('Media Bridge process exited during startup');
+    }
     child.unref();
     return state;
   } catch (error) {
@@ -223,6 +252,20 @@ async function startProcess({ config, runtime, homeDir = os.homedir(), portOverr
     await fsp.rm(statePath(homeDir), { force: true });
     throw error;
   }
+}
+
+async function startManagedRuntime({
+  config,
+  homeDir = os.homedir(),
+  portOverride,
+  readStatusImpl = readStatus,
+  resolveRuntimeImpl,
+  startProcessImpl = startProcess,
+} = {}) {
+  const current = readStatusImpl({ homeDir });
+  if (current.running) throw new Error(`Media Bridge is already running: ${current.pid}`);
+  const runtime = await resolveRuntimeImpl({ homeDir });
+  return startProcessImpl({ config, runtime, homeDir, portOverride });
 }
 
 async function stopProcess({
@@ -284,15 +327,31 @@ async function checkHealth({ config, fetchImpl = fetch } = {}) {
   }
 }
 
+async function checkManagedHealth({
+  config,
+  homeDir = os.homedir(),
+  fetchImpl = fetch,
+  readStatusImpl = readStatus,
+} = {}) {
+  const url = `http://${config.host}:${config.port}/health`;
+  if (!readStatusImpl({ homeDir }).running) {
+    return { healthy: false, status: null, url, reason: 'service_not_running' };
+  }
+  return checkHealth({ config, fetchImpl });
+}
+
 module.exports = {
+  assertPortAvailable,
   buildRuntimeArgs,
   checkHealth,
+  checkManagedHealth,
   identityMatches,
   inspectProcessIdentity,
   isAlive,
   prepareRuntimeEnvironment,
   readStatus,
   removeManagedTree,
+  startManagedRuntime,
   startProcess,
   statePath,
   stopProcess,

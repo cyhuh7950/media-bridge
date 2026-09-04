@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 const fs = require('node:fs');
-const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const readline = require('node:readline');
@@ -16,10 +15,10 @@ const { parseNonInteractiveConfig, runWizard } = require('../lib/wizard.cjs');
 const { openGui } = require('../lib/gui.cjs');
 const { resolveRuntime } = require('../lib/runtime.cjs');
 const {
-  checkHealth,
+  checkManagedHealth,
   readStatus,
   removeManagedTree,
-  startProcess,
+  startManagedRuntime,
   stopProcess,
 } = require('../lib/process.cjs');
 
@@ -79,12 +78,18 @@ async function start(argv) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('포트는 1부터 65535 사이의 정수여야 합니다.');
   }
+  const current = readStatus({ homeDir: os.homedir() });
+  if (current.running) throw new Error(`Media Bridge is already running: ${current.pid}`);
   if (portIndex >= 0) {
     config = applyPortOverride(config, port);
     saveConfig({ homeDir: os.homedir(), config });
   }
-  const runtime = await resolveRuntime({ homeDir: os.homedir() });
-  const state = await startProcess({ config, runtime, homeDir: os.homedir(), portOverride: port });
+  const state = await startManagedRuntime({
+    config,
+    homeDir: os.homedir(),
+    portOverride: port,
+    resolveRuntimeImpl: resolveRuntime,
+  });
   process.stdout.write(`Media Bridge started: ${state.pid}\n`);
 }
 
@@ -97,7 +102,7 @@ function status(json) {
 
 async function health(json) {
   const config = readConfig();
-  const result = await checkHealth({ config });
+  const result = await checkManagedHealth({ config, homeDir: os.homedir() });
   process.stdout.write(json ? `${JSON.stringify(result)}\n` : `${result.healthy ? 'healthy' : 'unhealthy'} ${result.url}\n`);
   if (!result.healthy) process.exitCode = 1;
 }
@@ -115,21 +120,21 @@ function ready(argv) {
   const timeoutIndex = argv.indexOf('--timeout');
   const timeout = timeoutIndex >= 0 ? Number(argv[timeoutIndex + 1]) : 0;
   const deadline = Date.now() + (Number.isFinite(timeout) && timeout > 0 ? timeout * 1000 : 0);
-  const check = () => {
+  const check = async () => {
     const { host, port } = readConfig();
-    const socket = net.createConnection({ host, port });
-    socket.once('connect', () => {
-      socket.destroy();
+    const result = await checkManagedHealth({
+      config: { host, port },
+      homeDir: os.homedir(),
+    });
+    if (result.healthy) {
       process.stdout.write(json ? `${JSON.stringify({ ready: true, host, port })}\n` : `ready ${host}:${port}\n`);
-    });
-    socket.once('error', () => {
-      socket.destroy();
-      if (wait && Date.now() < deadline) return setTimeout(check, 100);
-      process.stdout.write(json ? `${JSON.stringify({ ready: false, host, port })}\n` : `not-ready ${host}:${port}\n`);
-      process.exitCode = 1;
-    });
+      return;
+    }
+    if (wait && Date.now() < deadline) return setTimeout(check, 100);
+    process.stdout.write(json ? `${JSON.stringify({ ready: false, host, port })}\n` : `not-ready ${host}:${port}\n`);
+    process.exitCode = 1;
   };
-  check();
+  return check();
 }
 
 async function service(action) {
@@ -156,8 +161,11 @@ async function service(action) {
   if (action === 'start') {
     if (!fs.existsSync(serviceFile)) service('install');
     const config = readConfig();
-    const runtime = await resolveRuntime({ homeDir: os.homedir() });
-    const state = await startProcess({ config, runtime, homeDir: os.homedir() });
+    const state = await startManagedRuntime({
+      config,
+      homeDir: os.homedir(),
+      resolveRuntimeImpl: resolveRuntime,
+    });
     process.stdout.write(`service started: ${state.pid}\n`);
     return;
   }

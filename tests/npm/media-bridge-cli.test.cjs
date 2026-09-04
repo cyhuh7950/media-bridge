@@ -1,9 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { defaultConfig, saveConfig } = require('../../packaging/npm/lib/config.cjs');
 
 const cli = path.resolve(__dirname, '../../packaging/npm/bin/mb.cjs');
 const testRoot = process.env.MEDIA_BRIDGE_TEST_TMP || os.tmpdir();
@@ -61,6 +62,60 @@ test('mb update prints the installed public package name', () => {
   const result = spawnSync(process.execPath, [cli, 'update'], { encoding: 'utf8' });
   assert.equal(result.status, 0);
   assert.equal(result.stdout, 'npm update -g @cyhuh/media-bridge 를 실행하십시오.\n');
+});
+
+async function unownedHealthServer() {
+  const child = spawn(process.execPath, ['-e', [
+    "const http=require('node:http');",
+    "const server=http.createServer((_req,res)=>{res.writeHead(200,{'content-type':'application/json'});res.end('{\"status\":\"ok\"}');});",
+    "server.listen(0,'127.0.0.1',()=>console.log(server.address().port));",
+  ].join('')], { stdio: ['ignore', 'pipe', 'inherit'] });
+  const port = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.stdout.once('data', (chunk) => resolve(Number(String(chunk).trim())));
+  });
+  return { child, port };
+}
+
+test('mb ready does not trust an unowned listener', async () => {
+  const tempHome = path.join(testRoot, 'media-bridge-npm-cli-unowned-ready');
+  fs.rmSync(tempHome, { recursive: true, force: true });
+  const server = await unownedHealthServer();
+  try {
+    saveConfig({ homeDir: tempHome, config: { ...defaultConfig(), port: server.port } });
+    const result = spawnSync(process.execPath, [cli, 'ready'], {
+      encoding: 'utf8',
+      env: { ...process.env, HOME: tempHome, USERPROFILE: tempHome },
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /not-ready/);
+  } finally {
+    server.child.kill();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+});
+
+test('mb health does not trust an unowned healthy endpoint', async () => {
+  const tempHome = path.join(testRoot, 'media-bridge-npm-cli-unowned-health');
+  fs.rmSync(tempHome, { recursive: true, force: true });
+  const server = await unownedHealthServer();
+  try {
+    saveConfig({ homeDir: tempHome, config: { ...defaultConfig(), port: server.port } });
+    const result = spawnSync(process.execPath, [cli, 'health', '--json'], {
+      encoding: 'utf8',
+      env: { ...process.env, HOME: tempHome, USERPROFILE: tempHome },
+    });
+    assert.notEqual(result.status, 0);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      healthy: false,
+      status: null,
+      url: `http://127.0.0.1:${server.port}/health`,
+      reason: 'service_not_running',
+    });
+  } finally {
+    server.child.kill();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
 });
 
 function uninstallHome(name) {
