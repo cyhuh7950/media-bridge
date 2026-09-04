@@ -46,8 +46,22 @@ function writePrivateFileIfMissing(target, contents) {
 function prepareRuntimeEnvironment({ config, homeDir = os.homedir(), env = process.env } = {}) {
   const runtimeEnv = { ...env };
   const configRoot = path.join(stateDirectory(homeDir), 'runtime-config');
-  const model = config?.solar?.model || 'solar-pro4';
-  const solarEndpoint = config?.solar?.endpoint || 'https://api.upstage.ai/v1/chat/completions';
+  const textLlm = config?.textLlm || {
+    protocol: 'openai-chat-completions',
+    endpoint: config?.solar?.endpoint,
+    model: config?.solar?.model,
+    credentialRef: 'text-llm',
+    credentialEnv: config?.solar?.apiKeyEnv,
+  };
+  const mediaProcessor = config?.mediaProcessor || {
+    protocol: 'upstage-document-parse',
+    endpoint: config?.ocr?.endpoint,
+    model: config?.ocr?.model,
+    credentialRef: 'media-processor',
+    credentialEnv: config?.ocr?.apiKeyEnv,
+  };
+  const model = textLlm.model || 'solar-pro4';
+  const solarEndpoint = textLlm.endpoint || 'https://api.upstage.ai/v1/chat/completions';
 
   if (!runtimeEnv.MEDIA_BRIDGE_MODEL_REGISTRY) {
     const registryPath = path.join(configRoot, 'model-registry.yaml');
@@ -85,11 +99,16 @@ function prepareRuntimeEnvironment({ config, homeDir = os.homedir(), env = proce
   }
 
   runtimeEnv.MEDIA_BRIDGE_RUNTIME_MODE = 'personal';
-  runtimeEnv.MEDIA_BRIDGE_OCR_ENDPOINT ||= config?.ocr?.endpoint || 'https://api.upstage.ai/v1/document-digitization';
-  runtimeEnv.MEDIA_BRIDGE_OCR_CREDENTIAL_ENV ||= config?.ocr?.apiKeyEnv || config?.solar?.apiKeyEnv || 'SOLAR_API_KEY';
+  runtimeEnv.MEDIA_BRIDGE_CREDENTIAL_STORE_FILE ||= path.join(stateDirectory(homeDir), 'secrets', 'providers.json');
+  runtimeEnv.MEDIA_BRIDGE_TEXT_LLM_PROTOCOL ||= textLlm.protocol || 'openai-chat-completions';
+  runtimeEnv.MEDIA_BRIDGE_TEXT_LLM_CREDENTIAL_REF ||= textLlm.credentialRef || 'text-llm';
+  runtimeEnv.MEDIA_BRIDGE_MEDIA_PROCESSOR_PROTOCOL ||= mediaProcessor.protocol || 'upstage-document-parse';
+  runtimeEnv.MEDIA_BRIDGE_MEDIA_PROCESSOR_CREDENTIAL_REF ||= mediaProcessor.credentialRef || 'media-processor';
+  runtimeEnv.MEDIA_BRIDGE_OCR_ENDPOINT ||= mediaProcessor.endpoint || 'https://api.upstage.ai/v1/document-digitization';
+  runtimeEnv.MEDIA_BRIDGE_OCR_CREDENTIAL_ENV ||= mediaProcessor.credentialEnv || textLlm.credentialEnv || 'SOLAR_API_KEY';
   runtimeEnv.MEDIA_BRIDGE_SOLAR_ENDPOINT ||= solarEndpoint;
   runtimeEnv.MEDIA_BRIDGE_SOLAR_MODEL ||= model;
-  runtimeEnv.MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV ||= config?.solar?.apiKeyEnv || 'SOLAR_API_KEY';
+  runtimeEnv.MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV ||= textLlm.credentialEnv || 'SOLAR_API_KEY';
   runtimeEnv.MEDIA_BRIDGE_MAX_REQUEST_BYTES ||= String(config?.conversion?.maxBytes || 8388608);
   runtimeEnv.MEDIA_BRIDGE_OCR_ENABLED ||= String(config?.conversion?.ocrEnabled !== false);
   runtimeEnv.MEDIA_BRIDGE_VISION_ENABLED ||= String(config?.conversion?.visionEnabled !== false);
@@ -98,7 +117,7 @@ function prepareRuntimeEnvironment({ config, homeDir = os.homedir(), env = proce
   );
   runtimeEnv.MEDIA_BRIDGE_CONFIG_FILE ||= configPath(homeDir);
 
-  const configuredKey = runtimeEnv[config?.solar?.apiKeyEnv || 'SOLAR_API_KEY'];
+  const configuredKey = runtimeEnv[textLlm.credentialEnv || 'SOLAR_API_KEY'];
   if (configuredKey) {
     runtimeEnv.SOLAR_API_KEY ||= configuredKey;
     runtimeEnv.MEDIA_BRIDGE_VISION_API_KEY ||= configuredKey;

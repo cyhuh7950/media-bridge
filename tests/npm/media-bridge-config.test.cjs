@@ -37,6 +37,27 @@ test('default config contains fail-closed conversion settings', () => {
   assert.equal(config.failurePolicy.blockSolarOnPreparationFailure, true);
   assert.equal(config.conversion.ocrEnabled, true);
   assert.equal(config.conversion.visionEnabled, true);
+  assert.deepEqual(config.codingAgent, {
+    preset: 'opencodex',
+    protocol: 'openai-responses',
+    baseUrl: 'http://127.0.0.1:8642/v1',
+  });
+  assert.deepEqual(config.textLlm, {
+    preset: 'upstage-solar',
+    protocol: 'openai-chat-completions',
+    endpoint: 'https://api.upstage.ai/v1/chat/completions',
+    model: 'solar-pro4',
+    credentialRef: 'text-llm',
+    credentialEnv: 'SOLAR_API_KEY',
+  });
+  assert.deepEqual(config.mediaProcessor, {
+    preset: 'upstage-document-parse',
+    protocol: 'upstage-document-parse',
+    endpoint: 'https://api.upstage.ai/v1/document-digitization',
+    model: 'document-parse',
+    credentialRef: 'media-processor',
+    credentialEnv: 'SOLAR_API_KEY',
+  });
 });
 
 test('config is saved with private permissions and loaded without secrets', () => {
@@ -110,5 +131,48 @@ test('loading an older partial config fills the new personal runtime defaults', 
   assert.equal(loaded.solar.endpoint, 'https://api.upstage.ai/v1/chat/completions');
   assert.equal(loaded.ocr.model, 'document-parse');
   assert.equal(loaded.failurePolicy.blockSolarOnPreparationFailure, true);
+  assert.equal(loaded.codingAgent.preset, 'opencodex');
+  assert.equal(loaded.textLlm.model, 'solar-pro4');
+  assert.equal(loaded.textLlm.endpoint, 'https://api.upstage.ai/v1/chat/completions');
+  assert.equal(loaded.mediaProcessor.protocol, 'upstage-document-parse');
   fs.rmSync(tempHome, { recursive: true, force: true });
 });
+
+test('generic provider settings round-trip without storing API key material', () => {
+  const tempHome = home('generic-provider');
+  const config = defaultConfig();
+  config.codingAgent = {
+    preset: 'eoul-gateway',
+    protocol: 'openai-responses',
+    baseUrl: 'http://127.0.0.1:8642/v1',
+  };
+  config.textLlm = {
+    preset: 'custom',
+    protocol: 'openai-responses',
+    endpoint: 'https://llm.example.test/v1/responses',
+    model: 'text-model',
+    credentialRef: 'text-llm',
+    credentialEnv: 'CUSTOM_LLM_KEY',
+  };
+  config.mediaProcessor = {
+    preset: 'upstage-document-parse',
+    protocol: 'upstage-document-parse',
+    endpoint: 'https://api.upstage.ai/v1/document-digitization',
+    model: 'document-parse',
+    credentialRef: 'media-processor',
+    credentialEnv: 'UPSTAGE_API_KEY',
+  };
+
+  saveConfig({ homeDir: tempHome, config });
+  const loaded = loadConfig({ homeDir: tempHome });
+
+  assert.deepEqual(loaded.codingAgent, config.codingAgent);
+  assert.deepEqual(loaded.textLlm, config.textLlm);
+  assert.deepEqual(loaded.mediaProcessor, config.mediaProcessor);
+  assert.doesNotMatch(fs.readFileSync(configPathFor(tempHome), 'utf8'), /actual-secret/);
+  fs.rmSync(tempHome, { recursive: true, force: true });
+});
+
+function configPathFor(homeDir) {
+  return path.join(homeDir, '.media-bridge', 'config.json');
+}

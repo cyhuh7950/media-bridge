@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import secrets
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any, cast
 from urllib.parse import urlsplit
 
@@ -20,6 +20,7 @@ from media_bridge_gateway.contracts import (
     SealedGatewayRequest,
 )
 from media_bridge_gateway.normalizer import digest_gateway_payload
+from media_bridge_personal.credential_store import CredentialStoreError
 
 
 def _contains_media(value: object) -> bool:
@@ -36,18 +37,23 @@ def _contains_media(value: object) -> bool:
     return any(_contains_media(child) for child in item.values())
 
 
-def _validate_endpoint(endpoint: str) -> None:
+def _validate_endpoint(endpoint: str, protocol: str) -> None:
     parsed = urlsplit(endpoint)
+    expected_path = (
+        "/v1/chat/completions" if protocol == "openai-chat-completions" else "/v1/responses"
+    )
+    loopback = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
     if (
-        parsed.scheme != "https"
+        protocol not in {"openai-chat-completions", "openai-responses"}
+        or (parsed.scheme != "https" and not (parsed.scheme == "http" and loopback))
         or parsed.hostname is None
         or parsed.username is not None
         or parsed.password is not None
-        or parsed.path != "/v1/chat/completions"
+        or parsed.path != expected_path
         or parsed.query
         or parsed.fragment
     ):
-        raise ValueError("Solar endpoint must be a credential-free HTTPS chat completions URL")
+        raise ValueError("text LLM endpoint is not valid for the selected protocol")
 
 
 def _text_content(value: object) -> str:
@@ -148,12 +154,16 @@ class SolarResponsesDownstream:
         model: str,
         receipt_signer: GateReceiptSigner,
         api_key_env: str = "SOLAR_API_KEY",
+        credential_loader: Callable[[], str] | None = None,
+        protocol: str = "openai-chat-completions",
+        provider_name: str = "Solar",
+        error_prefix: str = "solar",
         transport: httpx.AsyncBaseTransport | None = None,
         timeout_seconds: float = 60.0,
         max_request_bytes: int = 4 * 1024 * 1024,
         max_response_bytes: int = 8 * 1024 * 1024,
     ) -> None:
-        _validate_endpoint(endpoint)
+        _validate_endpoint(endpoint, protocol)
         if (
             not model.strip()
             or timeout_seconds <= 0
@@ -164,6 +174,10 @@ class SolarResponsesDownstream:
         self._model = model
         self._receipt_signer = receipt_signer
         self._api_key_env = api_key_env
+        self._credential_loader = credential_loader
+        self._protocol = protocol
+        self._provider_name = provider_name
+        self._error_prefix = error_prefix
         self._max_request_bytes = max_request_bytes
         self._max_response_bytes = max_response_bytes
         self._client = httpx.AsyncClient(
@@ -179,11 +193,22 @@ class SolarResponsesDownstream:
     async def invoke(self, sealed: SealedGatewayRequest) -> GatewayResponse:
         self._verify_seal(sealed)
         messages = _chat_messages(sealed.payload)
-        solar_payload: dict[str, Any] = {
-            "model": self._model,
-            "messages": messages,
-            "stream": False,
-        }
+        solar_payload: dict[str, Any]
+        if self._protocol == "openai-chat-completions":
+            solar_payload = {"model": self._model, "messages": messages, "stream": False}
+        else:
+            solar_payload = {
+                "model": self._model,
+                "input": [
+                    {
+                        "type": "message",
+                        "role": message["role"],
+                        "content": [{"type": "input_text", "text": message["content"]}],
+                    }
+                    for message in messages
+                ],
+                "stream": False,
+            }
         encoded = json.dumps(
             solar_payload,
             ensure_ascii=False,
@@ -193,11 +218,15 @@ class SolarResponsesDownstream:
         if len(encoded) > self._max_request_bytes:
             raise DownstreamGuardError("Solar request exceeded the configured limit")
         try:
-            secret = load_secret(self._api_key_env, None)
-        except SecretConfigurationError as error:
+            secret = (
+                self._credential_loader()
+                if self._credential_loader is not None
+                else load_secret(self._api_key_env, None)
+            )
+        except (SecretConfigurationError, CredentialStoreError) as error:
             raise DownstreamError(
-                "solar_configuration",
-                "Solar credentials are not configured.",
+                f"{self._error_prefix}_configuration",
+                f"{self._provider_name} credentials are not configured.",
                 http_status=500,
             ) from error
         try:
@@ -210,45 +239,68 @@ class SolarResponsesDownstream:
                 content=encoded,
             )
         except httpx.TimeoutException as error:
-            raise DownstreamError("solar_timeout", "Solar request timed out.") from error
+            raise DownstreamError(
+                f"{self._error_prefix}_timeout", f"{self._provider_name} request timed out."
+            ) from error
         except httpx.RequestError as error:
-            raise DownstreamError("solar_transport", "Solar request failed.") from error
+            raise DownstreamError(
+                f"{self._error_prefix}_transport", f"{self._provider_name} request failed."
+            ) from error
         if response.status_code >= 400:
             code = (
-                "solar_authentication"
+                f"{self._error_prefix}_authentication"
                 if response.status_code in {401, 403}
-                else "solar_rate_limit"
+                else f"{self._error_prefix}_rate_limit"
                 if response.status_code == 429
-                else "solar_upstream_http"
+                else f"{self._error_prefix}_upstream_http"
             )
-            raise DownstreamError(code, "Solar rejected the request.")
+            raise DownstreamError(code, f"{self._provider_name} rejected the request.")
         content_type = response.headers.get("content-type", "").partition(";")[0].strip()
         if content_type != "application/json" or len(response.content) > self._max_response_bytes:
-            raise DownstreamError("solar_response_invalid", "Solar returned an invalid response.")
+            raise DownstreamError(
+                f"{self._error_prefix}_response_invalid",
+                f"{self._provider_name} returned an invalid response.",
+            )
         try:
             solar_response = response.json()
-            choice = solar_response["choices"][0]
-            text = choice["message"]["content"].strip()
+            if self._protocol == "openai-chat-completions":
+                choice = solar_response["choices"][0]
+                text = choice["message"]["content"].strip()
+            else:
+                text = "\n".join(
+                    str(part.get("text", "")).strip()
+                    for item in solar_response["output"]
+                    if isinstance(item, dict)
+                    for part in item.get("content", [])
+                    if isinstance(part, dict) and part.get("type") == "output_text"
+                ).strip()
         except (KeyError, IndexError, TypeError, AttributeError, ValueError) as error:
             raise DownstreamError(
-                "solar_response_invalid",
-                "Solar returned an invalid response.",
+                f"{self._error_prefix}_response_invalid",
+                f"{self._provider_name} returned an invalid response.",
             ) from error
         if not text:
-            raise DownstreamError("solar_response_invalid", "Solar returned an empty response.")
+            raise DownstreamError(
+                f"{self._error_prefix}_response_invalid",
+                f"{self._provider_name} returned an empty response.",
+            )
         usage_source = solar_response.get("usage", {})
         try:
             if not isinstance(usage_source, dict):
                 raise TypeError("usage must be an object")
             usage = {
-                "input_tokens": int(usage_source.get("prompt_tokens", 0)),
-                "output_tokens": int(usage_source.get("completion_tokens", 0)),
+                "input_tokens": int(
+                    usage_source.get("prompt_tokens", usage_source.get("input_tokens", 0))
+                ),
+                "output_tokens": int(
+                    usage_source.get("completion_tokens", usage_source.get("output_tokens", 0))
+                ),
                 "total_tokens": int(usage_source.get("total_tokens", 0)),
             }
         except (TypeError, ValueError, OverflowError) as error:
             raise DownstreamError(
-                "solar_response_invalid",
-                "Solar returned an invalid response.",
+                f"{self._error_prefix}_response_invalid",
+                f"{self._provider_name} returned an invalid response.",
             ) from error
         response_id = f"resp_mb_{secrets.token_urlsafe(12)}"
         message_id = f"msg_mb_{secrets.token_urlsafe(12)}"

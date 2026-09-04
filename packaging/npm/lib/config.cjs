@@ -10,15 +10,36 @@ function defaultConfig() {
     opencodex: {
       baseUrl: 'http://127.0.0.1:8642/v1',
     },
+    codingAgent: {
+      preset: 'opencodex',
+      protocol: 'openai-responses',
+      baseUrl: 'http://127.0.0.1:8642/v1',
+    },
     solar: {
       model: 'solar-pro4',
       endpoint: 'https://api.upstage.ai/v1/chat/completions',
       apiKeyEnv: 'SOLAR_API_KEY',
     },
+    textLlm: {
+      preset: 'upstage-solar',
+      protocol: 'openai-chat-completions',
+      endpoint: 'https://api.upstage.ai/v1/chat/completions',
+      model: 'solar-pro4',
+      credentialRef: 'text-llm',
+      credentialEnv: 'SOLAR_API_KEY',
+    },
     ocr: {
       endpoint: 'https://api.upstage.ai/v1/document-digitization',
       model: 'document-parse',
       apiKeyEnv: 'SOLAR_API_KEY',
+    },
+    mediaProcessor: {
+      preset: 'upstage-document-parse',
+      protocol: 'upstage-document-parse',
+      endpoint: 'https://api.upstage.ai/v1/document-digitization',
+      model: 'document-parse',
+      credentialRef: 'media-processor',
+      credentialEnv: 'SOLAR_API_KEY',
     },
     conversion: {
       maxBytes: 8388608,
@@ -64,13 +85,19 @@ function validateConfig(input) {
     throw new Error('host must be a loopback address');
   }
   config.opencodex ??= {};
+  config.codingAgent ??= {};
   config.solar ??= {};
+  config.textLlm ??= {};
   config.ocr ??= {};
+  config.mediaProcessor ??= {};
   config.conversion ??= {};
   config.failurePolicy ??= {};
   config.opencodex.baseUrl = validateEndpoint(config.opencodex.baseUrl, 'OpenCodex');
+  config.codingAgent.baseUrl = validateEndpoint(config.codingAgent.baseUrl, 'coding agent');
   config.solar.endpoint = validateEndpoint(config.solar.endpoint, 'Solar');
+  config.textLlm.endpoint = validateEndpoint(config.textLlm.endpoint, 'text LLM');
   config.ocr.endpoint = validateEndpoint(config.ocr.endpoint, 'OCR');
+  config.mediaProcessor.endpoint = validateEndpoint(config.mediaProcessor.endpoint, 'media processor');
   if (config.runtimeMode !== 'personal') {
     throw new Error('npm runtime mode must be personal');
   }
@@ -85,6 +112,29 @@ function validateConfig(input) {
   }
   if (typeof config.ocr.apiKeyEnv !== 'string' || config.ocr.apiKeyEnv.trim() === '') {
     throw new Error('OCR API key environment reference is required');
+  }
+  if (!['opencodex', 'eoul-gateway', 'custom'].includes(config.codingAgent.preset)
+      || config.codingAgent.protocol !== 'openai-responses') {
+    throw new Error('coding agent preset or protocol is unsupported');
+  }
+  if (!['upstage-solar', 'custom'].includes(config.textLlm.preset)
+      || !['openai-chat-completions', 'openai-responses'].includes(config.textLlm.protocol)
+      || typeof config.textLlm.model !== 'string'
+      || config.textLlm.model.trim() === ''
+      || typeof config.textLlm.credentialRef !== 'string'
+      || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(config.textLlm.credentialRef)
+      || typeof config.textLlm.credentialEnv !== 'string'
+      || !/^[A-Z_][A-Z0-9_]{0,127}$/.test(config.textLlm.credentialEnv)) {
+    throw new Error('text LLM settings are invalid or unsupported');
+  }
+  if (config.mediaProcessor.preset !== 'upstage-document-parse'
+      || config.mediaProcessor.protocol !== 'upstage-document-parse'
+      || config.mediaProcessor.model !== 'document-parse'
+      || typeof config.mediaProcessor.credentialRef !== 'string'
+      || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(config.mediaProcessor.credentialRef)
+      || typeof config.mediaProcessor.credentialEnv !== 'string'
+      || !/^[A-Z_][A-Z0-9_]{0,127}$/.test(config.mediaProcessor.credentialEnv)) {
+    throw new Error('media processor settings are invalid or unsupported');
   }
   if (!Number.isInteger(config.conversion.maxBytes) || config.conversion.maxBytes < 1) {
     throw new Error('conversion maxBytes must be a positive integer');
@@ -111,13 +161,36 @@ function loadConfig({ homeDir = os.homedir() } = {}) {
     ...defaults,
     ...parsed,
     opencodex: { ...defaults.opencodex, ...parsed.opencodex },
+    codingAgent: parsed.codingAgent
+      ? { ...defaults.codingAgent, ...parsed.codingAgent }
+      : {
+        ...defaults.codingAgent,
+        baseUrl: parsed.opencodex?.baseUrl || `http://${parsed.host || defaults.host}:${parsed.port || defaults.port}/v1`,
+      },
     solar: { ...defaults.solar, ...parsed.solar },
+    textLlm: parsed.textLlm
+      ? { ...defaults.textLlm, ...parsed.textLlm }
+      : {
+        ...defaults.textLlm,
+        endpoint: parsed.solar?.endpoint || defaults.solar.endpoint,
+        model: parsed.solar?.model || defaults.solar.model,
+        credentialEnv: parsed.solar?.apiKeyEnv || defaults.solar.apiKeyEnv,
+      },
     ocr: { ...defaults.ocr, ...parsed.ocr },
+    mediaProcessor: parsed.mediaProcessor
+      ? { ...defaults.mediaProcessor, ...parsed.mediaProcessor }
+      : {
+        ...defaults.mediaProcessor,
+        endpoint: parsed.ocr?.endpoint || defaults.ocr.endpoint,
+        model: parsed.ocr?.model || defaults.ocr.model,
+        credentialEnv: parsed.ocr?.apiKeyEnv || defaults.ocr.apiKeyEnv,
+      },
     conversion: { ...defaults.conversion, ...parsed.conversion },
     failurePolicy: { ...defaults.failurePolicy, ...parsed.failurePolicy },
   };
   if (merged.opencodex.baseUrl === 'http://127.0.0.1:10100/v1') {
     merged.opencodex.baseUrl = `http://${merged.host}:${merged.port}/v1`;
+    if (!parsed.codingAgent) merged.codingAgent.baseUrl = merged.opencodex.baseUrl;
   }
   return validateConfig(merged);
 }
@@ -128,6 +201,9 @@ function applyPortOverride(input, port) {
   config.port = port;
   if (config.opencodex?.baseUrl === previousOwnUrl) {
     config.opencodex.baseUrl = `http://${config.host}:${port}/v1`;
+  }
+  if (config.codingAgent?.baseUrl === previousOwnUrl) {
+    config.codingAgent.baseUrl = `http://${config.host}:${port}/v1`;
   }
   return validateConfig(config);
 }
