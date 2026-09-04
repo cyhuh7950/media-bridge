@@ -23,6 +23,7 @@ BUILD_LOCK = RUNTIME_DIR / "requirements-build.lock"
 VERIFY_SCRIPT = RUNTIME_DIR / "verify-win32-x64.ps1"
 MANAGED_VERIFY_SCRIPT = RUNTIME_DIR / "verify-managed-runtime.cjs"
 WORKFLOW = ROOT / ".github" / "workflows" / "build-runtime-win32-x64.yml"
+RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "publish-npm-runtime-release.yml"
 
 
 def test_shell_build_scripts_are_pinned_to_lf_in_git() -> None:
@@ -176,6 +177,20 @@ def test_runtime_workflow_builds_without_public_release_commands() -> None:
     assert "packaging/runtime/requirements-build.lock" in workflow
     assert "packaging/runtime/build-win32-x64.ps1" in workflow
     assert "actions/upload-artifact@v4" in workflow
+    assert "gh release" not in workflow
+    assert "npm publish" not in workflow
+
+
+def test_runtime_release_workflow_uses_verified_run_artifacts_without_local_gh() -> None:
+    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "33838863554" in workflow
+    assert "33838880214" in workflow
+    assert "33838897611" in workflow
+    assert workflow.count("actions/download-artifact@v4") == 3
+    assert "runtime-manifest.json" in workflow
+    assert "createRelease" in workflow
+    assert "uploadReleaseAsset" in workflow
     assert "gh release" not in workflow
     assert "npm publish" not in workflow
 

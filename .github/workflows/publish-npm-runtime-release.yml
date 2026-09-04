@@ -1,0 +1,165 @@
+name: Publish npm runtime release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-runtime-release:
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: 0.1.7
+      TAG: v0.1.7
+      SOURCE_COMMIT: 58e517b2bf230d6e43672284dbaa612828320e0d
+    steps:
+      - name: Check out release metadata
+        uses: actions/checkout@v4
+
+      - name: Download verified Linux ARM64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: media-bridge-runtime-linux-arm64-58e517b2bf230d6e43672284dbaa612828320e0d
+          path: ${{ runner.temp }}/runtime-linux-arm64
+          github-token: ${{ github.token }}
+          run-id: 33838863554
+
+      - name: Download verified Linux x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: media-bridge-runtime-linux-x64-58e517b2bf230d6e43672284dbaa612828320e0d
+          path: ${{ runner.temp }}/runtime-linux-x64
+          github-token: ${{ github.token }}
+          run-id: 33838880214
+
+      - name: Download verified Windows x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: media-bridge-runtime-win32-x64-58e517b2bf230d6e43672284dbaa612828320e0d
+          path: ${{ runner.temp }}/runtime-win32-x64
+          github-token: ${{ github.token }}
+          run-id: 33838897611
+
+      - name: Assemble and verify release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_assets="$RUNNER_TEMP/release-assets"
+          mkdir -p "$release_assets"
+          cp "$RUNNER_TEMP/runtime-linux-arm64/media-bridge-runtime-$VERSION-linux-arm64.tar.gz" "$release_assets/"
+          cp "$RUNNER_TEMP/runtime-linux-arm64/media-bridge-runtime-$VERSION-linux-arm64.tar.gz.sha256" "$release_assets/"
+          cp "$RUNNER_TEMP/runtime-linux-arm64/verification-result.json" "$release_assets/verification-result-linux-arm64.json"
+          cp "$RUNNER_TEMP/runtime-linux-x64/media-bridge-runtime-$VERSION-linux-x64.tar.gz" "$release_assets/"
+          cp "$RUNNER_TEMP/runtime-linux-x64/media-bridge-runtime-$VERSION-linux-x64.tar.gz.sha256" "$release_assets/"
+          cp "$RUNNER_TEMP/runtime-linux-x64/verification-result.json" "$release_assets/verification-result-linux-x64.json"
+          cp "$RUNNER_TEMP/runtime-win32-x64/media-bridge-runtime-$VERSION-win32-x64.tar.gz" "$release_assets/"
+          cp "$RUNNER_TEMP/runtime-win32-x64/media-bridge-runtime-$VERSION-win32-x64.tar.gz.sha256" "$release_assets/"
+          cp "$RUNNER_TEMP/runtime-win32-x64/verification-result.json" "$release_assets/verification-result-win32-x64.json"
+          cp packaging/npm/runtime-manifest.json "$release_assets/runtime-manifest.json"
+          for checksum in "$release_assets"/*.sha256; do
+            (cd "$release_assets" && sha256sum --check "$(basename "$checksum")")
+          done
+          node - "$release_assets" "$VERSION" "$SOURCE_COMMIT" <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const [root, version, sourceCommit] = process.argv.slice(2);
+          const manifest = JSON.parse(fs.readFileSync(path.join(root, 'runtime-manifest.json'), 'utf8'));
+          if (manifest.version !== version) throw new Error('runtime manifest version mismatch');
+          for (const platform of ['linux-arm64', 'linux-x64', 'win32-x64']) {
+            const entry = manifest.artifacts?.[platform];
+            const archive = path.join(root, `media-bridge-runtime-${version}-${platform}.tar.gz`);
+            const actual = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
+            if (!entry?.published || entry.sha256 !== actual) throw new Error(`${platform} manifest SHA mismatch`);
+            const verification = JSON.parse(fs.readFileSync(path.join(root, `verification-result-${platform}.json`), 'utf8'));
+            if (verification.sourceCommit !== sourceCommit || verification.sha256 !== actual || verification.healthStatus !== 200) {
+              throw new Error(`${platform} verification evidence mismatch`);
+            }
+          }
+          NODE
+          echo "RELEASE_ASSETS=$release_assets" >> "$GITHUB_ENV"
+
+      - name: Publish verified runtime release
+        uses: actions/github-script@v7
+        env:
+          RELEASE_BODY: |
+            Media Bridge 0.1.7 connects the npm personal runtime to the actual OCR and Solar-4 request path while keeping the managed enterprise runtime available.
+
+            ## Install or update
+
+            ```bash
+            npm install -g @cyhuh/media-bridge@0.1.7
+            mb init
+            mb start
+            mb health
+            ```
+
+            ## Changes
+
+            - Adds the personal OpenAI Responses runtime and loopback settings UI.
+            - Sends image documents to Upstage Document Parse, removes original media, and forwards text-only content to Solar-4.
+            - Blocks Solar forwarding when media preparation fails.
+            - Keeps the managed PostgreSQL and signed-snapshot runtime path.
+            - Supports Windows x64, Linux x64, and Linux ARM64 native runtimes.
+
+            ## Verification
+
+            Native no-Python build, health, managed install, checksum rejection, and rollback verification passed on all three platforms. WSL final main verification passed 440 Python tests, 55 npm tests, 27 Web tests, lint, build, and personal Chromium E2E 4/4. Runtime source commit: `58e517b2bf230d6e43672284dbaa612828320e0d`. Release metadata commit: `${{ github.sha }}`.
+
+            ## Uninstall
+
+            ```bash
+            mb uninstall --delete-config
+            npm uninstall -g @cyhuh/media-bridge
+            ```
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = process.env.TAG;
+            let release;
+            try {
+              release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              release = (await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tag,
+                target_commitish: context.sha,
+                name: `Media Bridge ${process.env.VERSION}`,
+                body: process.env.RELEASE_BODY,
+                draft: false,
+                prerelease: false,
+                make_latest: 'true',
+              })).data;
+            }
+            const existing = (await github.rest.repos.listReleaseAssets({
+              owner,
+              repo,
+              release_id: release.id,
+              per_page: 100,
+            })).data;
+            for (const name of fs.readdirSync(process.env.RELEASE_ASSETS).sort()) {
+              const prior = existing.find((asset) => asset.name === name);
+              if (prior) {
+                await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: prior.id });
+              }
+              const file = path.join(process.env.RELEASE_ASSETS, name);
+              const data = fs.readFileSync(file);
+              await github.rest.repos.uploadReleaseAsset({
+                owner,
+                repo,
+                release_id: release.id,
+                name,
+                headers: {
+                  'content-type': 'application/octet-stream',
+                  'content-length': data.length,
+                },
+                data,
+              });
+            }
