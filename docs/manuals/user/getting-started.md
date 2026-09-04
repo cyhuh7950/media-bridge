@@ -17,18 +17,8 @@ npm install -g @cyhuh/media-bridge
 mb init
 ```
 
-첫 질문에는 OpenCodex에 설정할 Media Bridge provider 주소를 입력합니다. 기본값은
-`http://127.0.0.1:8642/v1`입니다. 이어서 Media Bridge 포트, Solar 모델·endpoint·Secret
-참조명, Upstage Document Parse endpoint·Secret 참조명과 변환 정책을 입력합니다.
-Secret 원문은 입력하거나 저장하지 않습니다.
-
-기본 Secret 참조명이 `SOLAR_API_KEY`라면 같은 터미널 환경에 Upstage API key를 설정한 뒤
-시작합니다.
-
-```bash
-export SOLAR_API_KEY='발급받은-key'
-mb start
-```
+`mb init`은 Media Bridge 기본 포트와 1차 OpenCodex/Solar/Document Parse profile을 만듭니다.
+API Key와 실제 Provider 연결은 시작 후 Web 설정 화면에서 입력하고 시험할 수 있습니다.
 
 ## 3. 시작
 
@@ -38,10 +28,13 @@ mb health --json
 mb gui
 ```
 
-`mb gui`에서 로컬 설정 화면을 열어 포트, OpenCodex provider 주소, Solar-4,
-Upstage Document Parse와 변환 정책을 변경할 수 있습니다. 화면을 열 수 없는 headless 서버에서는
-표시된 주소를 브라우저로 엽니다. 저장 후 `mb service restart`를 실행하면 변경값이 적용됩니다.
-설정 화면에는 API key 원문을 입력하지 않습니다.
+`mb gui`에서 코딩 에이전트, Non-Vision LLM, Vision/OCR 엔진, API Key와 변환 정책을 설정합니다.
+기본 profile은 OpenCodex, Solar-4, Upstage Document Parse입니다. 다른 OpenAI 호환 Non-Vision
+LLM과 Eoul Gateway도 선택할 수 있습니다. 화면을 열 수 없는 headless 서버에서는 표시된 주소를
+SSH port forwarding으로 사용자의 브라우저에서 엽니다.
+
+화면에서 `LLM 연결 시험`, `OCR 연결 시험`, `전체 파이프라인 시험`을 차례로 실행합니다. 포트를
+바꾼 경우에만 `mb service restart`로 listener를 다시 시작합니다.
 
 관리된 runtime artifact가 준비되지 않은 경우 `mb start`는 fail-closed로 중단됩니다.
 이때 Python, Docker 또는 `.deb`를 직접 설치하지 말고 해당 플랫폼용 npm runtime release가

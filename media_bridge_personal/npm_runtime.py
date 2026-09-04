@@ -108,8 +108,9 @@ class UpstageDocumentParseBackend:
         secret_loader: Callable[[], str] | None = None,
     ) -> None:
         parsed = urlsplit(endpoint)
+        loopback = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
         if (
-            parsed.scheme != "https"
+            (parsed.scheme != "https" and not (parsed.scheme == "http" and loopback))
             or parsed.hostname is None
             or parsed.username is not None
             or parsed.password is not None

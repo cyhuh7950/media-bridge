@@ -257,7 +257,9 @@ async function startProcess({
       child.once('error', reject);
     });
     const identity = inspectProcessIdentity(child.pid);
-    if (!identity) throw new Error('Media Bridge child identity could not be verified');
+    if (!identity) {
+      throw new Error('Media Bridge process exited during startup before identity could be verified');
+    }
     const state = { pid: child.pid, command: runtime.command, identity, host: config.host, port };
     await writeState(homeDir, state);
     await sleepImpl(startupGraceMs);
