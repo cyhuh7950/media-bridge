@@ -16,14 +16,14 @@ mb init
 
 질문에 OpenCodex에 설정할 Media Bridge provider 주소, Media Bridge 포트, Solar
 모델·endpoint·Secret 참조, Upstage Document Parse endpoint·Secret 참조와 변환 정책을
-입력합니다. provider 주소 기본값은 `http://127.0.0.1:8765/v1`입니다.
+입력합니다. provider 주소 기본값은 `http://127.0.0.1:8642/v1`입니다.
 Secret 원문과 이미지 원문은 입력하거나 저장하지 않습니다.
 
 ## 실행과 상태
 
 ```bash
 mb start
-mb start --port 8765
+mb start --port 8642
 mb status
 mb health --json
 mb gui

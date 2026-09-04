@@ -14,6 +14,7 @@ test('mb help exposes the user install command surface', () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /media-bridge init/);
   assert.match(result.stdout, /media-bridge start/);
+  assert.match(result.stdout, /media-bridge start \[--port 8642\]/);
   assert.match(result.stdout, /Compatibility alias: mb/);
   assert.match(result.stdout, /media-bridge health/);
   assert.match(result.stdout, /media-bridge service/);
@@ -30,7 +31,7 @@ test('mb init creates a local configuration without requiring a provider secret'
   assert.match(result.stdout, /initialized/i);
   const config = JSON.parse(fs.readFileSync(path.join(tempHome, '.media-bridge', 'config.json'), 'utf8'));
   assert.deepEqual(config.host, '127.0.0.1');
-  assert.deepEqual(config.port, 8765);
+  assert.deepEqual(config.port, 8642);
   assert.equal(typeof config.opencodex, 'object');
   assert.equal('apiKey' in config, false);
   fs.rmSync(tempHome, { recursive: true, force: true });

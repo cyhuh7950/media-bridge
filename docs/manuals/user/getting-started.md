@@ -18,7 +18,7 @@ mb init
 ```
 
 첫 질문에는 OpenCodex에 설정할 Media Bridge provider 주소를 입력합니다. 기본값은
-`http://127.0.0.1:8765/v1`입니다. 이어서 Media Bridge 포트, Solar 모델·endpoint·Secret
+`http://127.0.0.1:8642/v1`입니다. 이어서 Media Bridge 포트, Solar 모델·endpoint·Secret
 참조명, Upstage Document Parse endpoint·Secret 참조명과 변환 정책을 입력합니다.
 Secret 원문은 입력하거나 저장하지 않습니다.
 

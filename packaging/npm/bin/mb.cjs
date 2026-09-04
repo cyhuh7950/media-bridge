@@ -28,7 +28,7 @@ const serviceFile = path.join(configDir, 'service.json');
 const pidFile = path.join(configDir, 'service.pid');
 
 function help() {
-  process.stdout.write(`Media Bridge\n\nCommands:\n  media-bridge init\n  media-bridge start [--port 8765]\n  media-bridge stop\n  media-bridge status\n  media-bridge health [--json]\n  media-bridge ready [--json] [--wait] [--timeout <seconds>]\n  media-bridge gui\n  media-bridge service <install|repair|restart|start|stop|status|uninstall|remove>\n  media-bridge update\n  media-bridge uninstall [--keep-config|--delete-config]\n\nCompatibility alias: mb\n`);
+  process.stdout.write(`Media Bridge\n\nCommands:\n  media-bridge init\n  media-bridge start [--port 8642]\n  media-bridge stop\n  media-bridge status\n  media-bridge health [--json]\n  media-bridge ready [--json] [--wait] [--timeout <seconds>]\n  media-bridge gui\n  media-bridge service <install|repair|restart|start|stop|status|uninstall|remove>\n  media-bridge update\n  media-bridge uninstall [--keep-config|--delete-config]\n\nCompatibility alias: mb\n`);
 }
 
 function detectExecutable(names) {

@@ -16,7 +16,7 @@ mb init
 
 ## 2. 최초 설정
 
-`mb init`에서 OpenCodex 주소, Media Bridge 포트(기본 `8765`), Solar 모델·HTTPS
+`mb init`에서 OpenCodex 주소, Media Bridge 포트(기본 `8642`), Solar 모델·HTTPS
 endpoint·Secret 참조, OCR/Vision 변환 기본값과 변환 실패 시 Solar 전송 차단 정책을
 입력합니다. Secret 원문은 저장하지 않습니다.
 

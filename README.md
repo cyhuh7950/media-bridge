@@ -16,7 +16,7 @@ mb start
 runtime artifact 배포는 별도 release 검증 대상입니다.
 
 npm 설치는 단일 사용자용 `personal` 모드입니다. OpenCodex의 provider base URL을
-`http://127.0.0.1:8765/v1`로 설정하면 text/image Responses 요청을 받고, 이미지는 Upstage
+`http://127.0.0.1:8642/v1`로 설정하면 text/image Responses 요청을 받고, 이미지는 Upstage
 Document Parse로 텍스트화한 뒤 원본을 제거하여 Solar-4로 전달합니다. 기존 PostgreSQL·서명
 snapshot·Control Plane 기반 구조는 서버용 `managed` 모드로 그대로 유지됩니다.
 
