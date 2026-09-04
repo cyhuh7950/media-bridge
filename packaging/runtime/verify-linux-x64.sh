@@ -93,9 +93,14 @@ env -i \
   MEDIA_BRIDGE_ASSET_ROOT="$test_root/assets" \
   MEDIA_BRIDGE_RECEIPT_SECRET='external-retest-receipt-secret-0001' \
   MEDIA_BRIDGE_SERVICE_TOKEN='external-retest-service-token-0001' \
-  MEDIA_BRIDGE_OCR_ENDPOINT='https://127.0.0.1:9/ocr' \
-  MEDIA_BRIDGE_VISION_ENDPOINT='https://127.0.0.1:9/vision' \
-  MEDIA_BRIDGE_VISION_MODEL='qa-vision-model' \
+  MEDIA_BRIDGE_RUNTIME_MODE='personal' \
+  MEDIA_BRIDGE_SOLAR_MODEL='solar-pro4' \
+  MEDIA_BRIDGE_SOLAR_ENDPOINT='https://127.0.0.1:9/v1/chat/completions' \
+  MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV='SOLAR_API_KEY' \
+  MEDIA_BRIDGE_OCR_ENDPOINT='https://127.0.0.1:9/v1/document-digitization' \
+  MEDIA_BRIDGE_OCR_CREDENTIAL_ENV='SOLAR_API_KEY' \
+  SOLAR_API_KEY='external-retest-provider-key-0001' \
+  MEDIA_BRIDGE_MAX_REQUEST_BYTES='8388608' \
   MEDIA_BRIDGE_HTTP_HOST='127.0.0.1' \
   MEDIA_BRIDGE_HTTP_PORT="$port" \
   "$runtime_command" >"$test_root/runtime.stdout" 2>"$test_root/runtime.stderr" &

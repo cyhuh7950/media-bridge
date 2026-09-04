@@ -14,6 +14,8 @@ ENTRYPOINT = RUNTIME_DIR / "entrypoint.py"
 BUILD_SCRIPT = RUNTIME_DIR / "build-win32-x64.ps1"
 LINUX_X64_BUILD_SCRIPT = RUNTIME_DIR / "build-linux-x64.sh"
 LINUX_ARM64_BUILD_SCRIPT = RUNTIME_DIR / "build-linux-arm64.sh"
+LINUX_X64_VERIFY_SCRIPT = RUNTIME_DIR / "verify-linux-x64.sh"
+LINUX_ARM64_VERIFY_SCRIPT = RUNTIME_DIR / "verify-linux-arm64.sh"
 BUILD_LOCK = RUNTIME_DIR / "requirements-build.lock"
 VERIFY_SCRIPT = RUNTIME_DIR / "verify-win32-x64.ps1"
 MANAGED_VERIFY_SCRIPT = RUNTIME_DIR / "verify-managed-runtime.cjs"
@@ -72,6 +74,17 @@ def test_win32_verifier_provisions_the_personal_runtime_contract() -> None:
     assert "/v1/document-digitization" in verifier
     managed_verifier = MANAGED_VERIFY_SCRIPT.read_text(encoding="utf-8")
     assert "packageVersion: sourceManifest.packageVersion" in managed_verifier
+
+
+def test_linux_verifiers_provision_the_personal_runtime_contract() -> None:
+    for verifier_path in (LINUX_X64_VERIFY_SCRIPT, LINUX_ARM64_VERIFY_SCRIPT):
+        verifier = verifier_path.read_text(encoding="utf-8")
+        assert "MEDIA_BRIDGE_RUNTIME_MODE='personal'" in verifier
+        assert "MEDIA_BRIDGE_SOLAR_MODEL='solar-pro4'" in verifier
+        assert "MEDIA_BRIDGE_SOLAR_ENDPOINT='https://127.0.0.1:9/v1/chat/completions'" in verifier
+        assert "MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV='SOLAR_API_KEY'" in verifier
+        assert "MEDIA_BRIDGE_OCR_CREDENTIAL_ENV='SOLAR_API_KEY'" in verifier
+        assert "/v1/document-digitization" in verifier
 
 
 def test_runtime_build_script_rejects_invalid_version_before_build(tmp_path: Path) -> None:
