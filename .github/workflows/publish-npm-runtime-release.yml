@@ -11,9 +11,9 @@ jobs:
   publish-runtime-release:
     runs-on: ubuntu-24.04
     env:
-      VERSION: 0.1.7
-      TAG: v0.1.7
-      SOURCE_COMMIT: 58e517b2bf230d6e43672284dbaa612828320e0d
+      VERSION: 0.1.8
+      TAG: v0.1.8
+      SOURCE_COMMIT: 659ada3a4b9e39d6bc2121441e00addb3b95ad66
     steps:
       - name: Check out release metadata
         uses: actions/checkout@v4
@@ -21,26 +21,26 @@ jobs:
       - name: Download verified Linux ARM64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: media-bridge-runtime-linux-arm64-58e517b2bf230d6e43672284dbaa612828320e0d
+          name: media-bridge-runtime-linux-arm64-659ada3a4b9e39d6bc2121441e00addb3b95ad66
           path: ${{ runner.temp }}/runtime-linux-arm64
           github-token: ${{ github.token }}
-          run-id: 33838863554
+          run-id: 33856725335
 
       - name: Download verified Linux x64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: media-bridge-runtime-linux-x64-58e517b2bf230d6e43672284dbaa612828320e0d
+          name: media-bridge-runtime-linux-x64-659ada3a4b9e39d6bc2121441e00addb3b95ad66
           path: ${{ runner.temp }}/runtime-linux-x64
           github-token: ${{ github.token }}
-          run-id: 33838880214
+          run-id: 33856725267
 
       - name: Download verified Windows x64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: media-bridge-runtime-win32-x64-58e517b2bf230d6e43672284dbaa612828320e0d
+          name: media-bridge-runtime-win32-x64-659ada3a4b9e39d6bc2121441e00addb3b95ad66
           path: ${{ runner.temp }}/runtime-win32-x64
           github-token: ${{ github.token }}
-          run-id: 33838897611
+          run-id: 33856725275
 
       - name: Assemble and verify release assets
         shell: bash
@@ -85,12 +85,12 @@ jobs:
         uses: actions/github-script@v7
         env:
           RELEASE_BODY: |
-            Media Bridge 0.1.7 connects the npm personal runtime to the actual OCR and Solar-4 request path while keeping the managed enterprise runtime available.
+            Media Bridge 0.1.8 fixes npm lifecycle ownership checks while preserving the personal OCR/Solar-4 and managed enterprise runtime paths.
 
             ## Install or update
 
             ```bash
-            npm install -g @cyhuh/media-bridge@0.1.7
+            npm install -g @cyhuh/media-bridge@0.1.8
             mb init
             mb start
             mb health
@@ -98,15 +98,15 @@ jobs:
 
             ## Changes
 
-            - Adds the personal OpenAI Responses runtime and loopback settings UI.
-            - Sends image documents to Upstage Document Parse, removes original media, and forwards text-only content to Solar-4.
-            - Blocks Solar forwarding when media preparation fails.
-            - Keeps the managed PostgreSQL and signed-snapshot runtime path.
+            - Refuses startup when the configured port belongs to an unmanaged process.
+            - Verifies the spawned runtime remains alive and owned during startup.
+            - Requires managed PID ownership before `mb ready` or `mb health` trusts an endpoint.
+            - Checks an existing managed service before resolving or replacing runtime files.
             - Supports Windows x64, Linux x64, and Linux ARM64 native runtimes.
 
             ## Verification
 
-            Native no-Python build, health, managed install, checksum rejection, and rollback verification passed on all three platforms. WSL final main verification passed 440 Python tests, 55 npm tests, 27 Web tests, lint, build, and personal Chromium E2E 4/4. Runtime source commit: `58e517b2bf230d6e43672284dbaa612828320e0d`. Release metadata commit: `${{ github.sha }}`.
+            Native no-Python build, personal health, managed install, checksum rejection, and rollback verification passed on all three platforms. Pre-release verification passed 441 Python tests and the complete npm suites on Windows and WSL. Runtime source commit: `659ada3a4b9e39d6bc2121441e00addb3b95ad66`. Release metadata commit: `${{ github.sha }}`.
 
             ## Uninstall
 

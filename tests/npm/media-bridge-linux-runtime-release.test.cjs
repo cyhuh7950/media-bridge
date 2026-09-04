@@ -13,7 +13,7 @@ const arm64BuildScript = path.join(root, 'packaging', 'runtime', 'build-linux-ar
 const arm64VerifyScript = path.join(root, 'packaging', 'runtime', 'verify-linux-arm64.sh');
 const { loadRuntimeManifest, selectArtifact } = require('../../packaging/npm/lib/runtime.cjs');
 
-test('published package selects the exact linux-x64 v0.1.7 runtime', () => {
+test('published package selects the exact linux-x64 v0.1.8 runtime', () => {
   const packageMetadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
   const manifest = loadRuntimeManifest({
     manifestPath: path.join(packageRoot, 'runtime-manifest.json'),
@@ -27,7 +27,7 @@ test('published package selects the exact linux-x64 v0.1.7 runtime', () => {
   });
 
   assert.equal(packageMetadata.name, '@cyhuh/media-bridge');
-  assert.equal(packageMetadata.version, '0.1.7');
+  assert.equal(packageMetadata.version, '0.1.8');
   assert.deepEqual(
     {
       key: artifact.key,
@@ -40,18 +40,18 @@ test('published package selects the exact linux-x64 v0.1.7 runtime', () => {
     },
     {
       key: 'linux-x64',
-      version: '0.1.7',
+      version: '0.1.8',
       published: true,
-      url: 'https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.7/media-bridge-runtime-0.1.7-linux-x64.tar.gz',
+      url: 'https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.8/media-bridge-runtime-0.1.8-linux-x64.tar.gz',
       archive: 'tar.gz',
       command: 'bin/media-bridge-runtime',
       python: false,
     },
   );
-  assert.equal(artifact.sha256, 'e42041d778cd5f593050a849656c4debd6f13308736e650d3a84cb98b8b01456');
+  assert.equal(artifact.sha256, 'e3f8ec90ff1cf8cc1912192213ad83b6dfa7fd904981afa52a639da6e6ed433d');
 });
 
-test('published package selects the exact win32-x64 v0.1.7 runtime', () => {
+test('published package selects the exact win32-x64 v0.1.8 runtime', () => {
   const packageMetadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
   const manifest = loadRuntimeManifest({
     manifestPath: path.join(packageRoot, 'runtime-manifest.json'),
@@ -76,18 +76,18 @@ test('published package selects the exact win32-x64 v0.1.7 runtime', () => {
     },
     {
       key: 'win32-x64',
-      version: '0.1.7',
+      version: '0.1.8',
       published: true,
-      url: 'https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.7/media-bridge-runtime-0.1.7-win32-x64.tar.gz',
+      url: 'https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.8/media-bridge-runtime-0.1.8-win32-x64.tar.gz',
       archive: 'tar.gz',
       command: 'bin/media-bridge-runtime.exe',
       python: false,
     },
   );
-  assert.equal(artifact.sha256, '27a7845f65d8d7ff3a27271c1adec985f3b0fea61733a3017f31bee3d32dd1f6');
+  assert.equal(artifact.sha256, '5294375ae1d449884612f8b459f38d5b36abc05ba0724c162931e7ccd0507cc8');
 });
 
-test('published package selects the exact linux-arm64 v0.1.7 runtime', () => {
+test('published package selects the exact linux-arm64 v0.1.8 runtime', () => {
   const packageMetadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
   const manifest = loadRuntimeManifest({
     manifestPath: path.join(packageRoot, 'runtime-manifest.json'),
@@ -112,24 +112,24 @@ test('published package selects the exact linux-arm64 v0.1.7 runtime', () => {
     },
     {
       key: 'linux-arm64',
-      version: '0.1.7',
+      version: '0.1.8',
       published: true,
-      url: 'https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.7/media-bridge-runtime-0.1.7-linux-arm64.tar.gz',
+      url: 'https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.8/media-bridge-runtime-0.1.8-linux-arm64.tar.gz',
       archive: 'tar.gz',
       command: 'bin/media-bridge-runtime',
       python: false,
     },
   );
-  assert.equal(artifact.sha256, '0abb800f0b26691d5195e6c5826b8d7723401c9271e5269b2127daaf9f171071');
+  assert.equal(artifact.sha256, 'd9284d93c6fa90ae2bbb6a8883f503ecf63818cee1130f88f6ed70cb4c7bd218');
 });
 
-test('linux-arm64 workflow builds and verifies the v0.1.7 candidate on the native ARM64 runner', () => {
+test('linux-arm64 workflow builds and verifies the v0.1.8 candidate on the native ARM64 runner', () => {
   const workflow = fs.readFileSync(
     path.join(root, '.github', 'workflows', 'build-runtime-linux-arm64.yml'),
     'utf8',
   );
 
-  assert.match(workflow, /default:\s*0\.1\.7/);
+  assert.match(workflow, /default:\s*0\.1\.8/);
   assert.match(workflow, /runs-on:\s*ubuntu-24\.04-arm/);
   assert.match(workflow, /packaging\/runtime\/build-linux-arm64\.sh/);
   assert.match(workflow, /packaging\/runtime\/verify-linux-arm64\.sh/);

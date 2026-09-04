@@ -184,9 +184,9 @@ def test_runtime_workflow_builds_without_public_release_commands() -> None:
 def test_runtime_release_workflow_uses_verified_run_artifacts_without_local_gh() -> None:
     workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
 
-    assert "33838863554" in workflow
-    assert "33838880214" in workflow
-    assert "33838897611" in workflow
+    assert "33856725335" in workflow
+    assert "33856725267" in workflow
+    assert "33856725275" in workflow
     assert workflow.count("actions/download-artifact@v4") == 3
     assert "runtime-manifest.json" in workflow
     assert "manifest.packageVersion !== version" in workflow

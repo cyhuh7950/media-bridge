@@ -1,30 +1,30 @@
 {
   "schemaVersion": 1,
-  "packageVersion": "0.1.7",
+  "packageVersion": "0.1.8",
   "artifacts": {
     "win32-x64": {
-      "version": "0.1.7",
+      "version": "0.1.8",
       "published": true,
-      "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.7/media-bridge-runtime-0.1.7-win32-x64.tar.gz",
-      "sha256": "27a7845f65d8d7ff3a27271c1adec985f3b0fea61733a3017f31bee3d32dd1f6",
+      "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.8/media-bridge-runtime-0.1.8-win32-x64.tar.gz",
+      "sha256": "5294375ae1d449884612f8b459f38d5b36abc05ba0724c162931e7ccd0507cc8",
       "archive": "tar.gz",
       "command": "bin/media-bridge-runtime.exe",
       "python": false
     },
     "linux-x64": {
-      "version": "0.1.7",
+      "version": "0.1.8",
       "published": true,
-      "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.7/media-bridge-runtime-0.1.7-linux-x64.tar.gz",
-      "sha256": "e42041d778cd5f593050a849656c4debd6f13308736e650d3a84cb98b8b01456",
+      "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.8/media-bridge-runtime-0.1.8-linux-x64.tar.gz",
+      "sha256": "e3f8ec90ff1cf8cc1912192213ad83b6dfa7fd904981afa52a639da6e6ed433d",
       "archive": "tar.gz",
       "command": "bin/media-bridge-runtime",
       "python": false
     },
     "linux-arm64": {
-      "version": "0.1.7",
+      "version": "0.1.8",
       "published": true,
-      "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.7/media-bridge-runtime-0.1.7-linux-arm64.tar.gz",
-      "sha256": "0abb800f0b26691d5195e6c5826b8d7723401c9271e5269b2127daaf9f171071",
+      "url": "https://github.com/cyhuh7950/media-bridge/releases/download/v0.1.8/media-bridge-runtime-0.1.8-linux-arm64.tar.gz",
+      "sha256": "d9284d93c6fa90ae2bbb6a8883f503ecf63818cee1130f88f6ed70cb4c7bd218",
       "archive": "tar.gz",
       "command": "bin/media-bridge-runtime",
       "python": false
