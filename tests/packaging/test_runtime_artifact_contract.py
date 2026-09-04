@@ -186,9 +186,9 @@ def test_runtime_release_workflow_uses_verified_run_artifacts_without_local_gh()
 
     assert "release-v*" in workflow
     assert "GITHUB_REF_NAME" in workflow
-    assert "33856725335" in workflow
-    assert "33856725267" in workflow
-    assert "33856725275" in workflow
+    assert "33875592901" in workflow
+    assert "33875592987" in workflow
+    assert "33875592959" in workflow
     assert workflow.count("actions/download-artifact@v4") == 3
     assert "runtime-manifest.json" in workflow
     assert "manifest.packageVersion !== version" in workflow
