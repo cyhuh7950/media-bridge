@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -46,7 +48,7 @@ class CredentialStore:
                 reference = self._validate_reference(str(key))
                 if not isinstance(value, str) or not value:
                     raise CredentialStoreError("credential store is invalid")
-                result[reference] = value
+                result[reference] = self._unprotect(value)
             return result
         except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             if isinstance(error, CredentialStoreError):
@@ -61,8 +63,11 @@ class CredentialStore:
         descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                protected = {
+                    reference: self._protect(value) for reference, value in credentials.items()
+                }
                 json.dump(
-                    {"schemaVersion": 1, "credentials": credentials},
+                    {"schemaVersion": 1, "credentials": protected},
                     stream,
                     ensure_ascii=False,
                     indent=2,
@@ -76,6 +81,25 @@ class CredentialStore:
         except Exception:
             temporary.unlink(missing_ok=True)
             raise
+
+    @staticmethod
+    def _protect(value: str) -> str:
+        if os.name != "nt":
+            return value
+        encrypted = _windows_dpapi(value.encode("utf-8"), protect=True)
+        return "dpapi:" + base64.b64encode(encrypted).decode("ascii")
+
+    @staticmethod
+    def _unprotect(value: str) -> str:
+        if not value.startswith("dpapi:"):
+            return value
+        if os.name != "nt":
+            raise CredentialStoreError("DPAPI credential cannot be read on this platform")
+        try:
+            encrypted = base64.b64decode(value.removeprefix("dpapi:"), validate=True)
+            return _windows_dpapi(encrypted, protect=False).decode("utf-8")
+        except (ValueError, UnicodeDecodeError, binascii.Error) as error:
+            raise CredentialStoreError("credential store is invalid") from error
 
     def set(self, reference: str, secret: str) -> None:
         key = self._validate_reference(reference)
@@ -111,3 +135,48 @@ class CredentialStore:
 
 
 __all__ = ["CredentialStore", "CredentialStoreError"]
+
+
+def _windows_dpapi(data: bytes, *, protect: bool) -> bytes:
+    """Protect data for the current Windows user without prompting."""
+    if os.name != "nt":
+        raise CredentialStoreError("DPAPI is only available on Windows")
+    import ctypes
+    from ctypes import wintypes
+
+    class DataBlob(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_byte))]
+
+    source_buffer = ctypes.create_string_buffer(data)
+    source = DataBlob(
+        len(data), ctypes.cast(source_buffer, ctypes.POINTER(ctypes.c_byte))
+    )
+    destination = DataBlob()
+    flags = 0x1  # CRYPTPROTECT_UI_FORBIDDEN
+    crypt32 = ctypes.windll.crypt32
+    if protect:
+        succeeded = crypt32.CryptProtectData(
+            ctypes.byref(source),
+            "Media Bridge credential",
+            None,
+            None,
+            None,
+            flags,
+            ctypes.byref(destination),
+        )
+    else:
+        succeeded = crypt32.CryptUnprotectData(
+            ctypes.byref(source),
+            None,
+            None,
+            None,
+            None,
+            flags,
+            ctypes.byref(destination),
+        )
+    if not succeeded:
+        raise CredentialStoreError("Windows credential protection failed")
+    try:
+        return ctypes.string_at(destination.pbData, destination.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(destination.pbData)

@@ -65,7 +65,7 @@ def test_process_entrypoint_applies_configured_request_limit(
     monkeypatch.setattr(
         npm_runtime_module,
         "build_personal_app",
-        lambda selected, *, max_request_bytes, config_file: (
+        lambda selected, *, max_request_bytes, config_file, **_kwargs: (
             selected,
             max_request_bytes,
             config_file,

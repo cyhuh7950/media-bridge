@@ -50,6 +50,12 @@ class _ClosableDownstream(ResponsesDownstream, Protocol):
     async def close(self) -> None: ...
 
 
+class _PersonalRuntimeLike(Protocol):
+    async def invoke(self, payload: object) -> GatewayResponse | tuple[int, dict[str, Any]]: ...
+
+    async def close(self) -> None: ...
+
+
 class _HtmlTextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -310,6 +316,15 @@ def _validated_generic_settings(payload: object, current: dict[str, Any]) -> dic
         or media_model != "document-parse"
         or _CREDENTIAL_REFERENCE.fullmatch(media_reference) is None
         or _ENV_REFERENCE.fullmatch(media_environment) is None
+        or (
+            llm_protocol == "openai-chat-completions"
+            and not urlsplit(llm_endpoint).path.endswith("/v1/chat/completions")
+        )
+        or (
+            llm_protocol == "openai-responses"
+            and not urlsplit(llm_endpoint).path.endswith("/v1/responses")
+        )
+        or not urlsplit(media_endpoint).path.endswith("/v1/document-digitization")
     ):
         raise PersonalRuntimeConfigurationError("settings are invalid")
     result = _normalize_npm_config(current)
@@ -364,10 +379,16 @@ def _validated_generic_settings(payload: object, current: dict[str, Any]) -> dic
 def _public_settings(config: dict[str, Any], store: CredentialStore) -> dict[str, Any]:
     normalized = _normalize_npm_config(config)
     return {
-        key: value
-        for key, value in normalized.items()
-        if key not in {"solar", "ocr", "opencodex"}
-    } | {"credentials": store.status()}
+        "runtimeMode": "personal",
+        "host": "127.0.0.1",
+        "port": normalized.get("port", 8642),
+        "codingAgent": dict(_section(normalized, "codingAgent")),
+        "textLlm": dict(_section(normalized, "textLlm")),
+        "mediaProcessor": dict(_section(normalized, "mediaProcessor")),
+        "conversion": dict(_section(normalized, "conversion")),
+        "failurePolicy": dict(_section(normalized, "failurePolicy")),
+        "credentials": store.status(),
+    }
 
 
 def _validated_settings(payload: dict[str, str], current: dict[str, Any]) -> dict[str, Any]:
@@ -751,6 +772,34 @@ class PersonalRuntime:
             await client.aclose()
 
 
+class ReloadablePersonalRuntime:
+    """Swap provider composition safely while keeping the loopback listener alive."""
+
+    def __init__(
+        self,
+        runtime: PersonalRuntime,
+        factory: Callable[[], PersonalRuntime],
+    ) -> None:
+        self._runtime = runtime
+        self._factory = factory
+        self._lock = asyncio.Lock()
+
+    async def invoke(self, payload: object) -> GatewayResponse | tuple[int, dict[str, Any]]:
+        async with self._lock:
+            return await self._runtime.invoke(payload)
+
+    async def reload(self) -> None:
+        replacement = self._factory()
+        async with self._lock:
+            previous = self._runtime
+            self._runtime = replacement
+            await previous.close()
+
+    async def close(self) -> None:
+        async with self._lock:
+            await self._runtime.close()
+
+
 def build_personal_runtime(
     *,
     model: str,
@@ -798,7 +847,7 @@ def build_personal_runtime(
 
 
 def build_personal_app(
-    runtime: PersonalRuntime,
+    runtime: _PersonalRuntimeLike,
     *,
     max_request_bytes: int = 8 * 1024 * 1024,
     config_file: Path | None = None,
@@ -885,7 +934,8 @@ def build_personal_app(
             return JSONResponse({"message": "forbidden"}, status_code=403)
         try:
             payload = await json_payload(request)
-            config = _validated_generic_settings(payload, _load_npm_config(config_file))
+            current = _load_npm_config(config_file)
+            config = _validated_generic_settings(payload, current)
             assert isinstance(payload, dict)
             for profile_name in ("textLlm", "mediaProcessor"):
                 profile = payload.get(profile_name)
@@ -895,7 +945,17 @@ def build_personal_app(
                 if secret is not None and str(secret).strip():
                     credential_store.set(str(profile["credentialRef"]), str(secret))
             _write_npm_config(config_file, config)
-            return JSONResponse({"status": "saved", **_public_settings(config, credential_store)})
+            restart_required = int(current.get("port", 8642)) != int(config["port"])
+            reload_method = getattr(runtime, "reload", None)
+            if not restart_required and callable(reload_method):
+                await reload_method()
+            return JSONResponse(
+                {
+                    "status": "saved",
+                    "restartRequired": restart_required,
+                    **_public_settings(config, credential_store),
+                }
+            )
         except (PersonalRuntimeConfigurationError, CredentialStoreError) as error:
             return JSONResponse({"message": str(error)}, status_code=400)
 
@@ -965,8 +1025,14 @@ def build_personal_app(
         try:
             parsed = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
             payload = {name: values[-1] for name, values in parsed.items() if values}
-            config = _validated_settings(payload, _load_npm_config(config_file))
+            current = _load_npm_config(config_file)
+            config = _validated_settings(payload, current)
             _write_npm_config(config_file, config)
+            reload_method = getattr(runtime, "reload", None)
+            if int(current.get("port", 8642)) == int(config["port"]) and callable(
+                reload_method
+            ):
+                await reload_method()
         except (UnicodeDecodeError, PersonalRuntimeConfigurationError):
             return HTMLResponse("설정값이 올바르지 않습니다.", status_code=400)
         return HTMLResponse(
@@ -1128,6 +1194,58 @@ def build_personal_runtime_from_environment() -> PersonalRuntime:
     )
 
 
+def build_personal_runtime_from_config(
+    config_file: Path,
+    credential_store: CredentialStore,
+) -> PersonalRuntime:
+    config = _normalize_npm_config(_load_npm_config(config_file))
+    text_llm = _section(config, "textLlm")
+    media = _section(config, "mediaProcessor")
+    model = str(text_llm.get("model", "")).strip()
+    text_protocol = str(text_llm.get("protocol", "")).strip()
+    media_protocol = str(media.get("protocol", "")).strip()
+    if text_protocol not in _TEXT_PROTOCOLS or media_protocol != "upstage-document-parse":
+        raise PersonalRuntimeConfigurationError("provider protocol is unsupported")
+    text_reference = str(text_llm.get("credentialRef", ""))
+    text_environment = str(text_llm.get("credentialEnv", ""))
+    media_reference = str(media.get("credentialRef", ""))
+    media_environment = str(media.get("credentialEnv", ""))
+    client = httpx.AsyncClient(
+        timeout=httpx.Timeout(60),
+        follow_redirects=False,
+        trust_env=False,
+    )
+    ocr = UpstageDocumentParseBackend(
+        endpoint=str(media.get("endpoint", "")),
+        api_key_env=media_environment,
+        client=client,
+        secret_loader=lambda: credential_store.resolve(media_reference, media_environment),
+    )
+    return build_personal_runtime(
+        model=model,
+        asset_root=Path(_required("MEDIA_BRIDGE_ASSET_ROOT")),
+        receipt_secret=_receipt_secret(),
+        ocr_backend=ocr,
+        downstream_factory=lambda signer: SolarResponsesDownstream(
+            endpoint=str(text_llm.get("endpoint", "")),
+            model=model,
+            receipt_signer=signer,
+            api_key_env=text_environment,
+            credential_loader=lambda: credential_store.resolve(
+                text_reference, text_environment
+            ),
+            protocol=text_protocol,
+            provider_name=(
+                "Solar" if text_llm.get("preset") == "upstage-solar" else "Text LLM"
+            ),
+            error_prefix=(
+                "solar" if text_llm.get("preset") == "upstage-solar" else "text_llm"
+            ),
+        ),
+        clients=(client,),
+    )
+
+
 def run_personal_npm_runtime() -> None:
     host = os.environ.get("MEDIA_BRIDGE_HTTP_HOST", "127.0.0.1")
     if host != "127.0.0.1":
@@ -1150,14 +1268,28 @@ def run_personal_npm_runtime() -> None:
         ) from error
     if max_request_bytes < 1:
         raise PersonalRuntimeConfigurationError("personal request limit is invalid")
-    runtime = build_personal_runtime_from_environment()
     config_file = Path(_required("MEDIA_BRIDGE_CONFIG_FILE"))
+    runtime: _PersonalRuntimeLike = build_personal_runtime_from_environment()
+    credential_store = CredentialStore(
+        Path(
+            os.environ.get(
+                "MEDIA_BRIDGE_CREDENTIAL_STORE_FILE",
+                str(config_file.parent / "secrets" / "providers.json"),
+            )
+        )
+    )
+    if config_file.exists():
+        runtime = ReloadablePersonalRuntime(
+            runtime,
+            lambda: build_personal_runtime_from_config(config_file, credential_store),
+        )
     try:
         uvicorn.run(
             build_personal_app(
                 runtime,
                 max_request_bytes=max_request_bytes,
                 config_file=config_file,
+                credential_store=credential_store,
             ),
             host=host,
             port=port,

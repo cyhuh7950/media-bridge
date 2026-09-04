@@ -49,7 +49,7 @@ def _validate_endpoint(endpoint: str, protocol: str) -> None:
         or parsed.hostname is None
         or parsed.username is not None
         or parsed.password is not None
-        or parsed.path != expected_path
+        or not parsed.path.endswith(expected_path)
         or parsed.query
         or parsed.fragment
     ):
