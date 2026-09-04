@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -15,6 +16,17 @@ MOCK = ROOT / "deploy" / "staging" / "mock_provider.py"
 def _render() -> dict[str, object]:
     docker = shutil.which("docker")
     assert docker is not None
+    environment = {
+        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "MEDIA_BRIDGE_STAGING_ROOT": "/run/media-bridge-staging-test",
+        "MEDIA_BRIDGE_CONTROL_ORIGIN": "https://media-bridge-staging.sinsan.kr",
+        "MEDIA_BRIDGE_CONTROL_HOST": "media-bridge-staging.sinsan.kr",
+        "MEDIA_BRIDGE_OCR_ENDPOINT": "https://media-bridge-staging-mock:8443/v1/document-digitization",
+        "MEDIA_BRIDGE_VISION_ENDPOINT": "https://media-bridge-staging-mock:8443/v1/chat/completions",
+        "MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL": "https://media-bridge-staging-mock:8443/v1/responses",
+    }
+    if docker_config := os.environ.get("DOCKER_CONFIG"):
+        environment["DOCKER_CONFIG"] = docker_config
     result = subprocess.run(  # noqa: S603
         [
             docker,
@@ -32,15 +44,7 @@ def _render() -> dict[str, object]:
         check=True,
         capture_output=True,
         text=True,
-        env={
-            "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-            "MEDIA_BRIDGE_STAGING_ROOT": "/run/media-bridge-staging-test",
-            "MEDIA_BRIDGE_CONTROL_ORIGIN": "https://media-bridge-staging.sinsan.kr",
-            "MEDIA_BRIDGE_CONTROL_HOST": "media-bridge-staging.sinsan.kr",
-            "MEDIA_BRIDGE_OCR_ENDPOINT": "https://media-bridge-staging-mock:8443/v1/document-digitization",
-            "MEDIA_BRIDGE_VISION_ENDPOINT": "https://media-bridge-staging-mock:8443/v1/chat/completions",
-            "MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL": "https://media-bridge-staging-mock:8443/v1/responses",
-        },
+        env=environment,
     )
     return json.loads(result.stdout)
 

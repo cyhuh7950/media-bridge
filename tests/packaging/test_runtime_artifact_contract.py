@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import os
 import runpy
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 import media_bridge_personal.npm_runtime
 
@@ -87,9 +90,10 @@ def test_linux_verifiers_provision_the_personal_runtime_contract() -> None:
         assert "/v1/document-digitization" in verifier
 
 
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell is not installed")
 def test_runtime_build_script_rejects_invalid_version_before_build(tmp_path: Path) -> None:
-    result = subprocess.run(
-        [
+    result = subprocess.run(  # noqa: S603 - fixed local PowerShell test command
+        [  # noqa: S607 - pwsh is intentionally resolved from the test environment
             "pwsh",
             "-NoProfile",
             "-File",
@@ -190,9 +194,10 @@ def test_runtime_verifier_is_wired_to_private_workflow_evidence() -> None:
     assert "retention-days: 14" in workflow
 
 
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell is not installed")
 def test_runtime_verifier_rejects_relative_artifact_directory(tmp_path: Path) -> None:
-    result = subprocess.run(
-        [
+    result = subprocess.run(  # noqa: S603 - fixed local PowerShell test command
+        [  # noqa: S607 - pwsh is intentionally resolved from the test environment
             "pwsh",
             "-NoProfile",
             "-File",
@@ -262,8 +267,8 @@ exit /b 0
     env = os.environ.copy()
     env["PATH"] = f"{git_tar_directory}{os.pathsep}{env.get('PATH', '')}"
 
-    result = subprocess.run(
-        [
+    result = subprocess.run(  # noqa: S603 - fixed local PowerShell test command
+        [  # noqa: S607 - pwsh is intentionally resolved from the test environment
             "pwsh", "-NoProfile", "-File", str(BUILD_SCRIPT),
             "-Python", str(fake_python),
             "-Version", "0.1.0",
@@ -280,8 +285,9 @@ exit /b 0
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     artifact = output / "media-bridge-runtime-0.1.0-win32-x64.tar.gz"
     assert artifact.is_file()
-    listed = subprocess.run(
-        [str(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "tar.exe"), "-tzf", str(artifact)],
+    system_tar = Path(os.environ.get("SYSTEMROOT", r"C:\Windows")) / "System32" / "tar.exe"
+    listed = subprocess.run(  # noqa: S603 - fixed local Windows system executable
+        [str(system_tar), "-tzf", str(artifact)],
         check=True,
         capture_output=True,
         text=True,
