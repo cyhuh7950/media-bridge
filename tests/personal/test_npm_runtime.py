@@ -13,12 +13,13 @@ from PIL import Image
 
 from media_bridge.backends import BackendStatus, OcrResult
 from media_bridge_personal import npm_runtime as npm_runtime_module
+from media_bridge_personal.credential_store import CredentialStore
 from media_bridge_personal.npm_runtime import (
+    ProviderTester,
     UpstageDocumentParseBackend,
     build_personal_app,
     build_personal_runtime,
 )
-from media_bridge_personal.credential_store import CredentialStore
 from media_bridge_personal.solar_responses import SolarResponsesDownstream
 
 
@@ -627,7 +628,9 @@ async def test_provider_console_exposes_connection_ocr_pipeline_and_agent_contra
             transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1:8642"
         ) as client:
             agent = await client.get("/api/coding-agent")
-            llm = await client.post("/api/test/text-llm", json={"prompt": "연결 시험"}, headers=headers)
+            llm = await client.post(
+                "/api/test/text-llm", json={"prompt": "연결 시험"}, headers=headers
+            )
             ocr = await client.post(
                 "/api/test/media-processor",
                 json={"filename": "test.png", "mimeType": "image/png", "dataBase64": image},
@@ -652,3 +655,71 @@ async def test_provider_console_exposes_connection_ocr_pipeline_and_agent_contra
     assert ocr.json()["text"] == "추출된 텍스트"
     assert pipeline.json()["originalMediaForwarded"] is False
     assert [call[0] for call in tester.calls] == ["text-llm", "media-processor", "pipeline"]
+
+
+@pytest.mark.asyncio
+async def test_real_provider_tester_runs_ocr_then_text_without_forwarding_media(
+    tmp_path: Path,
+) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.headers["authorization"] == "Bearer shared-provider-secret"
+        if request.url.path == "/v1/document-digitization":
+            assert b"fake-image-bytes" in request.content
+            return httpx.Response(
+                200,
+                headers={"content-type": "application/json"},
+                json={"content": {"text": "사진에서 읽은 문장"}},
+            )
+        body = json.loads(request.content)
+        serialized = json.dumps(body, ensure_ascii=False)
+        assert "사진에서 읽은 문장" in serialized
+        assert "fake-image-bytes" not in serialized
+        assert "data:image" not in serialized
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={
+                "choices": [{"message": {"content": "최종 분석 결과"}}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+            },
+        )
+
+    store = CredentialStore(tmp_path / "providers.json")
+    store.set("text-llm", "shared-provider-secret")
+    store.set("media-processor", "shared-provider-secret")
+    tester = ProviderTester(store, transport=httpx.MockTransport(handler))
+    config = {
+        "textLlm": {
+            "protocol": "openai-chat-completions",
+            "endpoint": "https://api.example.test/v1/chat/completions",
+            "model": "text-model",
+            "credentialRef": "text-llm",
+            "credentialEnv": "MISSING_LLM_KEY",
+        },
+        "mediaProcessor": {
+            "protocol": "upstage-document-parse",
+            "endpoint": "https://api.example.test/v1/document-digitization",
+            "model": "document-parse",
+            "credentialRef": "media-processor",
+            "credentialEnv": "MISSING_OCR_KEY",
+        },
+    }
+
+    result = await tester.test_pipeline(
+        config,
+        data=b"fake-image-bytes",
+        mime_type="image/png",
+        filename="screen.png",
+        question="무엇이 보이나요?",
+    )
+
+    assert result["originalMediaForwarded"] is False
+    assert result["extractedText"] == "사진에서 읽은 문장"
+    assert result["answer"] == "최종 분석 결과"
+    assert [request.url.path for request in requests] == [
+        "/v1/document-digitization",
+        "/v1/chat/completions",
+    ]

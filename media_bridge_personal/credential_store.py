@@ -8,7 +8,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-
 _REFERENCE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
 

@@ -1,5 +1,8 @@
 """Single-user npm runtime composed from the shared Media Bridge Core."""
 
+# The settings console embeds audited HTML/CSS/JavaScript assets as multiline literals.
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import asyncio
@@ -35,8 +38,8 @@ from media_bridge.receipts import GateReceiptSigner
 from media_bridge_gateway.contracts import DataPlaneSubject, GatewayResponse, ResponsesDownstream
 from media_bridge_gateway.state import GatewayStateStore
 from media_bridge_gateway.transaction import GatewayTransaction
-from media_bridge_personal.solar_responses import SolarResponsesDownstream
 from media_bridge_personal.credential_store import CredentialStore, CredentialStoreError
+from media_bridge_personal.solar_responses import SolarResponsesDownstream
 
 
 class PersonalRuntimeConfigurationError(RuntimeError):
@@ -572,8 +575,14 @@ async function load(){const response=await fetch('/api/settings');const data=awa
 class ProviderTester:
     """Run bounded provider probes without exposing credential material."""
 
-    def __init__(self, credential_store: CredentialStore) -> None:
+    def __init__(
+        self,
+        credential_store: CredentialStore,
+        *,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
         self._credential_store = credential_store
+        self._transport = transport
 
     def _secret(self, profile: dict[str, Any]) -> str:
         try:
@@ -602,7 +611,10 @@ class ProviderTester:
         else:
             raise PersonalRuntimeConfigurationError("text LLM protocol is unsupported")
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(60), follow_redirects=False, trust_env=False
+            transport=self._transport,
+            timeout=httpx.Timeout(60),
+            follow_redirects=False,
+            trust_env=False,
         ) as client:
             try:
                 response = await client.post(
@@ -651,7 +663,10 @@ class ProviderTester:
         if profile.get("protocol") != "upstage-document-parse":
             raise PersonalRuntimeConfigurationError("media processor protocol is unsupported")
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(60), follow_redirects=False, trust_env=False
+            transport=self._transport,
+            timeout=httpx.Timeout(60),
+            follow_redirects=False,
+            trust_env=False,
         ) as client:
             backend = UpstageDocumentParseBackend(
                 endpoint=str(profile.get("endpoint", "")),

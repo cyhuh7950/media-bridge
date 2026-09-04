@@ -215,3 +215,51 @@ async def test_rejects_malformed_solar_usage_as_an_upstream_response_error(
         await downstream.close()
 
     assert captured.value.code == "solar_response_invalid"
+
+
+@pytest.mark.asyncio
+async def test_generic_responses_provider_uses_credential_loader_and_normalizes_response() -> None:
+    requests: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["authorization"] == "Bearer stored-provider-secret"
+        requests.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": "generic answer"}],
+                    }
+                ],
+                "usage": {"input_tokens": 3, "output_tokens": 2, "total_tokens": 5},
+            },
+        )
+
+    signer = GateReceiptSigner(secret=b"r" * 32)
+    downstream = SolarResponsesDownstream(
+        endpoint="https://api.example.test/v1/responses",
+        model="solar-pro4",
+        receipt_signer=signer,
+        credential_loader=lambda: "stored-provider-secret",
+        protocol="openai-responses",
+        provider_name="Text LLM",
+        error_prefix="text_llm",
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        response = await downstream.invoke(
+            _sealed(signer, {"model": "solar-pro4", "input": "hello"})
+        )
+    finally:
+        await downstream.close()
+
+    assert requests[0]["model"] == "solar-pro4"
+    assert requests[0]["input"][0]["content"] == [
+        {"type": "input_text", "text": "hello"}
+    ]
+    body = json.loads(response.body)
+    assert body["output"][0]["content"][0]["text"] == "generic answer"
+    assert body["usage"] == {"input_tokens": 3, "output_tokens": 2, "total_tokens": 5}
