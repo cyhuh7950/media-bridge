@@ -135,6 +135,19 @@ test('linux-arm64 workflow builds and verifies the v0.1.7 candidate on the nativ
   assert.match(workflow, /packaging\/runtime\/verify-linux-arm64\.sh/);
 });
 
+test('native runtime workflows support SSH-triggered release tags', () => {
+  for (const name of [
+    'build-runtime-linux-arm64.yml',
+    'build-runtime-linux-x64.yml',
+    'build-runtime-win32-x64.yml',
+  ]) {
+    const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', name), 'utf8');
+    assert.match(workflow, /push:\s*\n\s*tags:\s*\n\s*- ['"]runtime-v\*['"]/);
+    assert.match(workflow, /GITHUB_REF_NAME/);
+    assert.match(workflow, /RUNTIME_VERSION/);
+  }
+});
+
 test('linux-arm64 runtime build rejects an invalid version before creating output', {
   skip: process.platform !== 'linux',
 }, () => {

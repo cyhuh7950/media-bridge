@@ -1,6 +1,9 @@
 name: Build win32-x64 runtime artifact
 
 on:
+  push:
+    tags:
+      - 'runtime-v*'
   workflow_dispatch:
     inputs:
       version:
@@ -17,6 +20,22 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Resolve runtime version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '${{ inputs.version }}'
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            if ($env:GITHUB_REF_NAME -notmatch '^runtime-v(?<version>[0-9]+\.[0-9]+\.[0-9]+)$') {
+              throw "invalid runtime tag: $env:GITHUB_REF_NAME"
+            }
+            $version = $Matches.version
+          }
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') {
+            throw "invalid runtime version: $version"
+          }
+          "RUNTIME_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -47,7 +66,7 @@ jobs:
           $work = Join-Path $env:RUNNER_TEMP 'media-bridge-runtime-work'
           ./packaging/runtime/build-win32-x64.ps1 `
             -Python $env:RUNTIME_BUILD_PYTHON `
-            -Version '${{ inputs.version }}' `
+            -Version $env:RUNTIME_VERSION `
             -OutputDirectory $output `
             -WorkDirectory $work `
             -BaseUrl 'http://127.0.0.1:18080'

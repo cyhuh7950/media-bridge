@@ -1,6 +1,9 @@
 name: Build linux-arm64 runtime artifact
 
 on:
+  push:
+    tags:
+      - 'runtime-v*'
   workflow_dispatch:
     inputs:
       version:
@@ -17,6 +20,18 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Resolve runtime version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            RUNTIME_VERSION="${GITHUB_REF_NAME#runtime-v}"
+          else
+            RUNTIME_VERSION="$INPUT_VERSION"
+          fi
+          [[ "$RUNTIME_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid runtime version: $RUNTIME_VERSION" >&2; exit 2; }
+          echo "RUNTIME_VERSION=$RUNTIME_VERSION" >> "$GITHUB_ENV"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -39,7 +54,7 @@ jobs:
         run: |
           packaging/runtime/build-linux-arm64.sh \
             --python "$RUNTIME_BUILD_PYTHON" \
-            --version '${{ inputs.version }}' \
+            --version "$RUNTIME_VERSION" \
             --output-dir "$RUNNER_TEMP/media-bridge-runtime-output" \
             --work-dir "$RUNNER_TEMP/media-bridge-runtime-work" \
             --base-url 'http://127.0.0.1:18080'
