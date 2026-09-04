@@ -778,8 +778,8 @@ class ReloadablePersonalRuntime:
 
     def __init__(
         self,
-        runtime: PersonalRuntime,
-        factory: Callable[[], PersonalRuntime],
+        runtime: _PersonalRuntimeLike,
+        factory: Callable[[], _PersonalRuntimeLike],
     ) -> None:
         self._runtime = runtime
         self._factory = factory

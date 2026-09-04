@@ -23,6 +23,14 @@ from media_bridge_gateway.normalizer import digest_gateway_payload
 from media_bridge_personal.credential_store import CredentialStoreError
 
 
+def _usage_count(value: object) -> int:
+    if value is None:
+        return 0
+    if not isinstance(value, (str, bytes, int, float)):
+        raise TypeError("usage count must be numeric")
+    return int(value)
+
+
 def _contains_media(value: object) -> bool:
     if isinstance(value, str):
         lowered = value.lower()
@@ -289,13 +297,13 @@ class SolarResponsesDownstream:
             if not isinstance(usage_source, dict):
                 raise TypeError("usage must be an object")
             usage = {
-                "input_tokens": int(
+                "input_tokens": _usage_count(
                     usage_source.get("prompt_tokens", usage_source.get("input_tokens", 0))
                 ),
-                "output_tokens": int(
+                "output_tokens": _usage_count(
                     usage_source.get("completion_tokens", usage_source.get("output_tokens", 0))
                 ),
-                "total_tokens": int(usage_source.get("total_tokens", 0)),
+                "total_tokens": _usage_count(usage_source.get("total_tokens", 0)),
             }
         except (TypeError, ValueError, OverflowError) as error:
             raise DownstreamError(
