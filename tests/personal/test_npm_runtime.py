@@ -5,6 +5,7 @@ import json
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 import pytest
@@ -40,6 +41,7 @@ class FakeOcr:
 
 def test_process_entrypoint_applies_configured_request_limit(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     captured: dict[str, Any] = {}
 
@@ -51,6 +53,8 @@ def test_process_entrypoint_applies_configured_request_limit(
     monkeypatch.setenv("MEDIA_BRIDGE_HTTP_HOST", "127.0.0.1")
     monkeypatch.setenv("MEDIA_BRIDGE_HTTP_PORT", "8879")
     monkeypatch.setenv("MEDIA_BRIDGE_MAX_REQUEST_BYTES", "4096")
+    config_file = tmp_path / "config.json"
+    monkeypatch.setenv("MEDIA_BRIDGE_CONFIG_FILE", str(config_file))
     monkeypatch.setattr(
         npm_runtime_module,
         "build_personal_runtime_from_environment",
@@ -59,7 +63,11 @@ def test_process_entrypoint_applies_configured_request_limit(
     monkeypatch.setattr(
         npm_runtime_module,
         "build_personal_app",
-        lambda selected, *, max_request_bytes: (selected, max_request_bytes),
+        lambda selected, *, max_request_bytes, config_file: (
+            selected,
+            max_request_bytes,
+            config_file,
+        ),
     )
     monkeypatch.setattr(
         npm_runtime_module.uvicorn,
@@ -69,7 +77,11 @@ def test_process_entrypoint_applies_configured_request_limit(
 
     npm_runtime_module.run_personal_npm_runtime()
 
-    assert captured["app"] == (runtime, 4096)
+    assert captured["app"] == (
+        runtime,
+        4096,
+        config_file,
+    )
     assert captured["kwargs"]["port"] == 8879
     assert captured["closed"] is True
 
@@ -265,3 +277,102 @@ async def test_personal_health_and_streaming_response(
     assert "response.created" in response.text
     assert "response.output_text.delta" in response.text
     assert response.text.endswith("data: [DONE]\n\n")
+
+
+@pytest.mark.asyncio
+async def test_personal_settings_page_saves_non_secret_npm_config(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("TEST_SOLAR_API_KEY", "secret-must-not-appear")
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "runtimeMode": "personal",
+                "host": "127.0.0.1",
+                "port": 8765,
+                "opencodex": {"baseUrl": "http://127.0.0.1:8765/v1"},
+                "solar": {
+                    "model": "solar-pro4",
+                    "endpoint": "https://api.upstage.ai/v1/chat/completions",
+                    "apiKeyEnv": "TEST_SOLAR_API_KEY",
+                },
+                "ocr": {
+                    "model": "document-parse",
+                    "endpoint": "https://api.upstage.ai/v1/document-digitization",
+                    "apiKeyEnv": "TEST_SOLAR_API_KEY",
+                },
+                "conversion": {
+                    "maxBytes": 8388608,
+                    "ocrEnabled": True,
+                    "visionEnabled": True,
+                },
+                "failurePolicy": {"blockSolarOnPreparationFailure": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    runtime = build_personal_runtime(
+        model="solar-pro4",
+        asset_root=tmp_path / "assets",
+        receipt_secret=b"r" * 32,
+        ocr_backend=FakeOcr(),
+        downstream_factory=lambda signer: SolarResponsesDownstream(
+            endpoint="https://api.example.test/v1/chat/completions",
+            model="solar-pro4",
+            receipt_signer=signer,
+            api_key_env="TEST_SOLAR_API_KEY",
+            transport=httpx.MockTransport(lambda _: httpx.Response(500)),
+        ),
+    )
+    app = build_personal_app(runtime, config_file=config_file)
+    form = urlencode(
+        {
+            "port": "8877",
+            "opencodex_base_url": "http://127.0.0.1:8877/v1",
+            "solar_model": "solar-pro4",
+            "solar_endpoint": "https://api.upstage.ai/v1/chat/completions",
+            "solar_api_key_env": "UPSTAGE_API_KEY",
+            "ocr_endpoint": "https://api.upstage.ai/v1/document-digitization",
+            "ocr_api_key_env": "UPSTAGE_API_KEY",
+            "max_bytes": "4194304",
+            "ocr_enabled": "true",
+            "vision_enabled": "true",
+            "block_solar_on_failure": "true",
+        }
+    )
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1:8765"
+        ) as client:
+            page = await client.get("/")
+            rejected = await client.post(
+                "/settings",
+                content=form,
+                headers={
+                    "content-type": "application/x-www-form-urlencoded",
+                    "origin": "https://malicious.example",
+                },
+            )
+            saved = await client.post(
+                "/settings",
+                content=form,
+                headers={
+                    "content-type": "application/x-www-form-urlencoded",
+                    "origin": "http://127.0.0.1:8765",
+                },
+            )
+    finally:
+        await runtime.close()
+
+    assert page.status_code == 200
+    assert "Media Bridge 설정" in page.text
+    assert "secret-must-not-appear" not in page.text
+    assert rejected.status_code == 403
+    assert saved.status_code == 200
+    assert "mb service restart" in saved.text
+    persisted = json.loads(config_file.read_text(encoding="utf-8"))
+    assert persisted["port"] == 8877
+    assert persisted["solar"]["apiKeyEnv"] == "UPSTAGE_API_KEY"
+    assert "apiKey" not in persisted["solar"]

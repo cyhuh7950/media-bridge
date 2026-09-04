@@ -38,6 +38,11 @@ mb health --json
 mb gui
 ```
 
+`mb gui`에서 로컬 설정 화면을 열어 포트, OpenCodex provider 주소, Solar-4,
+Upstage Document Parse와 변환 정책을 변경할 수 있습니다. 화면을 열 수 없는 headless 서버에서는
+표시된 주소를 브라우저로 엽니다. 저장 후 `mb service restart`를 실행하면 변경값이 적용됩니다.
+설정 화면에는 API key 원문을 입력하지 않습니다.
+
 관리된 runtime artifact가 준비되지 않은 경우 `mb start`는 fail-closed로 중단됩니다.
 이때 Python, Docker 또는 `.deb`를 직접 설치하지 말고 해당 플랫폼용 npm runtime release가
 준비되었는지 확인합니다.

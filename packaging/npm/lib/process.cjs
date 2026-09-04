@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawn } = require('node:child_process');
+const { configPath } = require('./config.cjs');
 
 function statePath(homeDir = os.homedir()) {
   return path.join(homeDir, '.media-bridge', 'service.pid');
@@ -94,6 +95,7 @@ function prepareRuntimeEnvironment({ config, homeDir = os.homedir(), env = proce
   runtimeEnv.MEDIA_BRIDGE_BLOCK_SOLAR_ON_FAILURE ||= String(
     config?.failurePolicy?.blockSolarOnPreparationFailure !== false,
   );
+  runtimeEnv.MEDIA_BRIDGE_CONFIG_FILE ||= configPath(homeDir);
 
   const configuredKey = runtimeEnv[config?.solar?.apiKeyEnv || 'SOLAR_API_KEY'];
   if (configuredKey) {

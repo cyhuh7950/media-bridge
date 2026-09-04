@@ -5,11 +5,19 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
+  applyPortOverride,
   defaultConfig,
   loadConfig,
   saveConfig,
   validateConfig,
 } = require('../../packaging/npm/lib/config.cjs');
+
+test('port override keeps health and gui config on the active listener', () => {
+  const updated = applyPortOverride(defaultConfig(), 8877);
+  assert.equal(updated.port, 8877);
+  assert.equal(updated.opencodex.baseUrl, 'http://127.0.0.1:8877/v1');
+  assert.throws(() => applyPortOverride(defaultConfig(), 0), /port/i);
+});
 
 function home(name) {
   const value = path.join(process.env.MEDIA_BRIDGE_TEST_TMP || os.tmpdir(), `media-bridge-npm-config-${name}`);

@@ -8,6 +8,10 @@ mb init
 mb start
 ```
 
+`mb gui`는 데스크톱에서 로컬 설정 화면을 열고, 화면을 열 수 없는 서버에서는 접속 주소를
+표시합니다. 설정 화면은 API key 원문이 아니라 환경변수 이름만 저장하며, 변경 사항은
+`mb service restart` 뒤 적용됩니다.
+
 npm 패키지는 단일 사용자용 `personal` 모드로 실행됩니다. OpenCodex의 Responses 요청을
 Media Bridge가 받고, 이미지에서는 Upstage Document Parse로 텍스트를 추출한 뒤 원본 이미지를
 제거하여 Solar-4에 전달합니다. 지원 플랫폼용 runtime

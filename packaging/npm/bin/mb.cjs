@@ -6,8 +6,14 @@ const os = require('node:os');
 const path = require('node:path');
 const readline = require('node:readline');
 const { spawn } = require('node:child_process');
-const { defaultConfig, loadConfig, saveConfig } = require('../lib/config.cjs');
+const {
+  applyPortOverride,
+  defaultConfig,
+  loadConfig,
+  saveConfig,
+} = require('../lib/config.cjs');
 const { parseNonInteractiveConfig, runWizard } = require('../lib/wizard.cjs');
+const { openGui } = require('../lib/gui.cjs');
 const { resolveRuntime } = require('../lib/runtime.cjs');
 const {
   checkHealth,
@@ -67,11 +73,15 @@ async function init() {
 }
 
 async function start(argv) {
-  const config = readConfig();
+  let config = readConfig();
   const portIndex = argv.indexOf('--port');
   const port = portIndex >= 0 ? Number(argv[portIndex + 1]) : Number(config.port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('포트는 1부터 65535 사이의 정수여야 합니다.');
+  }
+  if (portIndex >= 0) {
+    config = applyPortOverride(config, port);
+    saveConfig({ homeDir: os.homedir(), config });
   }
   const runtime = await resolveRuntime({ homeDir: os.homedir() });
   const state = await startProcess({ config, runtime, homeDir: os.homedir(), portOverride: port });
@@ -94,7 +104,9 @@ async function health(json) {
 
 function gui() {
   const { host, port } = readConfig();
-  process.stdout.write(`설정 화면 주소: http://${host}:${port}/\n`);
+  const url = `http://${host}:${port}/`;
+  openGui(url);
+  process.stdout.write(`설정 화면 주소: ${url}\n`);
 }
 
 function ready(argv) {

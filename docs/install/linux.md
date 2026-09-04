@@ -35,7 +35,8 @@ mb service uninstall
 mb update
 ```
 
-`mb gui`는 현재 설정된 Web 주소를 표시합니다. `mb health`가 실패하면 Media Bridge가
+`mb gui`는 데스크톱에서는 로컬 설정 화면을 열고 headless 서버에서는 현재 설정된 Web 주소를
+표시합니다. 설정 저장 후 `mb service restart`로 적용합니다. `mb health`가 실패하면 Media Bridge가
 준비되지 않은 상태입니다. runtime artifact가 없는 경우에는 Python이나 `.deb`를 직접
 설치하지 말고 지원 플랫폼 release 준비 여부를 확인합니다.
 

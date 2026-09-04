@@ -122,6 +122,16 @@ function loadConfig({ homeDir = os.homedir() } = {}) {
   return validateConfig(merged);
 }
 
+function applyPortOverride(input, port) {
+  const config = structuredClone(input);
+  const previousOwnUrl = `http://${config.host}:${config.port}/v1`;
+  config.port = port;
+  if (config.opencodex?.baseUrl === previousOwnUrl) {
+    config.opencodex.baseUrl = `http://${config.host}:${port}/v1`;
+  }
+  return validateConfig(config);
+}
+
 function saveConfig({ homeDir = os.homedir(), config }) {
   const validated = validateConfig(config);
   const directory = path.dirname(configPath(homeDir));
@@ -137,6 +147,7 @@ function saveConfig({ homeDir = os.homedir(), config }) {
 }
 
 module.exports = {
+  applyPortOverride,
   configPath,
   defaultConfig,
   loadConfig,

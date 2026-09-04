@@ -190,6 +190,7 @@ test('lifecycle provisions the required packaged-runtime environment from mb con
   assert.equal(runtimeEnv.MEDIA_BRIDGE_OCR_ENABLED, 'true');
   assert.equal(runtimeEnv.MEDIA_BRIDGE_VISION_ENABLED, 'false');
   assert.equal(runtimeEnv.MEDIA_BRIDGE_BLOCK_SOLAR_ON_FAILURE, 'true');
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_CONFIG_FILE, path.join(homeDir, '.media-bridge', 'config.json'));
   assert.equal(runtimeEnv.MEDIA_BRIDGE_VISION_ENDPOINT, undefined);
   assert.equal(runtimeEnv.MEDIA_BRIDGE_VISION_MODEL, undefined);
   assert.equal(runtimeEnv.SOLAR_API_KEY, 'not-written-to-disk');
