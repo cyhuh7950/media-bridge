@@ -186,9 +186,13 @@ def test_runtime_release_workflow_uses_verified_run_artifacts_without_local_gh()
 
     assert "release-v*" in workflow
     assert "GITHUB_REF_NAME" in workflow
-    assert "33889036552" in workflow
-    assert "33889039442" in workflow
-    assert "33889041728" in workflow
+    run_ids = [line.strip().removeprefix("run-id:").strip()
+               for line in workflow.splitlines() if line.strip().startswith("run-id:")]
+    assert len(run_ids) == 3
+    assert len(set(run_ids)) == 3
+    assert all(run_id.isdigit() and int(run_id) > 0 for run_id in run_ids)
+    assert "verification.sourceCommit !== sourceCommit" in workflow
+    assert "verification.sha256 !== actual" in workflow
     assert workflow.count("actions/download-artifact@v4") == 3
     assert "runtime-manifest.json" in workflow
     assert "manifest.packageVersion !== version" in workflow
