@@ -8,7 +8,7 @@
 `mb init`의 첫 주소는 Media Bridge가 OpenCodex를 호출할 주소가 아닙니다. OpenCodex의
 provider 설정에 넣을 Media Bridge 주소입니다.
 
-`http://127.0.0.1:8765/v1`
+`http://127.0.0.1:8642/v1`
 
 OpenCodex 설정에서는 이 값을 provider base URL로 지정하고 wire API는 `responses`를 선택합니다.
 npm `personal` 모드는 loopback 전용이므로 별도 Media Bridge bearer key는 사용하지 않습니다.

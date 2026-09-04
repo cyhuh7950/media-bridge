@@ -6,9 +6,9 @@ function defaultConfig() {
   return {
     runtimeMode: 'personal',
     host: '127.0.0.1',
-    port: 8765,
+    port: 8642,
     opencodex: {
-      baseUrl: 'http://127.0.0.1:8765/v1',
+      baseUrl: 'http://127.0.0.1:8642/v1',
     },
     solar: {
       model: 'solar-pro4',

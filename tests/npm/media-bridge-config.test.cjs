@@ -28,8 +28,8 @@ function home(name) {
 test('default config contains fail-closed conversion settings', () => {
   const config = defaultConfig();
   assert.equal(config.host, '127.0.0.1');
-  assert.equal(config.port, 8765);
-  assert.equal(config.opencodex.baseUrl, 'http://127.0.0.1:8765/v1');
+  assert.equal(config.port, 8642);
+  assert.equal(config.opencodex.baseUrl, 'http://127.0.0.1:8642/v1');
   assert.equal(config.runtimeMode, 'personal');
   assert.equal(config.ocr.endpoint, 'https://api.upstage.ai/v1/document-digitization');
   assert.equal(config.ocr.model, 'document-parse');
@@ -89,7 +89,7 @@ test('loading migrates the legacy OpenCodex server address to the Media Bridge p
 
   const loaded = loadConfig({ homeDir: tempHome });
 
-  assert.equal(loaded.opencodex.baseUrl, 'http://127.0.0.1:8765/v1');
+  assert.equal(loaded.opencodex.baseUrl, 'http://127.0.0.1:8642/v1');
   fs.rmSync(tempHome, { recursive: true, force: true });
 });
 

@@ -26,7 +26,7 @@ SHA-256을 검증합니다. manifest에 공개 산출물이 없는 플랫폼은 
 
 시작 전 `mb init`에서 지정한 환경변수 이름(기본 `SOLAR_API_KEY`)에 Upstage API key를
 설정해야 합니다. OpenCodex provider의 base URL은 기본
-`http://127.0.0.1:8765/v1`, wire API는 `responses`입니다. PostgreSQL과 서명 snapshot을
+`http://127.0.0.1:8642/v1`, wire API는 `responses`입니다. PostgreSQL과 서명 snapshot을
 사용하는 다중 사용자 `managed` 모드는 기존 서버 배포 entrypoint로 별도 유지됩니다.
 
 ## 제거

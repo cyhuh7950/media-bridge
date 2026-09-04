@@ -86,6 +86,47 @@ def test_process_entrypoint_applies_configured_request_limit(
     assert captured["closed"] is True
 
 
+def test_process_entrypoint_defaults_to_port_8642(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeRuntime:
+        async def close(self) -> None:
+            captured["closed"] = True
+
+    monkeypatch.delenv("MEDIA_BRIDGE_HTTP_PORT", raising=False)
+    monkeypatch.setenv("MEDIA_BRIDGE_CONFIG_FILE", str(tmp_path / "config.json"))
+    monkeypatch.setattr(
+        npm_runtime_module,
+        "build_personal_runtime_from_environment",
+        lambda: FakeRuntime(),
+    )
+    monkeypatch.setattr(
+        npm_runtime_module,
+        "build_personal_app",
+        lambda runtime, **_kwargs: runtime,
+    )
+    monkeypatch.setattr(
+        npm_runtime_module.uvicorn,
+        "run",
+        lambda _app, **kwargs: captured.update(kwargs),
+    )
+
+    npm_runtime_module.run_personal_npm_runtime()
+
+    assert captured["port"] == 8642
+    assert captured["closed"] is True
+
+
+def test_settings_page_defaults_to_port_8642() -> None:
+    page = npm_runtime_module._settings_page({})
+
+    assert 'name="port" type="number" min="1" max="65535" required value="8642"' in page
+    assert 'name="opencodex_base_url" type="url" required value="http://127.0.0.1:8642/v1"' in page
+
+
 @pytest.mark.asyncio
 async def test_document_parse_backend_sends_required_form_fields_and_extracts_content_html(
     monkeypatch: pytest.MonkeyPatch,

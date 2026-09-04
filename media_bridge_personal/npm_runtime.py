@@ -295,13 +295,13 @@ def _settings_page(config: dict[str, Any], *, saved: bool = False) -> str:
         input_field(
             "Media Bridge 포트",
             "port",
-            config.get("port", 8765),
+            config.get("port", 8642),
             'type="number" min="1" max="65535"',
         ),
         input_field(
             "OpenCodex에 설정할 Media Bridge 주소",
             "opencodex_base_url",
-            opencodex.get("baseUrl", "http://127.0.0.1:8765/v1"),
+            opencodex.get("baseUrl", "http://127.0.0.1:8642/v1"),
             'type="url"',
         ),
         input_field("Solar 모델", "solar_model", solar.get("model", "solar-pro4")),
@@ -606,7 +606,7 @@ def run_personal_npm_runtime() -> None:
     if host != "127.0.0.1":
         raise PersonalRuntimeConfigurationError("personal runtime must bind to 127.0.0.1")
     try:
-        port = int(os.environ.get("MEDIA_BRIDGE_HTTP_PORT", "8765"))
+        port = int(os.environ.get("MEDIA_BRIDGE_HTTP_PORT", "8642"))
     except ValueError as error:
         raise PersonalRuntimeConfigurationError(
             "personal runtime port must be an integer"
