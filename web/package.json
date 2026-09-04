@@ -9,10 +9,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "lint": "eslint src e2e vite.config.ts playwright.config.ts",
+    "lint": "eslint src e2e e2e-personal vite.config.ts playwright.config.ts playwright.personal.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:personal": "playwright test --config playwright.personal.config.ts"
   },
   "dependencies": {
     "react": "19.2.8",
