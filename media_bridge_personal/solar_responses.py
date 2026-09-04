@@ -203,7 +203,10 @@ class SolarResponsesDownstream:
         try:
             response = await self._client.post(
                 self._endpoint,
-                headers={"Authorization": f"Bearer {secret}"},
+                headers={
+                    "Authorization": f"Bearer {secret}",
+                    "Content-Type": "application/json",
+                },
                 content=encoded,
             )
         except httpx.TimeoutException as error:

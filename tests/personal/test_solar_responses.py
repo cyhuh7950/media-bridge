@@ -70,6 +70,7 @@ async def test_translates_text_only_responses_to_solar_chat_and_back(
     def handler(request: httpx.Request) -> httpx.Response:
         recorded.append(json.loads(request.content))
         assert request.headers["authorization"] == "Bearer test-secret-not-logged"
+        assert request.headers["content-type"] == "application/json"
         return httpx.Response(
             200,
             headers={"content-type": "application/json"},
