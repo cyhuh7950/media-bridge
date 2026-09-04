@@ -244,6 +244,14 @@ test('lifecycle provisions the required packaged-runtime environment from mb con
   assert.equal(runtimeEnv.MEDIA_BRIDGE_SOLAR_ENDPOINT, config.solar.endpoint);
   assert.equal(runtimeEnv.MEDIA_BRIDGE_SOLAR_MODEL, config.solar.model);
   assert.equal(runtimeEnv.MEDIA_BRIDGE_RUNTIME_MODE, 'personal');
+  assert.equal(
+    runtimeEnv.MEDIA_BRIDGE_CREDENTIAL_STORE_FILE,
+    path.join(homeDir, '.media-bridge', 'secrets', 'providers.json'),
+  );
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_TEXT_LLM_PROTOCOL, 'openai-chat-completions');
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_TEXT_LLM_CREDENTIAL_REF, 'text-llm');
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_MEDIA_PROCESSOR_PROTOCOL, 'upstage-document-parse');
+  assert.equal(runtimeEnv.MEDIA_BRIDGE_MEDIA_PROCESSOR_CREDENTIAL_REF, 'media-processor');
   assert.equal(runtimeEnv.MEDIA_BRIDGE_OCR_ENDPOINT, config.ocr.endpoint);
   assert.equal(runtimeEnv.MEDIA_BRIDGE_OCR_CREDENTIAL_ENV, 'CUSTOM_SOLAR_KEY');
   assert.equal(runtimeEnv.MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV, 'CUSTOM_SOLAR_KEY');

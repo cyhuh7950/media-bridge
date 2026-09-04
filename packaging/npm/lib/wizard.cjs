@@ -11,6 +11,31 @@ function booleanValue(value, fallback) {
   throw new Error(`boolean value is invalid: ${value}`);
 }
 
+function syncRoleConfig(config) {
+  config.codingAgent = {
+    preset: 'opencodex',
+    protocol: 'openai-responses',
+    baseUrl: config.opencodex.baseUrl,
+  };
+  config.textLlm = {
+    preset: 'upstage-solar',
+    protocol: 'openai-chat-completions',
+    endpoint: config.solar.endpoint,
+    model: config.solar.model,
+    credentialRef: config.textLlm?.credentialRef || 'text-llm',
+    credentialEnv: config.solar.apiKeyEnv,
+  };
+  config.mediaProcessor = {
+    preset: 'upstage-document-parse',
+    protocol: 'upstage-document-parse',
+    endpoint: config.ocr.endpoint,
+    model: 'document-parse',
+    credentialRef: config.mediaProcessor?.credentialRef || 'media-processor',
+    credentialEnv: config.ocr.apiKeyEnv,
+  };
+  return config;
+}
+
 function parseNonInteractiveConfig(env, existingConfig = defaultConfig()) {
   const config = structuredClone(existingConfig);
   config.opencodex.baseUrl = valueOrDefault(env.MB_OPEN_CODEX_URL, config.opencodex.baseUrl);
@@ -27,7 +52,7 @@ function parseNonInteractiveConfig(env, existingConfig = defaultConfig()) {
     env.MB_BLOCK_SOLAR_ON_FAILURE,
     config.failurePolicy.blockSolarOnPreparationFailure,
   );
-  return validateConfig(config);
+  return validateConfig(syncRoleConfig(config));
 }
 
 async function runWizard({ ask, existingConfig = defaultConfig() }) {
@@ -47,7 +72,7 @@ async function runWizard({ ask, existingConfig = defaultConfig() }) {
     await answer('변환 실패 시 Solar 전송 차단 (y/n)', config.failurePolicy.blockSolarOnPreparationFailure ? 'y' : 'n'),
     config.failurePolicy.blockSolarOnPreparationFailure,
   );
-  return validateConfig(config);
+  return validateConfig(syncRoleConfig(config));
 }
 
 module.exports = {

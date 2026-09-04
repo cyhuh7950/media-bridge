@@ -8,9 +8,11 @@ mb init
 mb start
 ```
 
-`mb gui`는 데스크톱에서 로컬 설정 화면을 열고, 화면을 열 수 없는 서버에서는 접속 주소를
-표시합니다. 설정 화면은 API key 원문이 아니라 환경변수 이름만 저장하며, 변경 사항은
-`mb service restart` 뒤 적용됩니다.
+`mb gui`는 데스크톱에서 로컬 설정·시험 화면을 열고, 화면을 열 수 없는 서버에서는 접속 주소를
+표시합니다. 화면에서 코딩 에이전트, OpenAI 호환 Non-Vision LLM, Upstage Document Parse와
+API Key를 설정하고 LLM·OCR·전체 pipeline을 각각 시험할 수 있습니다. API Key는 일반 설정과
+분리되며 화면에 다시 표시되지 않습니다. 포트 변경을 제외한 Provider 설정은 실행 중 다시
+로드됩니다.
 
 npm 패키지는 단일 사용자용 `personal` 모드로 실행됩니다. OpenCodex의 Responses 요청을
 Media Bridge가 받고, 이미지에서는 Upstage Document Parse로 텍스트를 추출한 뒤 원본 이미지를
@@ -24,8 +26,8 @@ SHA-256을 검증합니다. manifest에 공개 산출물이 없는 플랫폼은 
 첫 시작 시 runtime 구동에 필요한 model registry, asset 디렉터리와 내부 인증 secret을
 `~/.media-bridge` 아래에 자동 생성합니다. Secret 원문은 `config.json`에 저장하지 않습니다.
 
-시작 전 `mb init`에서 지정한 환경변수 이름(기본 `SOLAR_API_KEY`)에 Upstage API key를
-설정해야 합니다. OpenCodex provider의 base URL은 기본
+기존 자동화는 `mb init`에서 지정한 환경변수 이름(기본 `SOLAR_API_KEY`)을 계속 사용할 수 있고,
+일반 사용자는 설정 화면에서 API Key를 입력할 수 있습니다. OpenCodex provider의 base URL은 기본
 `http://127.0.0.1:8642/v1`, wire API는 `responses`입니다. PostgreSQL과 서명 snapshot을
 사용하는 다중 사용자 `managed` 모드는 기존 서버 배포 entrypoint로 별도 유지됩니다.
 

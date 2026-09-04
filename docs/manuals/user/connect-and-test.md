@@ -1,6 +1,50 @@
 # Media Bridge 연결과 시험
 
-Web Console에서 client credential 발급은 연결 성공이 아니다. Connection에는 Gateway URL과 외부
-credential Secret 참조를 저장한다. Preview는 downstream 호출 0회이고, 실제 downstream 시험은
-비용 안내를 매번 명시적으로 opt-in해야 한다. browser는 same-origin `/admin/v1`만 호출하며 media와
-credential을 storage에 보존하지 않는다. 실제 provider 연결은 아직 검증되지 않았다.
+## 시작 확인
+
+```bash
+mb start
+mb ready --wait --timeout 60
+mb health --json
+mb gui
+```
+
+`ready`와 `health`는 Media Bridge runtime 자체 상태입니다. Provider 연결 성공을 의미하지는
+않으므로 설정 화면에서 다음 시험을 순서대로 실행합니다.
+
+1. `연결 정보 확인`: 코딩 에이전트에 입력할 Responses 주소를 확인합니다.
+2. `LLM 연결 시험`: 선택한 Non-Vision LLM에 실제 텍스트를 보냅니다.
+3. `OCR 연결 시험`: 시험 이미지/PDF에서 실제 텍스트를 추출합니다.
+4. `전체 파이프라인 시험`: OCR 결과만 LLM에 보내고 최종 응답을 확인합니다.
+
+실제 Provider 시험은 외부 API 호출이므로 사용량이 발생할 수 있습니다. Media Bridge는 API Key
+원문과 업로드 파일을 browser storage에 저장하지 않으며, 응답 화면에도 API Key를 반환하지
+않습니다.
+
+## 코딩 에이전트 연결
+
+코딩 에이전트의 OpenAI Responses provider base URL을 설정 화면의 `baseUrl`로 맞춥니다. 기본값은
+다음과 같습니다.
+
+```text
+http://127.0.0.1:8642/v1
+```
+
+실제 요청 URL은 다음과 같습니다.
+
+```text
+http://127.0.0.1:8642/v1/responses
+```
+
+OpenCodex, Eoul Gateway 또는 다른 Responses 호환 client가 이 주소로 요청하면 Media Bridge가
+미디어를 처리하고 선택한 Non-Vision LLM의 답변을 Responses 형식으로 반환합니다.
+
+## 판정 구분
+
+- `health PASS`: Media Bridge process와 HTTP listener 정상
+- `LLM 시험 PASS`: 선택 LLM endpoint·모델·credential 정상
+- `OCR 시험 PASS`: 선택 미디어 처리 endpoint·credential·파일 처리 정상
+- `전체 흐름 PASS`: OCR → 원본 제거 → 텍스트 LLM → 최종 응답 정상
+- `코딩 에이전트 PASS`: 실제 코딩 에이전트에서 같은 요청과 응답을 확인
+
+앞 단계만 통과하고 뒤 단계가 실행되지 않았다면 제품 전체 PASS로 기록하지 않습니다.
