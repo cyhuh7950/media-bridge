@@ -14,9 +14,9 @@ jobs:
   publish-runtime-release:
     runs-on: ubuntu-24.04
     env:
-      VERSION: 0.1.9
-      TAG: v0.1.9
-      SOURCE_COMMIT: 88b0ff7597f72e99585ae00e92c9176a58977046
+      VERSION: 0.1.10
+      TAG: v0.1.10
+      SOURCE_COMMIT: e44d08599d2641b7ff482725fd7b0483abb7d755
     steps:
       - name: Check out release metadata
         uses: actions/checkout@v4
@@ -32,26 +32,26 @@ jobs:
       - name: Download verified Linux ARM64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: media-bridge-runtime-linux-arm64-88b0ff7597f72e99585ae00e92c9176a58977046
+          name: media-bridge-runtime-linux-arm64-e44d08599d2641b7ff482725fd7b0483abb7d755
           path: ${{ runner.temp }}/runtime-linux-arm64
           github-token: ${{ github.token }}
-          run-id: 33875592901
+          run-id: 33889036552
 
       - name: Download verified Linux x64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: media-bridge-runtime-linux-x64-88b0ff7597f72e99585ae00e92c9176a58977046
+          name: media-bridge-runtime-linux-x64-e44d08599d2641b7ff482725fd7b0483abb7d755
           path: ${{ runner.temp }}/runtime-linux-x64
           github-token: ${{ github.token }}
-          run-id: 33875592987
+          run-id: 33889039442
 
       - name: Download verified Windows x64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: media-bridge-runtime-win32-x64-88b0ff7597f72e99585ae00e92c9176a58977046
+          name: media-bridge-runtime-win32-x64-e44d08599d2641b7ff482725fd7b0483abb7d755
           path: ${{ runner.temp }}/runtime-win32-x64
           github-token: ${{ github.token }}
-          run-id: 33875592959
+          run-id: 33889041728
 
       - name: Assemble and verify release assets
         shell: bash
@@ -96,12 +96,12 @@ jobs:
         uses: actions/github-script@v7
         env:
           RELEASE_BODY: |
-            Media Bridge 0.1.9 fixes Solar JSON forwarding and changes the npm personal default port to 8642 while preserving explicit and managed legacy port settings.
+            Media Bridge 0.1.10 publishes the verified native runtimes and npm CLI through GitHub Actions trusted publishing (OIDC), without a long-lived npm token.
 
             ## Install or update
 
             ```bash
-            npm install -g @cyhuh/media-bridge@0.1.9
+            npm install -g @cyhuh/media-bridge@0.1.10
             mb init
             mb start
             mb health
@@ -109,14 +109,13 @@ jobs:
 
             ## Changes
 
-            - Sends Solar chat requests with the required JSON content type.
-            - Uses port 8642 for new npm personal installations to avoid common port conflicts.
-            - Preserves ports already saved in user configuration and the managed enterprise default.
+            - Publishes the npm package with GitHub Actions trusted publishing (OIDC).
+            - Uses port 8642 for new npm personal installations while preserving explicit and managed settings.
             - Supports Windows x64, Linux x64, and Linux ARM64 native runtimes.
 
             ## Verification
 
-            Native no-Python build, personal health, managed install, checksum rejection, and rollback verification passed on all three platforms. Pre-release verification passed 443 Python tests with 6 skips, 58 Node tests with 4 skips, 27 Web Console tests, Ruff, mypy, ESLint, typecheck, and the Vite build. Runtime source commit: `88b0ff7597f72e99585ae00e92c9176a58977046`. Release metadata commit: `${{ github.sha }}`.
+            Native no-Python build, personal health, managed install, checksum rejection, and rollback verification passed on all three platforms. Runtime source commit: `e44d08599d2641b7ff482725fd7b0483abb7d755`. Release metadata commit: `${{ github.sha }}`.
 
             ## Uninstall
 
