@@ -143,7 +143,7 @@ test('win32 runtime build isolates PyInstaller from the caller working directory
     path.join(__dirname, '../../.github/workflows/build-runtime-win32-x64.yml'),
     'utf8',
   );
-  assert.match(workflow, /default:\s*0\.1\.6/);
+  assert.match(workflow, /default:\s*0\.1\.7/);
 });
 
 test('manifest selects the exact published win32-x64 artifact', () => {

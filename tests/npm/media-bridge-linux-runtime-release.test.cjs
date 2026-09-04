@@ -123,13 +123,13 @@ test('published package selects the exact linux-arm64 v0.1.6 runtime', () => {
   assert.match(artifact.sha256, /^[a-f0-9]{64}$/);
 });
 
-test('linux-arm64 workflow builds and verifies on the native ARM64 runner', () => {
+test('linux-arm64 workflow builds and verifies the v0.1.7 candidate on the native ARM64 runner', () => {
   const workflow = fs.readFileSync(
     path.join(root, '.github', 'workflows', 'build-runtime-linux-arm64.yml'),
     'utf8',
   );
 
-  assert.match(workflow, /default:\s*0\.1\.6/);
+  assert.match(workflow, /default:\s*0\.1\.7/);
   assert.match(workflow, /runs-on:\s*ubuntu-24\.04-arm/);
   assert.match(workflow, /packaging\/runtime\/build-linux-arm64\.sh/);
   assert.match(workflow, /packaging\/runtime\/verify-linux-arm64\.sh/);
