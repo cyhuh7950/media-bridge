@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import codecs
+import hashlib
 import json
 import secrets
 import time
@@ -40,7 +42,9 @@ def _contains_media(value: object) -> bool:
     if not isinstance(value, dict):
         return False
     item = cast(dict[object, object], value)
-    if item.get("type") in {"input_image", "input_file", "image_url"}:
+    if isinstance(item.get("type"), str) and item["type"] in {
+        "input_image", "input_file", "image_url"
+    }:
         return True
     return any(_contains_media(child) for child in item.values())
 
@@ -85,6 +89,50 @@ def _text_content(value: object) -> str:
     return "\n".join(parts)
 
 
+def _tool_name(name: str, namespace: str | None = None) -> str:
+    if namespace is None:
+        return name
+    if not isinstance(namespace, str) or not namespace:
+        raise DownstreamGuardError("Tool namespace is malformed")
+    identity = json.dumps([namespace, name], ensure_ascii=False).encode()
+    return "mb_ns_" + hashlib.sha256(identity).hexdigest()[:48]
+
+
+def _chat_tools(value: object) -> tuple[list[dict[str, Any]], dict[str, dict[str, str]]]:
+    if not isinstance(value, list):
+        raise DownstreamGuardError("Unsupported Responses tool definition")
+    converted: list[dict[str, Any]] = []
+    identities: dict[str, dict[str, str]] = {}
+
+    def add(tool: object, namespace: str | None = None, description: str = "") -> None:
+        if (not isinstance(tool, dict) or tool.get("type") != "function"
+                or not isinstance(tool.get("name"), str) or not tool["name"]
+                or not isinstance(tool.get("parameters"), dict)):
+            raise DownstreamGuardError("Unsupported Responses tool definition")
+        name = _tool_name(tool["name"], namespace)
+        if name in identities:
+            raise DownstreamGuardError("Duplicate or colliding tool name")
+        identities[name] = {"name": tool["name"]}
+        function = {k: tool[k] for k in ("description", "parameters", "strict") if k in tool}
+        function["name"] = name
+        if namespace is not None:
+            identities[name]["namespace"] = namespace
+            function["description"] = (
+                f"{namespace}.{tool['name']}: {description}\n{tool.get('description', '')}")
+        converted.append({"type": "function", "function": function})
+
+    for tool in value:
+        if isinstance(tool, dict) and tool.get("type") == "namespace":
+            if (not isinstance(tool.get("name"), str) or not tool["name"]
+                    or not isinstance(tool.get("tools"), list)):
+                raise DownstreamGuardError("Tool namespace is malformed")
+            for child in tool["tools"]:
+                add(child, tool["name"], tool.get("description", ""))
+        else:
+            add(tool)
+    return converted, identities
+
+
 def _chat_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
     instructions = payload.get("instructions")
@@ -102,7 +150,8 @@ def _chat_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
                            for k in ("call_id", "name", "arguments")):
                     raise DownstreamGuardError("Function call is malformed")
                 call = {"id": item["call_id"], "type": "function", "function": {
-                    "name": item["name"], "arguments": item["arguments"]}}
+                    "name": _tool_name(item["name"], item.get("namespace")),
+                    "arguments": item["arguments"]}}
                 if messages and messages[-1].get("tool_calls"):
                     messages[-1]["tool_calls"].append(call)
                 else:
@@ -225,20 +274,31 @@ class SolarResponsesDownstream:
         ):
             raise DownstreamGuardError("Responses upstream tool passthrough is not yet supported")
         messages = _chat_messages(sealed.payload)
+        tool_identities: dict[str, dict[str, str]] = {}
         solar_payload: dict[str, Any]
         if self._protocol == "openai-chat-completions":
-            solar_payload = {"model": self._model, "messages": messages, "stream": False}
+            solar_payload = {"model": self._model, "messages": messages,
+                             "stream": sealed.payload.get("stream") is True}
             if sealed.payload.get("tools"):
-                tools = sealed.payload["tools"]
-                if not isinstance(tools, list) or any(
-                    not isinstance(t, dict) or t.get("type") != "function"
-                    or not isinstance(t.get("name"), str) or not t["name"]
-                    or not isinstance(t.get("parameters"), dict) for t in tools
-                ):
-                    raise DownstreamGuardError("Unsupported Responses tool definition")
-                solar_payload["tools"] = [{"type": "function", "function": {
-                    k: t[k] for k in ("name", "description", "parameters", "strict") if k in t
-                }} for t in tools]
+                solar_payload["tools"], tool_identities = _chat_tools(sealed.payload["tools"])
+            if "tool_choice" in sealed.payload:
+                choice = sealed.payload["tool_choice"]
+                if isinstance(choice, str) and choice in {"none", "auto", "required"}:
+                    solar_payload["tool_choice"] = choice
+                elif (isinstance(choice, dict) and set(choice) <= {"type", "name", "namespace"}
+                      and choice.get("type") == "function"
+                      and isinstance(choice.get("name"), str)
+                      and _tool_name(choice["name"], choice.get("namespace")) in tool_identities):
+                    solar_payload["tool_choice"] = {
+                        "type": "function", "function": {
+                            "name": _tool_name(choice["name"], choice.get("namespace"))}}
+                else:
+                    raise DownstreamGuardError("Unsupported Responses tool choice")
+            if "parallel_tool_calls" in sealed.payload:
+                parallel = sealed.payload["parallel_tool_calls"]
+                if not isinstance(parallel, bool):
+                    raise DownstreamGuardError("Parallel tool calls must be boolean")
+                solar_payload["parallel_tool_calls"] = parallel
         else:
             solar_payload = {
                 "model": self._model,
@@ -273,14 +333,15 @@ class SolarResponsesDownstream:
                 http_status=500,
             ) from error
         try:
-            response = await self._client.post(
-                self._endpoint,
+            request = self._client.build_request(
+                "POST", self._endpoint,
                 headers={
                     "Authorization": f"Bearer {secret}",
                     "Content-Type": "application/json",
                 },
                 content=encoded,
             )
+            response = await self._client.send(request, stream=True)
         except httpx.TimeoutException as error:
             raise DownstreamError(
                 f"{self._error_prefix}_timeout", f"{self._provider_name} request timed out."
@@ -290,6 +351,7 @@ class SolarResponsesDownstream:
                 f"{self._error_prefix}_transport", f"{self._provider_name} request failed."
             ) from error
         if response.status_code >= 400:
+            await response.aclose()
             code = (
                 f"{self._error_prefix}_authentication"
                 if response.status_code in {401, 403}
@@ -299,6 +361,23 @@ class SolarResponsesDownstream:
             )
             raise DownstreamError(code, f"{self._provider_name} rejected the request.")
         content_type = response.headers.get("content-type", "").partition(";")[0].strip()
+        if (content_type == "text/event-stream" and solar_payload["stream"]
+                and self._protocol == "openai-chat-completions"):
+            response_id = f"resp_mb_{secrets.token_urlsafe(12)}"
+            return GatewayResponse(
+                body=b"", content_type="text/event-stream", response_id=response_id,
+                status_code=200, stream=self._stream_live(response, response_id, tool_identities),
+            )
+        try:
+            await response.aread()
+        except httpx.TimeoutException as error:
+            raise DownstreamError(f"{self._error_prefix}_timeout",
+                                  f"{self._provider_name} request timed out.") from error
+        except httpx.RequestError as error:
+            raise DownstreamError(f"{self._error_prefix}_transport",
+                                  f"{self._provider_name} request failed.") from error
+        finally:
+            await response.aclose()
         if content_type != "application/json" or len(response.content) > self._max_response_bytes:
             raise DownstreamError(
                 f"{self._error_prefix}_response_invalid",
@@ -325,6 +404,8 @@ class SolarResponsesDownstream:
                                        "type": "function_call", "status": "completed",
                                        "call_id": call["id"], "name": function["name"],
                                        "arguments": function["arguments"]})
+                    if function["name"] in tool_identities:
+                        tool_calls[-1].update(tool_identities[function["name"]])
             else:
                 text = "\n".join(
                     str(part.get("text", "")).strip()
@@ -391,6 +472,152 @@ class SolarResponsesDownstream:
             response_id=response_id,
             status_code=200,
         )
+
+    async def _stream_live(
+        self, response: httpx.Response, response_id: str,
+        tool_identities: dict[str, dict[str, str]],
+    ) -> AsyncIterator[bytes]:
+        message_id = f"msg_mb_{secrets.token_urlsafe(12)}"
+        text = ""
+        usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        buffer = ""
+        decoder = codecs.getincrementaldecoder("utf-8")("strict")
+        received = 0
+        finished = False
+        done = False
+        started = False
+        output: list[dict[str, Any]] = []
+        calls: dict[int, tuple[int, dict[str, Any]]] = {}
+        text_index = 0
+        initial = _response_payload(response_id=response_id, message_id=message_id,
+                                    model=self._model, text="", usage=usage)
+        try:
+            yield _sse_event("response.created", {"type": "response.created", "response": {
+                **initial, "output": [], "status": "in_progress"}})
+            async for chunk in response.aiter_bytes():
+                received += len(chunk)
+                if received > self._max_response_bytes:
+                    raise ValueError("Stream exceeds configured limit")
+                buffer = (buffer + decoder.decode(chunk)).replace("\r\n", "\n")
+                while "\n\n" in buffer:
+                    frame, buffer = buffer.split("\n\n", 1)
+                    data = "\n".join(line[5:].lstrip(" ") for line in frame.splitlines()
+                                     if line.startswith("data:"))
+                    if not data:
+                        continue
+                    if data == "[DONE]":
+                        done = True
+                        break
+                    event = json.loads(data)
+                    if not isinstance(event, dict) or "error" in event:
+                        raise ValueError("Invalid stream event")
+                    if event.get("usage") is not None:
+                        source = event["usage"]
+                        usage = {"input_tokens": _usage_count(source.get("prompt_tokens", 0)),
+                                 "output_tokens": _usage_count(source.get("completion_tokens", 0)),
+                                 "total_tokens": _usage_count(source.get("total_tokens", 0))}
+                    for choice in event.get("choices", []):
+                        if choice.get("index", 0) != 0:
+                            raise ValueError("Multiple stream choices are unsupported")
+                        delta = choice.get("delta", {})
+                        for fragment in delta.get("tool_calls", []):
+                            index = fragment["index"]
+                            if type(index) is not int or index < 0 or finished:
+                                raise ValueError("Invalid tool index")
+                            function = fragment["function"]
+                            if index not in calls:
+                                name = function.get("name")
+                                if (not isinstance(name, str) or name not in tool_identities
+                                        or not isinstance(fragment.get("id"), str)
+                                        or not fragment["id"]):
+                                    raise ValueError("Undeclared or malformed tool call")
+                                call = {"id": f"fc_mb_{secrets.token_urlsafe(12)}",
+                                        "type": "function_call", "status": "in_progress",
+                                        "call_id": fragment["id"], "arguments": "",
+                                        **tool_identities[name]}
+                                calls[index] = (len(output), call)
+                                output.append(call)
+                                yield _sse_event("response.output_item.added", {
+                                    "type": "response.output_item.added",
+                                    "output_index": len(output) - 1, "item": dict(call)})
+                            output_index, call = calls[index]
+                            if fragment.get("id") not in {None, call["call_id"]}:
+                                raise ValueError("Tool call ID changed")
+                            if function.get("name") is not None and tool_identities.get(
+                                function["name"]
+                            ) != {k: call[k] for k in ("name", "namespace") if k in call}:
+                                raise ValueError("Tool call name changed")
+                            arguments = function.get("arguments", "")
+                            if not isinstance(arguments, str):
+                                raise ValueError("Invalid arguments delta")
+                            call["arguments"] += arguments
+                            if arguments:
+                                yield _sse_event("response.function_call_arguments.delta", {
+                                    "type": "response.function_call_arguments.delta",
+                                    "output_index": output_index, "item_id": call["id"],
+                                    "delta": arguments})
+                        content = delta.get("content")
+                        if content is not None:
+                            if not isinstance(content, str) or finished:
+                                raise ValueError("Invalid text delta")
+                            if not started:
+                                started = True
+                                text_index = len(output)
+                                output.append({**initial["output"][0], "content": []})
+                                yield _sse_event("response.output_item.added", {
+                                    "type": "response.output_item.added",
+                                    "output_index": text_index,
+                                    "item": {**initial["output"][0], "status": "in_progress",
+                                             "content": []}})
+                                yield _sse_event("response.content_part.added", {
+                                    "type": "response.content_part.added",
+                                    "output_index": text_index,
+                                    "item_id": message_id, "content_index": 0,
+                                    "part": {"type": "output_text", "text": "", "annotations": []}})
+                            text += content
+                            yield _sse_event("response.output_text.delta", {
+                                "type": "response.output_text.delta", "output_index": text_index,
+                                "item_id": message_id, "content_index": 0, "delta": content})
+                        reason = choice.get("finish_reason")
+                        if reason is not None:
+                            if reason not in {"stop", "tool_calls"}:
+                                raise ValueError("Stream did not finish normally")
+                            finished = True
+                if done:
+                    break
+            if not done or not finished or (not text and not calls):
+                raise ValueError("Incomplete upstream stream")
+            for index, item in enumerate(output):
+                item["status"] = "completed"
+                if item["type"] == "function_call":
+                    if not isinstance(json.loads(item["arguments"]), dict):
+                        raise ValueError("Tool arguments must be a JSON object")
+                    yield _sse_event("response.function_call_arguments.done", {
+                        "type": "response.function_call_arguments.done", "output_index": index,
+                        "item_id": item["id"], "arguments": item["arguments"]})
+                else:
+                    part = {"type": "output_text", "text": text, "annotations": []}
+                    item["content"] = [part]
+                    yield _sse_event("response.output_text.done", {
+                        "type": "response.output_text.done", "output_index": index,
+                        "item_id": item["id"], "content_index": 0, "text": text})
+                    yield _sse_event("response.content_part.done", {
+                        "type": "response.content_part.done", "output_index": index,
+                        "item_id": item["id"], "content_index": 0, "part": part})
+                yield _sse_event("response.output_item.done", {
+                    "type": "response.output_item.done", "output_index": index, "item": item})
+            yield _sse_event("response.completed", {"type": "response.completed", "response": {
+                **initial, "output": output, "usage": usage}})
+            yield b"data: [DONE]\n\n"
+        except (ValueError, TypeError, KeyError, AttributeError, httpx.HTTPError) as error:
+            safe = DownstreamError(f"{self._error_prefix}_stream_failed",
+                                   f"{self._provider_name} stream failed.")
+            yield _sse_event("response.failed", {"type": "response.failed", "response": {
+                **initial, "status": "failed", "output": [],
+                "error": {"code": safe.code, "message": safe.safe_message}}})
+            raise safe from error
+        finally:
+            await response.aclose()
 
     async def _stream(
         self,

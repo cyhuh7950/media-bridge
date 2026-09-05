@@ -68,6 +68,97 @@ async def test_function_call_and_result_keep_ids_and_history(
     assert output[0]["arguments"] == '{"path":"b.txt"}'
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("choice, expected", [
+    ("none", "none"), ("auto", "auto"), ("required", "required"),
+    ({"type": "function", "name": "read_file"},
+     {"type": "function", "function": {"name": "read_file"}}),
+])
+async def test_tool_execution_constraints_reach_provider(monkeypatch, choice, expected):
+    sent = []
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    downstream, signer = _downstream(monkeypatch, handler)
+    try:
+        await downstream.invoke(_sealed(signer, {
+            "model": "solar-pro4", "input": "hello", "tool_choice": choice,
+            "parallel_tool_calls": False,
+            "tools": [{"type": "function", "name": "read_file", "parameters": {
+                "type": "object", "properties": {}}}],
+        }))
+    finally:
+        await downstream.close()
+    assert sent[0]["tool_choice"] == expected
+    assert sent[0]["parallel_tool_calls"] is False
+
+
+@pytest.mark.asyncio
+async def test_namespace_calls_keep_scope_when_local_names_overlap(monkeypatch):
+    recorded = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        recorded.append(body)
+        tools = body["tools"]
+        assert len({t["function"]["name"] for t in tools}) == 3
+        historical_name = body["messages"][1]["tool_calls"][0]["function"]["name"]
+        assert historical_name == tools[1]["function"]["name"]
+        return httpx.Response(200, json={"choices": [{"message": {
+            "content": None, "tool_calls": [{"id": "next", "type": "function", "function": {
+                "name": tools[2]["function"]["name"], "arguments": "{}"}}]}}]})
+
+    downstream, signer = _downstream(monkeypatch, handler)
+    function = {"type": "function", "name": "inspect", "parameters": {
+        "type": "object", "properties": {"type": {"type": "string"}}}}
+    try:
+        result = await downstream.invoke(_sealed(signer, {
+            "model": "solar-pro4", "input": [
+                {"role": "user", "content": "inspect"},
+                {"type": "function_call", "name": "inspect", "namespace": "one",
+                 "call_id": "previous", "arguments": "{}"},
+                {"type": "function_call_output", "call_id": "previous", "output": "done"}],
+            "tools": [function, {"type": "namespace", "name": "one", "tools": [function]},
+                      {"type": "namespace", "name": "two", "tools": [function]}],
+        }))
+    finally:
+        await downstream.close()
+    call = json.loads(result.body)["output"][0]
+    assert call["namespace"] == "two"
+    assert call["name"] == "inspect"
+    assert call["call_id"] == "next"
+    assert call["arguments"] == "{}"
+    assert len(recorded) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", [
+    {"tools": [{"type": "web_search"}]},
+    {"tools": [{"type": "custom", "name": "shell"}]},
+    {"tool_choice": {"type": "function", "name": "undeclared"}},
+    {"parallel_tool_calls": "false"},
+    {"tools": [{"type": "namespace", "name": "bad", "tools": [
+        {"type": "namespace", "name": "nested", "tools": []}]}]},
+])
+async def test_unsupported_tool_contract_never_calls_provider(monkeypatch, invalid):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(500)
+
+    downstream, signer = _downstream(monkeypatch, handler)
+    try:
+        with pytest.raises(DownstreamGuardError):
+            await downstream.invoke(_sealed(signer, {
+                "model": "solar-pro4", "input": "hello", **invalid}))
+    finally:
+        await downstream.close()
+    assert calls == []
+
+
 def _sealed(
     signer: GateReceiptSigner,
     payload: dict[str, Any],

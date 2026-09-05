@@ -43,9 +43,24 @@ async def main() -> None:
                     "name": "exec_command", "arguments": json.dumps({
                         "cmd": "printf MB_TOOL_OK", "workdir": str(project),
                         "max_output_tokens": 100})}}]}
-        return httpx.Response(200, json={"choices": [{"message": message}],
-                                       "usage": {"prompt_tokens": 1, "completion_tokens": 1,
-                                                 "total_tokens": 2}})
+        assert body["stream"] is True
+
+        class ProviderStream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                delta = dict(message)
+                if "tool_calls" in delta:
+                    delta["tool_calls"] = [{"index": 0, **delta["tool_calls"][0]}]
+                for event in [
+                    {"choices": [{"index": 0, "delta": delta}]},
+                    {"choices": [{"index": 0, "delta": {}, "finish_reason":
+                                  "tool_calls" if "tool_calls" in message else "stop"}],
+                     "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}},
+                ]:
+                    yield ("data: " + json.dumps(event) + "\n\n").encode()
+                yield b"data: [DONE]\n\n"
+
+        return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                              stream=ProviderStream())
 
     runtime = build_personal_runtime(
         model="solar-pro4", asset_root=root / "tool-assets", receipt_secret=b"q" * 32,
@@ -70,7 +85,7 @@ async def main() -> None:
            "-c", f'model_providers.probe.base_url="http://127.0.0.1:{listener.getsockname()[1]}/v1"',
            "-c", 'model_providers.probe.wire_api="responses"',
            "-c", 'model_providers.probe.requires_openai_auth=false',
-           "-c", 'web_search="disabled"', "-c", 'features.multi_agent=false',
+           "-c", 'web_search="disabled"',
            "Run printf MB_TOOL_OK once, then reply ROUNDTRIP_OK."]
     try:
         for _ in range(100):
