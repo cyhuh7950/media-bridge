@@ -108,7 +108,8 @@ async def test_namespace_calls_keep_scope_when_local_names_overlap(monkeypatch):
         assert historical_name == tools[1]["function"]["name"]
         return httpx.Response(200, json={"choices": [{"message": {
             "content": None, "tool_calls": [{"id": "next", "type": "function", "function": {
-                "name": tools[2]["function"]["name"], "arguments": "{}"}}]}}]})
+                    "name": tools[2]["function"]["name"], "arguments": "{}"}}]},
+            "finish_reason": "tool_calls"}]})
 
     downstream, signer = _downstream(monkeypatch, handler)
     function = {"type": "function", "name": "inspect", "parameters": {
@@ -157,6 +158,28 @@ async def test_unsupported_tool_contract_never_calls_provider(monkeypatch, inval
     finally:
         await downstream.close()
     assert calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name, arguments, reason", [
+    ("undeclared", "{}", "tool_calls"), ("read_file", "{", "tool_calls"),
+    ("read_file", "[]", "tool_calls"), ("read_file", "{}", "length"),
+])
+@pytest.mark.parametrize("stream", [False, True])
+async def test_invalid_json_tool_response_is_never_completed(
+    monkeypatch, name, arguments, reason, stream,
+):
+    downstream, signer = _downstream(monkeypatch, lambda _: httpx.Response(200, json={
+        "choices": [{"finish_reason": reason, "message": {"content": None, "tool_calls": [{
+            "id": "bad", "type": "function", "function": {"name": name, "arguments": arguments}
+        }]}}]}))
+    try:
+        with pytest.raises(DownstreamError):
+            await downstream.invoke(_sealed(signer, {
+                "model": "solar-pro4", "input": "read", "stream": stream,
+                "tools": [{"type": "function", "name": "read_file", "parameters": {}}]}))
+    finally:
+        await downstream.close()
 
 
 def _sealed(

@@ -63,7 +63,8 @@ async def test_failed_stream_never_emits_completed_and_closes(monkeypatch, failu
 
 
 @pytest.mark.asyncio
-async def test_cancelled_stream_closes_upstream(monkeypatch):
+@pytest.mark.parametrize("started", [False, True])
+async def test_cancelled_stream_closes_upstream(monkeypatch, started):
     closed = []
 
     class Chunks(httpx.AsyncByteStream):
@@ -79,7 +80,8 @@ async def test_cancelled_stream_closes_upstream(monkeypatch):
     try:
         result = await downstream.invoke(_sealed(signer, {
             "model": "solar-pro4", "input": "hello", "stream": True}))
-        await anext(result.stream)
+        if started:
+            await anext(result.stream)
         await result.stream.aclose()
         assert closed
     finally:

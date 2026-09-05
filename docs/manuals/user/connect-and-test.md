@@ -25,6 +25,10 @@ mb gui
 
 ## 코딩 에이전트 연결
 
+Codex CLI 직접 연결은 [별도 연결·해제 안내](connect-codex-cli.md)를 따릅니다.
+직접 연결 기능의 개발 후보 검증과 공개 npm 배포 여부를 구분합니다.
+OpenCodex와 Eoul Gateway는 코딩 에이전트가 아니라 연결·라우팅 gateway입니다.
+
 코딩 에이전트의 OpenAI Responses provider base URL을 설정 화면의 `baseUrl`로 맞춥니다. 기본값은
 다음과 같습니다.
 

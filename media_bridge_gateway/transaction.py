@@ -29,6 +29,7 @@ from media_bridge.interop_v2 import (
     TransformationReceipt,
     build_transformation_receipt,
 )
+from media_bridge.openai_responses import _contains_media_reference
 from media_bridge.receipts import GateReceiptSigner, ReceiptBinding
 from media_bridge.receipts import ReceiptValidationError as GateReceiptValidationError
 from media_bridge.responses_state import ResponsesStateRecord
@@ -52,6 +53,7 @@ from media_bridge_gateway.state import (
     GatewayStateStore,
     MediaModality,
 )
+from media_bridge_gateway.streams import ResourceStream
 
 
 def _blocked(
@@ -139,6 +141,7 @@ class GatewayTransaction:
         receipt_signer: GateReceiptSigner,
         state_store: GatewayStateStore,
         snapshot_version: int = 0,
+        allow_client_media_history: bool = False,
     ) -> None:
         if snapshot_version < 0:
             raise ValueError("snapshot version cannot be negative")
@@ -147,11 +150,63 @@ class GatewayTransaction:
         self._receipt_signer = receipt_signer
         self._state_store = state_store
         self._snapshot_version = snapshot_version
+        self._allow_client_media_history = allow_client_media_history
 
     def clear_state(self) -> None:
         self._state_store.clear()
 
+    async def _sanitize_client_history(
+        self, payload: dict[str, Any], tenant_id: str,
+    ) -> dict[str, Any] | GatewayResult:
+        sanitized = copy.deepcopy(payload)
+        items = sanitized.get("input")
+        if not isinstance(items, list):
+            return _blocked("unsafe_history_media", "Unsupported media history.")
+        user_indices = [i for i, item in enumerate(items)
+                        if isinstance(item, dict) and item.get("role") == "user"]
+        if not user_indices:
+            return _blocked("current_user_required", "Current user input is required.")
+        for item in items:
+            if not _contains_media_reference(item):
+                continue
+            if not isinstance(item, dict) or item.get("role") != "user":
+                return _blocked("unsafe_history_media", "Only user media history is supported.")
+            try:
+                normalize_responses_request(
+                    {"model": payload.get("model"), "input": [item]}, state=None)
+            except ResponsesNormalizationError as error:
+                return _blocked(error.code, error.safe_message)
+            replaced = []
+            for part in item["content"]:
+                if not _contains_media_reference(part):
+                    replaced.append(part)
+                    continue
+                try:
+                    normalized = normalize_responses_request({"model": payload.get("model"),
+                        "input": [{"role": "user", "content": [part]}]}, state=None)
+                except ResponsesNormalizationError as error:
+                    return _blocked(error.code, error.safe_message)
+                outcome = await self._gate.prepare_for_model(
+                    normalized.request, tenant_id=tenant_id)
+                prepared = outcome.prepared
+                if prepared is None:
+                    gate_error = outcome.public.error or SafeError(
+                        code="pre_request_blocked", message="History media preparation failed.")
+                    return _blocked(gate_error.code, gate_error.message, gate_result=outcome.public)
+                try:
+                    self._receipt_signer.verify(prepared.receipt, expected=prepared.binding)
+                    if prepared.capability != "non_vision" or any(
+                        isinstance(prepared_part, MediaPart) for prepared_part in prepared.content
+                    ):
+                        raise DownstreamGuardError("History must be converted to text")
+                    replaced.extend(_rebuilt_input(prepared)[0]["content"])
+                except (GateReceiptValidationError, DownstreamGuardError):
+                    return _blocked("gateway_guard_rejected", "History conversion guard rejected.")
+            item["content"] = replaced
+        return sanitized
+
     async def invoke(self, payload: object, *, subject: DataPlaneSubject) -> GatewayResult:
+        original_payload = payload
         if "responses:invoke" not in subject.scopes:
             return _blocked(
                 "credential_scope_denied",
@@ -178,7 +233,28 @@ class GatewayTransaction:
                 state=cast(ResponsesStateRecord | None, state),
             )
         except ResponsesNormalizationError as error:
-            return _blocked(error.code, error.safe_message)
+            if (error.code != "unsafe_history_media" or not self._allow_client_media_history
+                    or not isinstance(payload, dict) or state is not None):
+                return _blocked(error.code, error.safe_message)
+            sanitized = await self._sanitize_client_history(payload, tenant_id)
+            if isinstance(sanitized, GatewayResult):
+                return sanitized
+            payload = sanitized
+            try:
+                normalized = normalize_responses_request(payload, state=None)
+            except ResponsesNormalizationError as history_error:
+                return _blocked(history_error.code, history_error.safe_message)
+
+        if (self._allow_client_media_history and normalized.input_had_media
+                and isinstance(payload, dict) and state is None):
+            sanitized = await self._sanitize_client_history(payload, tenant_id)
+            if isinstance(sanitized, GatewayResult):
+                return sanitized
+            payload = sanitized
+            try:
+                normalized = normalize_responses_request(payload, state=None)
+            except ResponsesNormalizationError as media_error:
+                return _blocked(media_error.code, media_error.safe_message)
 
         state_policy_failure = self._check_state_capability(normalized)
         if state_policy_failure is not None:
@@ -203,7 +279,7 @@ class GatewayTransaction:
                 raise TypeError
             raw_payload = cast(dict[str, Any], payload)
             downstream_payload = _build_downstream_payload(raw_payload, normalized, prepared)
-            input_digest = digest_gateway_payload(raw_payload)
+            input_digest = digest_gateway_payload(cast(dict[str, Any], original_payload))
             request_nonce = secrets.token_urlsafe(18)
             output_digest = digest_gateway_payload(
                 {
@@ -342,12 +418,17 @@ class GatewayTransaction:
                     # Preserve the provider result and leave follow-up state absent.
                     return
 
+        async def close_source() -> None:
+            close = getattr(source, "aclose", None)
+            if callable(close):
+                await close()
+
         return GatewayResponse(
             body=response.body,
             content_type=response.content_type,
             response_id=response.response_id,
             status_code=response.status_code,
-            stream=state_committing_stream(),
+            stream=ResourceStream(state_committing_stream(), close_source),
         )
 
     def _check_state_capability(

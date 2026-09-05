@@ -24,7 +24,7 @@ import httpx
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 from starlette.types import ASGIApp
 
@@ -744,6 +744,10 @@ class PersonalRuntime:
     clients: tuple[httpx.AsyncClient, ...] = field(default_factory=tuple)
 
     async def invoke(self, payload: object) -> GatewayResponse | tuple[int, dict[str, Any]]:
+        if isinstance(payload, dict) and payload.get("previous_response_id") is not None:
+            return (400, {"error": {"type": "media_bridge_error",
+                "code": "previous_response_id_unsupported",
+                "message": "Send the full client conversation history instead of previous_response_id."}})
         subject = DataPlaneSubject(
             credential_selector="personal",
             tenant_id="personal",
@@ -842,6 +846,7 @@ def build_personal_runtime(
         downstream=downstream,
         receipt_signer=signer,
         state_store=GatewayStateStore(),
+        allow_client_media_history=True,
     )
     return PersonalRuntime(
         transaction=transaction,
@@ -1072,7 +1077,9 @@ def build_personal_app(
             status, error = result
             return JSONResponse(error, status_code=status)
         if result.stream is not None:
-            return StreamingResponse(
+            from media_bridge_gateway.streams import ClosingStreamingResponse
+
+            return ClosingStreamingResponse(
                 result.stream,
                 status_code=result.status_code,
                 media_type=result.content_type,

@@ -22,6 +22,7 @@ from media_bridge_gateway.contracts import (
     SealedGatewayRequest,
 )
 from media_bridge_gateway.normalizer import digest_gateway_payload
+from media_bridge_gateway.streams import ResourceStream
 from media_bridge_personal.credential_store import CredentialStoreError
 
 
@@ -72,7 +73,7 @@ def _text_content(value: object) -> str:
     if isinstance(value, str):
         text = value.strip()
         if text:
-            return text
+            return value
         raise DownstreamGuardError("Responses message text is empty")
     if not isinstance(value, list):
         raise DownstreamGuardError("Responses message content is unsupported")
@@ -83,7 +84,7 @@ def _text_content(value: object) -> str:
         part_text = part.get("text")
         if not isinstance(part_text, str) or not part_text.strip():
             raise DownstreamGuardError("Responses message text is empty")
-        parts.append(part_text.strip())
+        parts.append(part_text)
     if not parts:
         raise DownstreamGuardError("Responses message content is empty")
     return "\n".join(parts)
@@ -366,7 +367,8 @@ class SolarResponsesDownstream:
             response_id = f"resp_mb_{secrets.token_urlsafe(12)}"
             return GatewayResponse(
                 body=b"", content_type="text/event-stream", response_id=response_id,
-                status_code=200, stream=self._stream_live(response, response_id, tool_identities),
+                status_code=200, stream=ResourceStream(
+                    self._stream_live(response, response_id, tool_identities), response.aclose),
             )
         try:
             await response.aread()
@@ -393,6 +395,8 @@ class SolarResponsesDownstream:
                 calls = message.get("tool_calls", [])
                 if not isinstance(calls, list):
                     raise ValueError("Invalid tool calls")
+                if calls and choice.get("finish_reason") != "tool_calls":
+                    raise ValueError("Tool response did not finish normally")
                 for call in calls:
                     function = call["function"]
                     if call.get("type") != "function" or not all(
@@ -400,6 +404,9 @@ class SolarResponsesDownstream:
                         (call.get("id"), function.get("name"), function.get("arguments"))
                     ):
                         raise ValueError("Invalid tool call")
+                    if (function["name"] not in tool_identities
+                            or not isinstance(json.loads(function["arguments"]), dict)):
+                        raise ValueError("Undeclared tool or malformed arguments")
                     tool_calls.append({"id": f"fc_mb_{secrets.token_urlsafe(12)}",
                                        "type": "function_call", "status": "completed",
                                        "call_id": call["id"], "name": function["name"],
