@@ -17,6 +17,45 @@ from media_bridge_gateway.normalizer import digest_gateway_payload
 from media_bridge_personal.solar_responses import SolarResponsesDownstream
 
 
+@pytest.mark.asyncio
+async def test_function_call_and_result_keep_ids_and_history(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorded = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {
+            "role": "assistant", "content": None, "tool_calls": [{
+                "id": "call_next", "type": "function", "function": {
+                    "name": "read_file", "arguments": '{"path":"b.txt"}'}}]},
+            "finish_reason": "tool_calls"}], "usage": {}})
+
+    downstream, signer = _downstream(monkeypatch, handler)
+    try:
+        response = await downstream.invoke(_sealed(signer, {
+            "model": "solar-pro4", "input": [
+                {"role": "user", "content": "inspect files"},
+                {"type": "function_call", "call_id": "call_first", "name": "read_file",
+                 "arguments": '{"path":"a.txt"}'},
+                {"type": "function_call_output", "call_id": "call_first", "output": "ALPHA"}],
+            "tools": [{"type": "function", "name": "read_file",
+                       "parameters": {"type": "object", "properties": {
+                           "path": {"type": "string"}}, "required": ["path"]}}]}))
+    finally:
+        await downstream.close()
+    assert recorded[0]["messages"] == [
+        {"role": "user", "content": "inspect files"},
+        {"role": "assistant", "content": None, "tool_calls": [{
+            "id": "call_first", "type": "function", "function": {
+                "name": "read_file", "arguments": '{"path":"a.txt"}'}}]},
+        {"role": "tool", "tool_call_id": "call_first", "content": "ALPHA"}]
+    assert recorded[0]["tools"][0]["function"]["name"] == "read_file"
+    output = json.loads(response.body)["output"]
+    assert len(output) == 1
+    assert output[0]["type"] == "function_call"
+    assert output[0]["call_id"] == "call_next"
+    assert output[0]["arguments"] == '{"path":"b.txt"}'
+
+
 def _sealed(
     signer: GateReceiptSigner,
     payload: dict[str, Any],
