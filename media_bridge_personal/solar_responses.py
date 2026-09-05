@@ -85,10 +85,8 @@ def _text_content(value: object) -> str:
     return "\n".join(parts)
 
 
-def _chat_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
-    if payload.get("tools"):
-        raise DownstreamGuardError("Solar personal runtime does not yet support Responses tools")
-    messages: list[dict[str, str]] = []
+def _chat_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
     instructions = payload.get("instructions")
     if instructions is not None:
         if not isinstance(instructions, str) or not instructions.strip():
@@ -99,6 +97,24 @@ def _chat_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
         messages.append({"role": "user", "content": _text_content(input_value)})
     elif isinstance(input_value, list):
         for item in input_value:
+            if isinstance(item, dict) and item.get("type") == "function_call":
+                if not all(isinstance(item.get(k), str) and item[k]
+                           for k in ("call_id", "name", "arguments")):
+                    raise DownstreamGuardError("Function call is malformed")
+                call = {"id": item["call_id"], "type": "function", "function": {
+                    "name": item["name"], "arguments": item["arguments"]}}
+                if messages and messages[-1].get("tool_calls"):
+                    messages[-1]["tool_calls"].append(call)
+                else:
+                    messages.append({"role": "assistant", "content": None, "tool_calls": [call]})
+                continue
+            if isinstance(item, dict) and item.get("type") == "function_call_output":
+                if not isinstance(item.get("call_id"), str) or not item["call_id"] \
+                        or not isinstance(item.get("output"), str):
+                    raise DownstreamGuardError("Function result is malformed")
+                messages.append({"role": "tool", "tool_call_id": item["call_id"],
+                                 "content": item["output"]})
+                continue
             if not isinstance(item, dict) or item.get("type", "message") != "message":
                 raise DownstreamGuardError("Responses input item is unsupported")
             role = item.get("role")
@@ -204,6 +220,17 @@ class SolarResponsesDownstream:
         solar_payload: dict[str, Any]
         if self._protocol == "openai-chat-completions":
             solar_payload = {"model": self._model, "messages": messages, "stream": False}
+            if sealed.payload.get("tools"):
+                tools = sealed.payload["tools"]
+                if not isinstance(tools, list) or any(
+                    not isinstance(t, dict) or t.get("type") != "function"
+                    or not isinstance(t.get("name"), str) or not t["name"]
+                    or not isinstance(t.get("parameters"), dict) for t in tools
+                ):
+                    raise DownstreamGuardError("Unsupported Responses tool definition")
+                solar_payload["tools"] = [{"type": "function", "function": {
+                    k: t[k] for k in ("name", "description", "parameters", "strict") if k in t
+                }} for t in tools]
         else:
             solar_payload = {
                 "model": self._model,
@@ -269,11 +296,27 @@ class SolarResponsesDownstream:
                 f"{self._error_prefix}_response_invalid",
                 f"{self._provider_name} returned an invalid response.",
             )
+        tool_calls: list[dict[str, Any]] = []
         try:
             solar_response = response.json()
             if self._protocol == "openai-chat-completions":
                 choice = solar_response["choices"][0]
-                text = choice["message"]["content"].strip()
+                message = choice["message"]
+                text = (message.get("content") or "").strip()
+                calls = message.get("tool_calls", [])
+                if not isinstance(calls, list):
+                    raise ValueError("Invalid tool calls")
+                for call in calls:
+                    function = call["function"]
+                    if call.get("type") != "function" or not all(
+                        isinstance(v, str) and v for v in
+                        (call.get("id"), function.get("name"), function.get("arguments"))
+                    ):
+                        raise ValueError("Invalid tool call")
+                    tool_calls.append({"id": f"fc_mb_{secrets.token_urlsafe(12)}",
+                                       "type": "function_call", "status": "completed",
+                                       "call_id": call["id"], "name": function["name"],
+                                       "arguments": function["arguments"]})
             else:
                 text = "\n".join(
                     str(part.get("text", "")).strip()
@@ -287,7 +330,7 @@ class SolarResponsesDownstream:
                 f"{self._error_prefix}_response_invalid",
                 f"{self._provider_name} returned an invalid response.",
             ) from error
-        if not text:
+        if not text and not tool_calls:
             raise DownstreamError(
                 f"{self._error_prefix}_response_invalid",
                 f"{self._provider_name} returned an empty response.",
@@ -319,7 +362,11 @@ class SolarResponsesDownstream:
             text=text,
             usage=usage,
         )
+        if tool_calls:
+            body_payload["output"] = (body_payload["output"] if text else []) + tool_calls
         if sealed.payload.get("stream") is True:
+            if tool_calls:
+                raise DownstreamGuardError("Streaming function calls are not yet supported")
             return GatewayResponse(
                 body=b"",
                 content_type="text/event-stream",
