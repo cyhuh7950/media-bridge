@@ -117,6 +117,14 @@ def _build_downstream_payload(
     }
     rebuilt["model"] = prepared.target_id
     rebuilt["input"] = _rebuilt_input(prepared)
+    if normalized.previous_state is None and isinstance(raw_payload.get("input"), list):
+        history = copy.deepcopy(raw_payload["input"])
+        user_indices = [index for index, item in enumerate(history)
+                        if isinstance(item, dict) and item.get("role") == "user"]
+        if not user_indices:
+            raise DownstreamGuardError("gated request has no current user message")
+        history[user_indices[-1]]["content"] = rebuilt["input"][0]["content"]
+        rebuilt["input"] = history
     return rebuilt
 
 
