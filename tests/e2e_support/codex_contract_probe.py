@@ -66,7 +66,9 @@ def main() -> None:
            "-c", 'model_providers.probe.requires_openai_auth=false',
            "Reply PROBE_OK only. Do not use tools."]
     try:
-        completed = subprocess.run(cmd, env=env, input="", capture_output=True, text=True, timeout=55)
+        completed = subprocess.run(  # noqa: S603 - fixed isolated CLI and loopback fixture.
+            cmd, env=env, input="", capture_output=True, text=True, timeout=55,
+        )
         print(json.dumps({"returncode": completed.returncode, "requests": requests,
                           "stdout": completed.stdout, "stderr": completed.stderr},
                          ensure_ascii=False))

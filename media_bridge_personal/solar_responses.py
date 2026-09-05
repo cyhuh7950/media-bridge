@@ -216,6 +216,14 @@ class SolarResponsesDownstream:
 
     async def invoke(self, sealed: SealedGatewayRequest) -> GatewayResponse:
         self._verify_seal(sealed)
+        if self._protocol == "openai-responses" and (
+            sealed.payload.get("tools") or any(
+                isinstance(item, dict) and item.get("type") in {
+                    "function_call", "function_call_output"}
+                for item in sealed.payload.get("input", [])
+            )
+        ):
+            raise DownstreamGuardError("Responses upstream tool passthrough is not yet supported")
         messages = _chat_messages(sealed.payload)
         solar_payload: dict[str, Any]
         if self._protocol == "openai-chat-completions":
