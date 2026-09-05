@@ -1,10 +1,25 @@
 """이미지 OCR 재구성 시 역할·도구 이력 손실을 방지한다."""
 from copy import deepcopy
 
+import pytest
+
 from media_bridge.contracts import TextPart
 from media_bridge.gate import DownstreamPayload
 from media_bridge.openai_responses import normalize_responses_request
 from media_bridge_gateway.transaction import _build_downstream_payload
+
+
+@pytest.mark.parametrize("message_id", [None, "msg_codex_1"])
+def test_codex_message_id_is_accepted_and_preserved(message_id: str | None) -> None:
+    payload = {"model": "solar-pro4", "input": [{
+        "type": "message", "id": message_id, "role": "user", "content": "Read a file"}]}
+    normalized = normalize_responses_request(payload, None)
+    prepared = DownstreamPayload(
+        target_id="solar-pro4", capability="non_vision", action="passthrough",
+        content=(TextPart(text="Read a file"),), input_digest="a" * 64,
+        output_digest="b" * 64, receipt="fixture",
+    )
+    assert _build_downstream_payload(payload, normalized, prepared)["input"] == payload["input"]
 
 
 def test_image_conversion_keeps_surrounding_messages_and_tool_results() -> None:

@@ -30,8 +30,12 @@ def main() -> None:
                 "stream": body.get("stream"),
                 "fields": sorted(body),
                 "tools": [{"type": t.get("type"), "name": t.get("name"),
-                           "keys": sorted(t)} for t in body.get("tools", [])],
-                "input": [{"type": t.get("type"), "role": t.get("role")}
+                           "keys": sorted(t),
+                           "nested": [{"type": child.get("type"), "name": child.get("name"),
+                                       "keys": sorted(child)}
+                                      for child in t.get("tools", [])]}
+                          for t in body.get("tools", [])],
+                "input": [{"type": t.get("type"), "role": t.get("role"), "keys": sorted(t)}
                           for t in body.get("input", [])],
             })
             response = _response_payload(response_id="resp_probe", message_id="msg_probe",

@@ -212,9 +212,12 @@ def _select_current_input(value: object) -> tuple[object, list[object]]:
     current = value[current_index]
     if not isinstance(current, dict):  # pragma: no cover - selected above
         _raise("invalid_request", "Current user input is malformed.")
-    allowed = {"type", "role", "content"}
+    allowed = {"type", "role", "content", "id"}
     if not set(current).issubset(allowed) or current.get("type") not in {None, "message"}:
         _raise("invalid_request", "Current user message is malformed.")
+    message_id = current.get("id")
+    if message_id is not None and (not isinstance(message_id, str) or not message_id.strip()):
+        _raise("invalid_request", "Current user message ID is malformed.")
     if "content" not in current:
         _raise("current_user_required", "Current user input is required.")
     return current["content"], history
