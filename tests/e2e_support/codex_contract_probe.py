@@ -68,6 +68,11 @@ def main() -> None:
         print(json.dumps({"returncode": completed.returncode, "requests": requests,
                           "stdout": completed.stdout, "stderr": completed.stderr},
                          ensure_ascii=False))
+    except subprocess.TimeoutExpired as error:
+        print(json.dumps({"timeout": True, "requests": requests,
+                          "stdout": (error.stdout or b"").decode(errors="replace"),
+                          "stderr": (error.stderr or b"").decode(errors="replace")},
+                         ensure_ascii=False))
     finally:
         server.shutdown()
         server.server_close()
