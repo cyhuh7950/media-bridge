@@ -16,7 +16,7 @@ jobs:
     env:
       VERSION: 0.1.12
       TAG: v0.1.12
-      SOURCE_COMMIT: 323f08a1726dd45479657fdb6b345455a30efdae
+      SOURCE_COMMIT: a746b032856d36e6a119fb427fd346f8592203af
     steps:
       - name: Check out release metadata
         uses: actions/checkout@v4
@@ -32,26 +32,26 @@ jobs:
       - name: Download verified Linux ARM64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: media-bridge-runtime-linux-arm64-323f08a1726dd45479657fdb6b345455a30efdae
+          name: media-bridge-runtime-linux-arm64-a746b032856d36e6a119fb427fd346f8592203af
           path: ${{ runner.temp }}/runtime-linux-arm64
           github-token: ${{ github.token }}
-          run-id: 33906605115
+          run-id: 33982776204
 
       - name: Download verified Linux x64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: media-bridge-runtime-linux-x64-323f08a1726dd45479657fdb6b345455a30efdae
+          name: media-bridge-runtime-linux-x64-a746b032856d36e6a119fb427fd346f8592203af
           path: ${{ runner.temp }}/runtime-linux-x64
           github-token: ${{ github.token }}
-          run-id: 33906606830
+          run-id: 33982776210
 
       - name: Download verified Windows x64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: media-bridge-runtime-win32-x64-323f08a1726dd45479657fdb6b345455a30efdae
+          name: media-bridge-runtime-win32-x64-a746b032856d36e6a119fb427fd346f8592203af
           path: ${{ runner.temp }}/runtime-win32-x64
           github-token: ${{ github.token }}
-          run-id: 33906608922
+          run-id: 33982776205
 
       - name: Assemble and verify release assets
         shell: bash
@@ -68,7 +68,25 @@ jobs:
           cp "$RUNNER_TEMP/runtime-win32-x64/media-bridge-runtime-$VERSION-win32-x64.tar.gz" "$release_assets/"
           cp "$RUNNER_TEMP/runtime-win32-x64/media-bridge-runtime-$VERSION-win32-x64.tar.gz.sha256" "$release_assets/"
           cp "$RUNNER_TEMP/runtime-win32-x64/verification-result.json" "$release_assets/verification-result-win32-x64.json"
-          cp packaging/npm/runtime-manifest.json "$release_assets/runtime-manifest.json"
+          node - "$release_assets" "$VERSION" <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const [root, version] = process.argv.slice(2);
+          const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'packaging/npm/runtime-manifest.json'), 'utf8'));
+          if (manifest.packageVersion !== version) throw new Error('runtime manifest version mismatch');
+          for (const platform of ['linux-arm64', 'linux-x64', 'win32-x64']) {
+            const archive = path.join(root, `media-bridge-runtime-${version}-${platform}.tar.gz`);
+            const actual = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
+            const entry = manifest.artifacts?.[platform];
+            if (!entry) throw new Error(`${platform} manifest entry missing`);
+            entry.version = version;
+            entry.published = true;
+            entry.sha256 = actual;
+            entry.url = `https://github.com/cyhuh7950/media-bridge/releases/download/v${version}/media-bridge-runtime-${version}-${platform}.tar.gz`;
+          }
+          fs.writeFileSync(path.join(root, 'runtime-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+          NODE
           for checksum in "$release_assets"/*.sha256; do
             (cd "$release_assets" && sha256sum --check "$(basename "$checksum")")
           done
@@ -113,10 +131,11 @@ jobs:
             - Stores Provider credentials outside config and supports Linux private files plus Windows current-user DPAPI.
             - Tests LLM, OCR, and the OCR-to-text-only-to-LLM pipeline without forwarding original media.
             - Supports OpenCodex, Eoul Gateway, Chat Completions, Responses, Solar, and Upstage Document Parse presets.
+            - Supports direct Codex CLI routing through Media Bridge without requiring OpenCodex or Eoul Gateway.
 
             ## Verification
 
-            Native no-Python build, personal health, managed install, checksum rejection, and rollback verification passed on all three platforms. Runtime source commit: `323f08a1726dd45479657fdb6b345455a30efdae`. Release metadata commit: `${{ github.sha }}`.
+            Native no-Python build, personal health, managed install, checksum rejection, and rollback verification passed on all three platforms. Runtime source commit: `a746b032856d36e6a119fb427fd346f8592203af`. Release metadata commit: `${{ github.sha }}`.
 
             ## Uninstall
 
@@ -174,6 +193,14 @@ jobs:
               });
             }
 
+      - name: Retain generated release assets for npm publish
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-bridge-release-assets-${{ github.sha }}
+          path: ${{ runner.temp }}/release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
   publish-npm-package:
     needs: publish-runtime-release
     if: github.ref_type == 'tag'
@@ -191,6 +218,15 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
+
+      - name: Download generated runtime manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: media-bridge-release-assets-${{ github.sha }}
+          path: ${{ runner.temp }}/release-assets
+
+      - name: Install generated runtime manifest
+        run: cp "${{ runner.temp }}/release-assets/runtime-manifest.json" packaging/npm/runtime-manifest.json
 
       - name: Verify npm package and release tag
         working-directory: packaging/npm
