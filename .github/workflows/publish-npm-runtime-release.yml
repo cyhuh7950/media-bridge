@@ -14,8 +14,8 @@ jobs:
   publish-runtime-release:
     runs-on: ubuntu-24.04
     env:
-      VERSION: 0.1.11
-      TAG: v0.1.11
+      VERSION: 0.1.12
+      TAG: v0.1.12
       SOURCE_COMMIT: 323f08a1726dd45479657fdb6b345455a30efdae
     steps:
       - name: Check out release metadata
@@ -96,12 +96,12 @@ jobs:
         uses: actions/github-script@v7
         env:
           RELEASE_BODY: |
-            Media Bridge 0.1.11 adds the local Provider settings and test console and publishes verified native runtimes plus the npm CLI through GitHub Actions trusted publishing (OIDC), without a long-lived npm token.
+            Media Bridge 0.1.12 adds the local Provider settings and test console and publishes verified native runtimes plus the npm CLI through GitHub Actions trusted publishing (OIDC), without a long-lived npm token.
 
             ## Install or update
 
             ```bash
-            npm install -g @cyhuh/media-bridge@0.1.11
+            npm install -g @cyhuh/media-bridge@0.1.12
             mb init
             mb start
             mb health
