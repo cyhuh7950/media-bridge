@@ -18,7 +18,10 @@ from media_bridge_personal.solar_responses import SolarResponsesDownstream
 
 
 @pytest.mark.asyncio
-async def test_function_call_and_result_keep_ids_and_history(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("stream", [False, True])
+async def test_function_call_and_result_keep_ids_and_history(
+    monkeypatch: pytest.MonkeyPatch, stream: bool,
+) -> None:
     recorded = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -32,7 +35,7 @@ async def test_function_call_and_result_keep_ids_and_history(monkeypatch: pytest
     downstream, signer = _downstream(monkeypatch, handler)
     try:
         response = await downstream.invoke(_sealed(signer, {
-            "model": "solar-pro4", "input": [
+            "model": "solar-pro4", "stream": stream, "input": [
                 {"role": "user", "content": "inspect files"},
                 {"type": "function_call", "call_id": "call_first", "name": "read_file",
                  "arguments": '{"path":"a.txt"}'},
@@ -49,7 +52,16 @@ async def test_function_call_and_result_keep_ids_and_history(monkeypatch: pytest
                 "name": "read_file", "arguments": '{"path":"a.txt"}'}}]},
         {"role": "tool", "tool_call_id": "call_first", "content": "ALPHA"}]
     assert recorded[0]["tools"][0]["function"]["name"] == "read_file"
-    output = json.loads(response.body)["output"]
+    if stream:
+        assert response.stream is not None
+        wire = b"".join([chunk async for chunk in response.stream]).decode()
+        events = [json.loads(line[6:]) for line in wire.splitlines()
+                  if line.startswith("data: {")]
+        assert any(e["type"] == "response.function_call_arguments.done" for e in events)
+        output = next(e["response"]["output"] for e in events
+                      if e["type"] == "response.completed")
+    else:
+        output = json.loads(response.body)["output"]
     assert len(output) == 1
     assert output[0]["type"] == "function_call"
     assert output[0]["call_id"] == "call_next"

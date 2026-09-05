@@ -35,7 +35,9 @@ def main() -> None:
                           for t in body.get("input", [])],
             })
             response = _response_payload(response_id="resp_probe", message_id="msg_probe",
-                                         model="solar-pro4", text="PROBE_OK", usage={})
+                                         model="solar-pro4", text="PROBE_OK", usage={
+                                             "input_tokens": 1, "output_tokens": 1,
+                                             "total_tokens": 2})
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.end_headers()
