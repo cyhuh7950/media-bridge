@@ -365,8 +365,6 @@ class SolarResponsesDownstream:
         if tool_calls:
             body_payload["output"] = (body_payload["output"] if text else []) + tool_calls
         if sealed.payload.get("stream") is True:
-            if tool_calls:
-                raise DownstreamGuardError("Streaming function calls are not yet supported")
             return GatewayResponse(
                 body=b"",
                 content_type="text/event-stream",
@@ -394,6 +392,35 @@ class SolarResponsesDownstream:
         text: str,
         completed: dict[str, Any],
     ) -> AsyncIterator[bytes]:
+        calls = [item for item in completed["output"] if item["type"] == "function_call"]
+        if calls:
+            messages = [item for item in completed["output"] if item["type"] == "message"]
+            if messages:
+                async for event in self._stream(
+                    response_id=response_id, message_id=message_id, text=text,
+                    completed={**completed, "output": messages},
+                ):
+                    if not event.startswith((b"event: response.completed", b"data: [DONE]")):
+                        yield event
+            else:
+                yield _sse_event("response.created", {"type": "response.created", "response": {
+                    **completed, "status": "in_progress", "output": []}})
+            for index, call in enumerate(calls, start=len(messages)):
+                yield _sse_event("response.output_item.added", {
+                    "type": "response.output_item.added", "output_index": index,
+                    "item": {**call, "status": "in_progress", "arguments": ""}})
+                yield _sse_event("response.function_call_arguments.delta", {
+                    "type": "response.function_call_arguments.delta", "output_index": index,
+                    "item_id": call["id"], "delta": call["arguments"]})
+                yield _sse_event("response.function_call_arguments.done", {
+                    "type": "response.function_call_arguments.done", "output_index": index,
+                    "item_id": call["id"], "arguments": call["arguments"]})
+                yield _sse_event("response.output_item.done", {
+                    "type": "response.output_item.done", "output_index": index, "item": call})
+            yield _sse_event("response.completed", {
+                "type": "response.completed", "response": completed})
+            yield b"data: [DONE]\n\n"
+            return
         created = {**completed, "status": "in_progress", "output": []}
         item = {
             "id": message_id,
