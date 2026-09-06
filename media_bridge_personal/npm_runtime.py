@@ -28,16 +28,20 @@ from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingR
 from starlette.routing import Route
 from starlette.types import ASGIApp
 
-from media_bridge.acquisition import MediaAcquirer
-from media_bridge.assets import AssetStore
-from media_bridge.backends import BackendStatus, OcrBackend, OcrResult, VisionResult
-from media_bridge.capabilities import CapabilityRegistry, ModelCapability
-from media_bridge.gate import PreRequestGate
-from media_bridge.pdf_pipeline import PdfiumPageRenderer
-from media_bridge.receipts import GateReceiptSigner
-from media_bridge_gateway.contracts import DataPlaneSubject, GatewayResponse, ResponsesDownstream
-from media_bridge_gateway.state import GatewayStateStore
-from media_bridge_gateway.transaction import GatewayTransaction
+from media_bridge_local.core.acquisition import MediaAcquirer
+from media_bridge_local.core.assets import AssetStore
+from media_bridge_local.core.backends import BackendStatus, OcrBackend, OcrResult, VisionResult
+from media_bridge_local.core.capabilities import CapabilityRegistry, ModelCapability
+from media_bridge_local.core.gate import PreRequestGate
+from media_bridge_local.core.pdf_pipeline import PdfiumPageRenderer
+from media_bridge_local.core.receipts import GateReceiptSigner
+from media_bridge_local.gateway.contracts import (
+    DataPlaneSubject,
+    GatewayResponse,
+    ResponsesDownstream,
+)
+from media_bridge_local.gateway.state import GatewayStateStore
+from media_bridge_local.gateway.transaction import GatewayTransaction
 from media_bridge_personal.credential_store import CredentialStore, CredentialStoreError
 from media_bridge_personal.solar_responses import SolarResponsesDownstream
 

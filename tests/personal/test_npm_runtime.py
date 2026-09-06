@@ -11,7 +11,7 @@ import httpx
 import pytest
 from PIL import Image
 
-from media_bridge.backends import BackendStatus, OcrResult
+from media_bridge_local.core.backends import BackendStatus, OcrResult
 from media_bridge_personal import npm_runtime as npm_runtime_module
 from media_bridge_personal.credential_store import CredentialStore
 from media_bridge_personal.npm_runtime import (

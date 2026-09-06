@@ -9,7 +9,7 @@ from pathlib import Path
 
 import uvicorn
 
-from media_bridge_gateway.entrypoints import (
+from media_bridge_local.gateway.entrypoints import (
     GatewayConfigurationError,
     GatewayProcess,
     build_gateway_process_from_environment,

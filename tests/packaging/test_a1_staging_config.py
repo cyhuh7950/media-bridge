@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,7 +16,8 @@ MOCK = ROOT / "deploy" / "staging" / "mock_provider.py"
 
 def _render() -> dict[str, object]:
     docker = shutil.which("docker")
-    assert docker is not None
+    if docker is None:
+        pytest.skip("Docker is required for A1 Compose rendering")
     environment = {
         "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "MEDIA_BRIDGE_STAGING_ROOT": "/run/media-bridge-staging-test",
