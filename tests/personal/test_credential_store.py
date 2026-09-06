@@ -17,10 +17,13 @@ def test_credential_store_writes_private_atomic_file_without_echoing_secret(tmp_
 
     assert store.get("text-llm") == "secret-value"
     assert store.status() == {"text-llm": True}
-    assert json.loads(target.read_text(encoding="utf-8")) == {
-        "schemaVersion": 1,
-        "credentials": {"text-llm": "secret-value"},
-    }
+    persisted = json.loads(target.read_text(encoding="utf-8"))
+    assert persisted["schemaVersion"] == 1
+    if os.name == "nt":
+        assert persisted["credentials"]["text-llm"].startswith("dpapi:")
+        assert "secret-value" not in target.read_text(encoding="utf-8")
+    else:
+        assert persisted["credentials"] == {"text-llm": "secret-value"}
     assert not list(target.parent.glob("*.tmp"))
     if os.name != "nt":
         assert target.stat().st_mode & 0o777 == 0o600

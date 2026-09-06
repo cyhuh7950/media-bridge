@@ -7,13 +7,13 @@ from typing import Any
 import httpx
 import pytest
 
-from media_bridge.receipts import GateReceiptSigner, ReceiptBinding
-from media_bridge_gateway.contracts import (
+from media_bridge_local.core.receipts import GateReceiptSigner, ReceiptBinding
+from media_bridge_local.gateway.contracts import (
     DownstreamError,
     DownstreamGuardError,
     SealedGatewayRequest,
 )
-from media_bridge_gateway.normalizer import digest_gateway_payload
+from media_bridge_local.gateway.normalizer import digest_gateway_payload
 from media_bridge_personal.solar_responses import SolarResponsesDownstream
 
 

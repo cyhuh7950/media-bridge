@@ -11,15 +11,15 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from media_bridge.backends import SecretConfigurationError, load_secret
-from media_bridge.receipts import GateReceiptSigner, ReceiptValidationError
-from media_bridge_gateway.contracts import (
+from media_bridge_local.core.backends import SecretConfigurationError, load_secret
+from media_bridge_local.core.receipts import GateReceiptSigner, ReceiptValidationError
+from media_bridge_local.gateway.contracts import (
     DownstreamError,
     DownstreamGuardError,
     GatewayResponse,
     SealedGatewayRequest,
 )
-from media_bridge_gateway.normalizer import digest_gateway_payload
+from media_bridge_local.gateway.normalizer import digest_gateway_payload
 from media_bridge_personal.credential_store import CredentialStoreError
 
 
