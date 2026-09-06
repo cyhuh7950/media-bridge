@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -55,7 +56,8 @@ def test_workspace_cleanup_must_remove_all_materialized_media(tmp_path: Path) ->
     materialized = workspace.write_bytes("capture.png", b"not-secret-test-bytes")
 
     assert materialized.exists()
-    assert materialized.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert materialized.stat().st_mode & 0o777 == 0o600
 
     workspace.cleanup()
 

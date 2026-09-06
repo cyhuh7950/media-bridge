@@ -168,13 +168,13 @@ class PersonalSupervisor:
     @staticmethod
     def _terminate_group(process: subprocess.Popen[bytes]) -> None:
         if os.name == "posix":
-            os.killpg(process.pid, signal.SIGTERM)
+            os.killpg(process.pid, signal.SIGTERM)  # type: ignore[attr-defined]
         else:
             process.terminate()
 
     @staticmethod
     def _kill_group(process: subprocess.Popen[bytes]) -> None:
         if os.name == "posix":
-            os.killpg(process.pid, signal.SIGKILL)
+            os.killpg(process.pid, signal.SIGKILL)  # type: ignore[attr-defined]
         else:
             process.kill()

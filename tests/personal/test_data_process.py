@@ -110,7 +110,7 @@ def test_connection_metadata_maps_to_process_configuration(monkeypatch, tmp_path
 
 
 def test_gateway_configuration_failure_keeps_data_process_available(monkeypatch) -> None:
-    from media_bridge_gateway.entrypoints import GatewayConfigurationError
+    from media_bridge_local.gateway.entrypoints import GatewayConfigurationError
     from media_bridge_personal import data_entrypoint
 
     monkeypatch.setenv("MEDIA_BRIDGE_GATEWAY_ENABLED", "true")
