@@ -4,6 +4,24 @@
 
 이 문서는 Media Bridge 소스를 변경하지 않고, ysna-server에 설치된 Media Bridge를 다른 프로그램에서 호출하기 위한 소비자 측 설정 절차를 설명합니다. 대상은 Daon2, Daon2-RAG, Eoul Agent, Eoul Gateway입니다.
 
+## 설치 순서와 주소 결정
+
+Media Bridge는 먼저 설치할 수 있지만 `npm install`만으로 네트워크 주소를 추측하거나 변경하지
+않습니다. 설치 자동화는 Media Bridge 설치 후 실행 환경을 알고 있는 단계에서 `mb init`에 bind
+주소를 전달하고, 이어서 Eoul Gateway가 같은 주소의 endpoint를 사용하도록 구성합니다.
+
+```bash
+npm install -g @cyhuh/media-bridge
+mb init --host <Media-Bridge를 열 주소> --port 8642
+mb service install
+mb service start
+```
+
+호스트에서 직접 실행되는 Gateway는 `127.0.0.1`을 사용합니다. Docker Gateway는 Media Bridge가
+실제로 해당 Docker host gateway에서 수신하도록 설정된 경우에만 그 gateway 주소를 사용합니다.
+주소를 정하지 않으면 Media Bridge 기본 bind는 `127.0.0.1`입니다. 따라서 Docker Gateway가
+이미 설치된 Media Bridge에 연결할 때 endpoint만 임의로 `172.17.0.1`로 바꾸면 연결되지 않습니다.
+
 ## 1. 현재 서버 연결 정보
 
 ysna-server에서 확인된 Media Bridge는 다음 주소에 바인딩되어 있습니다.
