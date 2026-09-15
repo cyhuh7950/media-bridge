@@ -60,7 +60,19 @@ function isLoopback(hostname) {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
 }
 
-function validateEndpoint(value, field) {
+function isPrivateIPv4(hostname) {
+  const octets = hostname.split('.').map(Number);
+  if (octets.length !== 4 || octets.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return false;
+  return octets[0] === 10
+    || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+    || (octets[0] === 192 && octets[1] === 168);
+}
+
+function isPrivateBindHost(hostname) {
+  return isLoopback(hostname) || isPrivateIPv4(hostname);
+}
+
+function validateEndpoint(value, field, { allowPrivateHttp = false } = {}) {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`${field} endpoint is required`);
   }
@@ -70,8 +82,10 @@ function validateEndpoint(value, field) {
   } catch {
     throw new Error(`${field} endpoint must be a valid URL`);
   }
-  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback(parsed.hostname))) {
-    throw new Error(`${field} endpoint must use HTTPS or loopback`);
+  if (parsed.protocol !== 'https:'
+      && !(parsed.protocol === 'http:' && (isLoopback(parsed.hostname)
+        || (allowPrivateHttp && isPrivateIPv4(parsed.hostname))))) {
+    throw new Error(`${field} endpoint must use HTTPS or loopback/private HTTP`);
   }
   return value;
 }
@@ -81,8 +95,8 @@ function validateConfig(input) {
   if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) {
     throw new Error('port must be an integer from 1 to 65535');
   }
-  if (typeof config.host !== 'string' || !isLoopback(config.host)) {
-    throw new Error('host must be a loopback address');
+  if (typeof config.host !== 'string' || !isPrivateBindHost(config.host)) {
+    throw new Error('host must be loopback or private IPv4 address');
   }
   config.opencodex ??= {};
   config.codingAgent ??= {};
@@ -92,8 +106,8 @@ function validateConfig(input) {
   config.mediaProcessor ??= {};
   config.conversion ??= {};
   config.failurePolicy ??= {};
-  config.opencodex.baseUrl = validateEndpoint(config.opencodex.baseUrl, 'OpenCodex');
-  config.codingAgent.baseUrl = validateEndpoint(config.codingAgent.baseUrl, 'coding agent');
+  config.opencodex.baseUrl = validateEndpoint(config.opencodex.baseUrl, 'OpenCodex', { allowPrivateHttp: true });
+  config.codingAgent.baseUrl = validateEndpoint(config.codingAgent.baseUrl, 'coding agent', { allowPrivateHttp: true });
   config.solar.endpoint = validateEndpoint(config.solar.endpoint, 'Solar');
   config.textLlm.endpoint = validateEndpoint(config.textLlm.endpoint, 'text LLM');
   config.ocr.endpoint = validateEndpoint(config.ocr.endpoint, 'OCR');
@@ -208,6 +222,16 @@ function applyPortOverride(input, port) {
   return validateConfig(config);
 }
 
+function applyHostOverride(input, host) {
+  const config = structuredClone(input);
+  const previousOwnUrl = `http://${config.host}:${config.port}/v1`;
+  config.host = host;
+  const nextOwnUrl = `http://${host}:${config.port}/v1`;
+  if (config.opencodex?.baseUrl === previousOwnUrl) config.opencodex.baseUrl = nextOwnUrl;
+  if (config.codingAgent?.baseUrl === previousOwnUrl) config.codingAgent.baseUrl = nextOwnUrl;
+  return validateConfig(config);
+}
+
 function saveConfig({ homeDir = os.homedir(), config }) {
   const validated = validateConfig(config);
   const directory = path.dirname(configPath(homeDir));
@@ -224,6 +248,7 @@ function saveConfig({ homeDir = os.homedir(), config }) {
 
 module.exports = {
   applyPortOverride,
+  applyHostOverride,
   configPath,
   defaultConfig,
   loadConfig,

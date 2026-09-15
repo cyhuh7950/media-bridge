@@ -18,6 +18,55 @@ test('mb help exposes the user install command surface', () => {
   assert.match(result.stdout, /Compatibility alias: mb/);
   assert.match(result.stdout, /media-bridge health/);
   assert.match(result.stdout, /media-bridge service/);
+  assert.match(result.stdout, /media-bridge init \[--host HOST\] \[--port PORT\]/);
+});
+
+test('mb init persists an explicitly selected HTTP bind host and port', () => {
+  const tempHome = path.join(testRoot, 'media-bridge-npm-cli-host-home');
+  fs.rmSync(tempHome, { recursive: true, force: true });
+  const result = spawnSync(process.execPath, [cli, 'init', '--host', '172.17.0.1', '--port', '8642'], {
+    encoding: 'utf8',
+    env: { ...process.env, HOME: tempHome, USERPROFILE: tempHome },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const config = JSON.parse(fs.readFileSync(path.join(tempHome, '.media-bridge', 'config.json'), 'utf8'));
+  assert.equal(config.host, '172.17.0.1');
+  assert.equal(config.port, 8642);
+  assert.equal(config.codingAgent.baseUrl, 'http://172.17.0.1:8642/v1');
+  fs.rmSync(tempHome, { recursive: true, force: true });
+});
+
+test('mb init rejects a public HTTP bind host', () => {
+  const tempHome = path.join(testRoot, 'media-bridge-npm-cli-public-host');
+  fs.rmSync(tempHome, { recursive: true, force: true });
+  const result = spawnSync(process.execPath, [cli, 'init', '--host', '8.8.8.8'], {
+    encoding: 'utf8',
+    env: { ...process.env, HOME: tempHome, USERPROFILE: tempHome },
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /host must be loopback or private/);
+  fs.rmSync(tempHome, { recursive: true, force: true });
+});
+
+test('mb init uses MB_HOST and keeps the own provider endpoint in sync', () => {
+  const tempHome = path.join(testRoot, 'media-bridge-npm-cli-host-env-home');
+  fs.rmSync(tempHome, { recursive: true, force: true });
+  const result = spawnSync(process.execPath, [cli, 'init'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+      MB_HOST: '172.17.0.1',
+      MB_PORT: '8642',
+    },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const config = JSON.parse(fs.readFileSync(path.join(tempHome, '.media-bridge', 'config.json'), 'utf8'));
+  assert.equal(config.host, '172.17.0.1');
+  assert.equal(config.opencodex.baseUrl, 'http://172.17.0.1:8642/v1');
+  assert.equal(config.codingAgent.baseUrl, 'http://172.17.0.1:8642/v1');
+  fs.rmSync(tempHome, { recursive: true, force: true });
 });
 
 test('mb init creates a local configuration without requiring a provider secret', () => {

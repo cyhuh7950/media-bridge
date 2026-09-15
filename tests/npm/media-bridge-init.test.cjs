@@ -5,6 +5,7 @@ const { parseNonInteractiveConfig, runWizard } = require('../../packaging/npm/li
 
 test('init wizard stores OpenCodex, port, Solar, conversion, and failure policy', async () => {
   const answers = [
+    '127.0.0.1',
     'http://127.0.0.1:8876/v1',
     '8876',
     'solar-pro4',
@@ -22,6 +23,7 @@ test('init wizard stores OpenCodex, port, Solar, conversion, and failure policy'
     ask: async () => answers.shift(),
   });
   assert.equal(config.opencodex.baseUrl, 'http://127.0.0.1:8876/v1');
+  assert.equal(config.host, '127.0.0.1');
   assert.equal(config.port, 8876);
   assert.equal(config.solar.model, 'solar-pro4');
   assert.equal(config.solar.apiKeyEnv, 'SOLAR_API_KEY');
@@ -32,7 +34,7 @@ test('init wizard stores OpenCodex, port, Solar, conversion, and failure policy'
 });
 
 test('init wizard rejects invalid port and endpoint without accepting unsafe values', async () => {
-  const answers = ['http://example.com/v1', '0'];
+  const answers = ['127.0.0.1', 'http://example.com/v1', '0'];
   await assert.rejects(() => runWizard({
     existingConfig: defaultConfig(),
     ask: async () => answers.shift(),

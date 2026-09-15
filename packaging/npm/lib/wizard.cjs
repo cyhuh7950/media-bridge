@@ -38,8 +38,13 @@ function syncRoleConfig(config) {
 
 function parseNonInteractiveConfig(env, existingConfig = defaultConfig()) {
   const config = structuredClone(existingConfig);
+  const previousOwnUrl = `http://${config.host}:${config.port}/v1`;
+  config.host = valueOrDefault(env.MB_HOST, config.host);
   config.opencodex.baseUrl = valueOrDefault(env.MB_OPEN_CODEX_URL, config.opencodex.baseUrl);
   config.port = Number(valueOrDefault(env.MB_PORT, config.port));
+  if (env.MB_OPEN_CODEX_URL === undefined && config.opencodex.baseUrl === previousOwnUrl) {
+    config.opencodex.baseUrl = `http://${config.host}:${config.port}/v1`;
+  }
   config.solar.model = valueOrDefault(env.MB_SOLAR_MODEL, config.solar.model);
   config.solar.endpoint = valueOrDefault(env.MB_SOLAR_ENDPOINT, config.solar.endpoint);
   config.solar.apiKeyEnv = valueOrDefault(env.MB_SOLAR_API_KEY_ENV, config.solar.apiKeyEnv);
@@ -58,6 +63,7 @@ function parseNonInteractiveConfig(env, existingConfig = defaultConfig()) {
 async function runWizard({ ask, existingConfig = defaultConfig() }) {
   const config = structuredClone(existingConfig);
   const answer = async (question, fallback) => valueOrDefault(await ask(question, fallback), fallback);
+  config.host = await answer('Media Bridge HTTP bind 주소', config.host);
   config.opencodex.baseUrl = await answer('OpenCodex에 설정할 Media Bridge 주소', config.opencodex.baseUrl);
   config.port = Number(await answer('Media Bridge 포트', config.port));
   config.solar.model = await answer('Solar 모델 이름', config.solar.model);

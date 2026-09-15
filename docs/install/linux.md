@@ -14,9 +14,21 @@ mb start
 
 ## `mb init` 설정
 
-`mb init`에서 OpenCodex 주소, Media Bridge 포트(기본 `8642`), Solar 모델·HTTPS
+`mb init`에서 Media Bridge bind 주소(기본 `127.0.0.1`), OpenCodex 주소, Media Bridge 포트(기본 `8642`), Solar 모델·HTTPS
 endpoint·Secret 참조, OCR/Vision 변환 기본값, 변환 실패 시 Solar 전송 차단 정책을 입력합니다.
 설정은 `$HOME/.media-bridge/config.json`에 저장되며 Secret 원문은 저장하지 않습니다.
+
+Docker 컨테이너처럼 다른 네트워크 네임스페이스의 소비자가 같은 PC의 Media Bridge를 호출해야
+하면 사설 IPv4 bind 주소를 지정합니다. Docker 기본 bridge gateway가 `172.17.0.1`인 경우:
+
+```bash
+mb init --host 172.17.0.1 --port 8642
+```
+
+비대화식 설치에서는 `MB_HOST=172.17.0.1 MB_PORT=8642 mb init`을 사용할 수 있습니다.
+HTTP bind 주소는 loopback 또는 `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` 사설 IPv4만
+허용하며 공인 주소는 거부합니다. 주소를 생략하면 기본값 `127.0.0.1`을 유지합니다.
+설정은 사용자 홈에 저장되므로 패키지를 다시 설치해도 자동으로 `172.17.0.1`로 바뀌지 않습니다.
 
 ## 명령
 

@@ -18,6 +18,22 @@ ysna-server에서 확인된 Media Bridge는 다음 주소에 바인딩되어 있
 
 Media Bridge가 loopback(`127.0.0.1`)에만 열려 있으므로, 호출하는 프로그램이 ysna-server에서 실행될 때만 위 주소를 그대로 사용합니다. 노트북에서 연 SSH 터널(`ssh -L 18765:127.0.0.1:8642 ...`)은 노트북의 브라우저나 노트북에서 실행하는 시험 클라이언트용입니다. ysna-server에서 실행되는 Daon2나 Gateway의 설정값을 `18765`로 넣으면 안 됩니다.
 
+### Docker 소비자를 같은 PC에서 호출하는 경우
+
+Media Bridge는 npm 설치 시 기본적으로 `127.0.0.1`에만 bind됩니다. Docker 컨테이너에서 호출해야
+하면 설치 프로그램에서 해당 PC의 Docker bridge gateway를 명시적으로 저장합니다.
+
+```bash
+docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
+mb init --host 172.17.0.1 --port 8642
+mb service restart
+```
+
+위 주소는 예시이며 모든 PC에 고정하지 않습니다. 첫 명령의 실제 결과를 `--host`에 넣어야 합니다.
+비대화식 설치는 `MB_HOST=<사설-IPv4> MB_PORT=8642 mb init`을 사용합니다. loopback과 사설 IPv4만
+허용하므로 공인 주소는 설정할 수 없습니다. `--host`를 생략하면 기본값 `127.0.0.1`을 유지하며,
+다른 PC에 패키지를 다시 설치해도 그 PC의 설정이 자동으로 `172.17.0.1`로 바뀌지 않습니다.
+
 ### 다른 PC에서 지속적으로 사용하는 경우
 
 SSH 터널은 임시 점검이나 단기 사용에는 적합하지만, 프로세스 종료·네트워크 단절·재부팅 때 다시 열어야 합니다. 여러 PC의 Daon2, Daon2-RAG, Eoul Gateway 또는 Eoul Agent가 지속적으로 사용해야 한다면 ysna-server에 HTTPS Reverse Proxy를 등록하는 운영 구성이 적합합니다.

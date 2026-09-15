@@ -6,6 +6,7 @@ const path = require('node:path');
 const readline = require('node:readline');
 const { spawn } = require('node:child_process');
 const {
+  applyHostOverride,
   applyPortOverride,
   defaultConfig,
   loadConfig,
@@ -28,7 +29,7 @@ const serviceFile = path.join(configDir, 'service.json');
 const pidFile = path.join(configDir, 'service.pid');
 
 function help() {
-  process.stdout.write(`Media Bridge\n\nCommands:\n  media-bridge init\n  media-bridge start [--port 8642]\n  media-bridge stop\n  media-bridge status\n  media-bridge health [--json]\n  media-bridge ready [--json] [--wait] [--timeout <seconds>]\n  media-bridge gui\n  media-bridge service <install|repair|restart|start|stop|status|uninstall|remove>\n  media-bridge update\n  media-bridge uninstall [--keep-config|--delete-config]\n\nCompatibility alias: mb\n`);
+  process.stdout.write(`Media Bridge\n\nCommands:\n  media-bridge init [--host HOST] [--port PORT]\n  media-bridge start [--port 8642]\n  media-bridge stop\n  media-bridge status\n  media-bridge health [--json]\n  media-bridge ready [--json] [--wait] [--timeout <seconds>]\n  media-bridge gui\n  media-bridge service <install|repair|restart|start|stop|status|uninstall|remove>\n  media-bridge update\n  media-bridge uninstall [--keep-config|--delete-config]\n\nCompatibility alias: mb\n`);
 }
 
 function detectExecutable(names) {
@@ -49,7 +50,7 @@ function readConfig() {
   return loadConfig({ homeDir: os.homedir() });
 }
 
-async function init() {
+async function init(argv = []) {
   const existing = fs.existsSync(configFile) ? readConfig() : defaultConfig();
   let config;
   if (process.stdin.isTTY && process.stdout.isTTY) {
@@ -66,6 +67,18 @@ async function init() {
     }
   } else {
     config = parseNonInteractiveConfig(process.env, existing);
+  }
+  const hostIndex = argv.indexOf('--host');
+  if (hostIndex >= 0) {
+    const host = argv[hostIndex + 1];
+    if (!host) throw new Error('--host 다음에 주소가 필요합니다.');
+    config = applyHostOverride(config, host);
+  }
+  const portIndex = argv.indexOf('--port');
+  if (portIndex >= 0) {
+    const port = Number(argv[portIndex + 1]);
+    if (!Number.isInteger(port)) throw new Error('--port 다음에 정수가 필요합니다.');
+    config = applyPortOverride(config, port);
   }
   saveConfig({ homeDir: os.homedir(), config });
   process.stdout.write(`Media Bridge initialized: ${configFile}\n`);
@@ -226,7 +239,7 @@ async function uninstall(argv) {
 async function main(argv) {
   const [command, ...rest] = argv;
   if (!command || command === 'help' || command === '--help' || command === '-h') return help();
-  if (command === 'init') return init();
+  if (command === 'init') return init(rest);
   if (command === 'start') return start(rest);
   if (command === 'stop') return service('stop');
   if (command === 'status') return status(rest.includes('--json'));
