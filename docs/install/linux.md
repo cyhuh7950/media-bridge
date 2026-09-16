@@ -10,6 +10,20 @@ mb init
 mb start
 ```
 
+시스템 전역 경로(`/usr/local`)에 쓸 권한이 없는 계정은 사용자 전역 prefix를 먼저 지정합니다.
+이 경우 npm이 만드는 실행 링크가 `~/.local/bin`에 놓이므로 PATH에도 등록해야 합니다.
+
+```bash
+npm config set prefix "$HOME/.local"
+npm install -g @cyhuh/media-bridge
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+export PATH="$HOME/.local/bin:$PATH"
+command -v mb
+```
+
+`command -v mb`가 경로를 출력하면 설치가 완료된 것입니다. `sudo npm install -g`로 우회하지
+않고 사용자 prefix를 사용합니다.
+
 사용자는 Python, Docker, PostgreSQL 또는 `.deb` 명령을 직접 실행하지 않습니다.
 Eoul Gateway와 함께 자동 설치할 때는 이 패키지를 먼저 설치한 뒤, Gateway의 실행 방식에 맞는
 bind 주소를 `mb init --host`로 전달합니다. `npm install` 자체는 주소를 추측하지 않습니다.

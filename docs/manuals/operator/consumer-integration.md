@@ -10,6 +10,18 @@ Media Bridge는 먼저 설치할 수 있지만 `npm install`만으로 네트워�
 않습니다. 설치 자동화는 Media Bridge 설치 후 실행 환경을 알고 있는 단계에서 `mb init`에 bind
 주소를 전달하고, 이어서 Eoul Gateway가 같은 주소의 endpoint를 사용하도록 구성합니다.
 
+시스템 전역 npm 경로에 쓸 권한이 없는 계정은 사용자 prefix와 PATH를 먼저 설정합니다.
+
+```bash
+npm config set prefix "$HOME/.local"
+npm install -g @cyhuh/media-bridge
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+export PATH="$HOME/.local/bin:$PATH"
+command -v mb
+```
+
+`command -v mb`가 경로를 출력한 뒤 아래 초기화를 실행합니다.
+
 ```bash
 npm install -g @cyhuh/media-bridge
 mb init --host <Media-Bridge를 열 주소> --port 8642
