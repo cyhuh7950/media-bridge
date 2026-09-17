@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,29 @@ class FakeGateway:
     async def invoke(self, payload: object, *, tenant_id: str) -> ResponsesGatewayResult:
         self.calls.append((payload, tenant_id))
         return self.result
+
+
+class StreamingGateway(FakeGateway):
+    async def invoke(self, payload: object, *, tenant_id: str) -> ResponsesGatewayResult:
+        self.calls.append((payload, tenant_id))
+
+        async def source() -> AsyncIterator[bytes]:
+            yield b'data: {"type":"response.output_text.delta","delta":"Hi"}\n\n'
+            yield b'data: {"type":"response.completed"}\n\n'
+
+        return ResponsesGatewayResult(
+            status="completed",
+            response=OmniRouteResponse(
+                b"",
+                "text/event-stream",
+                "resp_stream",
+                200,
+                stream=source(),
+            ),
+            gate_result=None,
+            error=None,
+            http_status=200,
+        )
 
 
 def _app(
@@ -171,6 +195,99 @@ async def test_responses_route_returns_bounded_upstream_body(
     assert response.content == body
     assert response.headers["content-type"].startswith("application/json")
     assert gateway.calls == [({"model": "text-model", "input": "hello"}, "tenant-a")]
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_route_translates_to_responses_and_back(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    gateway = FakeGateway(
+        ResponsesGatewayResult(
+            status="completed",
+            response=OmniRouteResponse(
+                b'{"id":"resp_chat","model":"text-model","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hi"}]}]}',
+                "application/json",
+                "resp_chat",
+                200,
+            ),
+            gate_result=None,
+            error=None,
+            http_status=200,
+        )
+    )
+    app = _app(monkeypatch, tmp_path, gateway)
+    headers = {
+        "Authorization": "Bearer service-secret",
+        "X-Media-Bridge-Tenant": "tenant-a",
+    }
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            headers=headers,
+            json={"model": "text-model", "messages": [{"role": "user", "content": "Hello"}]},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == "Hi"
+    assert gateway.calls == [
+        (
+            {
+                "model": "text-model",
+                "input": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "Hello"}],
+                    }
+                ],
+            },
+            "tenant-a",
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_route_translates_streaming_responses(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    gateway = StreamingGateway(
+        ResponsesGatewayResult(
+            status="completed",
+            response=None,
+            gate_result=None,
+            error=None,
+            http_status=200,
+        )
+    )
+    app = _app(monkeypatch, tmp_path, gateway)
+    headers = {
+        "Authorization": "Bearer service-secret",
+        "X-Media-Bridge-Tenant": "tenant-a",
+    }
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": "text-model",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "stream": True,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert b'"content":"Hi"' in response.content
+    assert response.content.endswith(b"data: [DONE]\n\n")
 
 
 @pytest.mark.asyncio

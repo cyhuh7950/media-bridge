@@ -42,6 +42,7 @@ ysna-server에서 확인된 Media Bridge는 다음 주소에 바인딩되어 있
 | --- | --- |
 | 주소 | `127.0.0.1:8642` |
 | Responses endpoint | `http://127.0.0.1:8642/v1/responses` |
+| Chat Completions endpoint | `http://127.0.0.1:8642/v1/chat/completions` |
 | Models endpoint | `http://127.0.0.1:8642/v1/models` |
 | API base URL | `http://127.0.0.1:8642/v1` |
 | 상태 확인 | `mb status`, `mb health --json`, `mb ready` |
@@ -73,7 +74,7 @@ SSH 터널은 임시 점검이나 단기 사용에는 적합하지만, 프로세
 다른 PC의 소비자 프로그램
   -> HTTPS Reverse Proxy (허용된 DNS 이름과 TLS)
   -> ysna-server의 127.0.0.1:8642
-  -> Media Bridge /v1/responses
+  -> Media Bridge /v1/responses 또는 /v1/chat/completions
 ```
 
 Reverse Proxy를 사용할 때 소비자 프로그램의 API base URL은 `http://127.0.0.1:8642/v1`이 아니라 다음처럼 Proxy의 HTTPS 주소를 사용합니다.
@@ -89,7 +90,7 @@ https://<Media-Bridge-허용-DNS>/v1
 - Proxy는 내부 upstream을 `http://127.0.0.1:8642`로 고정하고 임의 upstream 전달을 허용하지 않습니다.
 - 요청 본문, `Authorization` 헤더, tenant 헤더를 Proxy access log에 기록하지 않습니다.
 - Media Bridge의 Bearer 토큰과 `X-Media-Bridge-Tenant` 헤더를 소비자에서 그대로 전달하되, 토큰을 URL query나 문서에 넣지 않습니다.
-- Proxy 등록 후 각 소비자에서 `/v1/responses` 최소 text 요청과 실제 Provider readiness를 별도로 확인합니다.
+- Proxy 등록 후 각 소비자에서 사용할 계약에 맞춰 `/v1/responses` 또는 `/v1/chat/completions` 최소 text 요청과 실제 Provider readiness를 별도로 확인합니다.
 
 Media Bridge의 HTTPS 경계와 예시 profile은 [`docs/install/https-reverse-proxy.md`](../../install/https-reverse-proxy.md)를 따릅니다. 이 구성은 Media Bridge 소스를 변경하는 작업이 아니라 ysna-server의 배포·네트워크 계층을 설정하는 작업입니다.
 
@@ -104,7 +105,7 @@ X-Media-Bridge-Tenant: <tenant id>
 
 OpenAI 호환 Provider가 모델을 자동으로 가져올 때는 `GET /v1/models`를 호출합니다.
 이 조회에는 Bearer 토큰만 필요하고 tenant 헤더는 필요하지 않습니다. 실제
-`POST /v1/responses` 호출에는 위 두 헤더가 모두 필요합니다.
+`POST /v1/responses`와 `POST /v1/chat/completions` 호출에는 위 두 헤더가 모두 필요합니다.
 
 서비스 토큰 원문은 ysna-server의 Media Bridge runtime secret 저장 위치에서 읽어야 합니다. 토큰을 소스, Git, DB의 일반 문자열, 화면 캡처, 문서에 넣지 않습니다. 소비자 프로그램은 각 제품이 지원하는 Secret file 또는 Secret Store 참조로 주입합니다.
 
@@ -116,6 +117,16 @@ curl -sS -X POST http://127.0.0.1:8642/v1/responses \
   -H "X-Media-Bridge-Tenant: ${MEDIA_BRIDGE_TENANT_ID}" \
   -H 'Content-Type: application/json' \
   -d '{"model":"<실제 Media Bridge 모델 ID>","input":"연결 확인"}'
+```
+
+Chat Completions 소비자는 다음 경로를 사용합니다.
+
+```bash
+curl -sS -X POST http://127.0.0.1:8642/v1/chat/completions \
+  -H "Authorization: Bearer ${MEDIA_BRIDGE_SERVICE_TOKEN}" \
+  -H "X-Media-Bridge-Tenant: ${MEDIA_BRIDGE_TENANT_ID}" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"<실제 Media Bridge 모델 ID>","messages":[{"role":"user","content":"연결 확인"}]}'
 ```
 
 `<실제 Media Bridge 모델 ID>`는 설치된 runtime의 모델 원장과 외부 Provider 계약으로 확인한 값을 사용합니다. 모델명을 추측해 문서나 설정에 고정하지 않습니다.
@@ -138,13 +149,14 @@ Daon2의 Provider profile에 다음 의미를 등록합니다.
 | provider type | `external_api` |
 | base URL | `http://127.0.0.1:8642/v1` (Daon2가 ysna-server에서 실행될 때) |
 | Responses 경로 | `/responses` (`POST /v1/responses`) |
+| Chat Completions 경로 | `/chat/completions` (`POST /v1/chat/completions`) |
 | 인증 | Bearer service token + `X-Media-Bridge-Tenant` 헤더 |
 | 후보 역할 | 우선 `text`; Media 입력 계약을 검증한 뒤 필요한 역할만 추가 |
 | execution policy | `external_provider` |
 | contract version | Daon2가 요구하는 `v1` |
 | secret reference | 토큰 원문이 아닌 Daon2가 읽을 수 있는 Secret 참조 |
 
-Daon2의 기존 OpenAI baseline을 Media Bridge 주소로 바꾸어 우회하는 방식은 권장하지 않습니다. OpenAI baseline은 공식 OpenAI 주소와 Chat Completions 경로를 전제로 하므로 Responses endpoint와 헤더 계약을 정확히 표현하지 못할 수 있습니다.
+Daon2의 기존 OpenAI baseline을 Media Bridge 주소로 바꾸어 우회하는 방식은 권장하지 않습니다. 소비자 Provider profile에서 실제로 사용할 Responses 또는 Chat Completions 계약과 tenant 헤더를 명시해야 합니다.
 
 ### Provider·Model·역할 매핑 순서
 
@@ -164,7 +176,7 @@ Media Bridge용 Provider profile이 소비자 코드에 반영된 뒤 Admin 화�
 
 Daon2-RAG도 같은 Provider→Model→역할 매핑 원칙을 사용하지만, 역할별로 Media Bridge를 구분해야 합니다.
 
-- `text`: Media Bridge Responses 계약으로 연결할 수 있는 후보입니다.
+- `text`: Media Bridge Responses 또는 Chat Completions 계약으로 연결할 수 있는 후보입니다.
 - `embedding`: Media Bridge의 `/v1/responses`는 embedding endpoint가 아니므로 매핑하지 않습니다. 기존 embedding Provider와 `/embeddings` 계약을 유지합니다.
 - `reranker`: Media Bridge Responses만으로 대체할 수 있다고 확인되지 않았으므로 기존 reranker 계약을 유지합니다.
 - `vision`: 이미지 입력을 실제로 Media Bridge가 처리하는 소비자 경로와 모델 capability를 별도 검증한 뒤에만 사용합니다.
@@ -183,7 +195,7 @@ Gateway Console의 Provider 등록에서 다음 개념을 사용합니다.
 | --- | --- |
 | adapterId | `openai-compatible` 또는 Responses를 지원하는 Gateway adapter의 실제 ID |
 | endpoint/base URL | `http://127.0.0.1:8642/v1` (Gateway가 ysna-server에서 실행될 때) |
-| protocol | Media Bridge의 Responses 계약과 일치하는 값 |
+| protocol | 소비자가 선택한 Media Bridge Responses 또는 Chat Completions 계약과 일치하는 값 |
 | secretRef | Media Bridge service token을 가리키는 Secret reference |
 | local network | loopback `127.0.0.1`, TCP port `8642`, `http`를 명시적으로 허용 |
 | status | 연결 시험 성공 후 `ACTIVE` |
@@ -212,7 +224,7 @@ Eoul Agent → Eoul Gateway의 발행된 logical model → Gateway의 Media Brid
 
 Eoul Agent를 직접 Media Bridge에 연결하려면 Eoul Agent에 Responses client/connector와 다음 계약을 구현해야 합니다.
 
-- base URL과 `/v1/responses` 경로
+- base URL과 `/v1/responses` 또는 `/v1/chat/completions` 경로
 - Bearer service token Secret file 주입
 - `X-Media-Bridge-Tenant` 헤더
 - Responses 요청·streaming 응답 처리

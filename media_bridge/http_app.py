@@ -11,13 +11,19 @@ from typing import Any
 from mcp.server import MCPServer
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Mount, Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from media_bridge.assets import AssetAccessError, AssetStore, validate_tenant_id
 from media_bridge.backends import load_secret
 from media_bridge.capabilities import CapabilityRegistry
+from media_bridge.openai_chat import (
+    ChatNormalizationError,
+    chat_request_to_responses,
+    chat_response_from_responses,
+    chat_stream_from_responses,
+)
 from media_bridge.responses_gateway import ResponsesIngressGateway
 
 current_tenant: contextvars.ContextVar[str | None] = contextvars.ContextVar(
@@ -155,6 +161,75 @@ def build_http_app(
             )
         return response_error(error.code, error.message, result.http_status)
 
+    async def chat_completions(request: Request) -> Response:
+        content_type = request.headers.get("content-type", "").partition(";")[0].strip().lower()
+        if content_type != "application/json":
+            return response_error(
+                "unsupported_content_type",
+                "Chat Completions request must use application/json.",
+                415,
+            )
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > max_responses_body_bytes:
+                return response_error(
+                    "request_too_large",
+                    "Chat Completions request exceeded the configured limit.",
+                    413,
+                )
+        try:
+            chat_payload = json.loads(bytes(body))
+            responses_payload = chat_request_to_responses(chat_payload)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return response_error(
+                "invalid_json",
+                "Chat Completions request is not valid JSON.",
+                400,
+            )
+        except ChatNormalizationError as normalization_error:
+            return response_error(
+                normalization_error.code,
+                normalization_error.safe_message,
+                400,
+            )
+        tenant_id = current_tenant.get()
+        if tenant_id is None or responses_gateway is None:
+            return response_error("gateway_unavailable", "Responses gateway is unavailable.", 503)
+        result = await responses_gateway.invoke(responses_payload, tenant_id=tenant_id)
+        if result.response is not None and result.status == "completed":
+            model = responses_payload["model"]
+            if result.response.stream is not None:
+                return StreamingResponse(
+                    chat_stream_from_responses(
+                        result.response.stream,
+                        response_id=result.response.response_id,
+                        request_model=model,
+                    ),
+                    status_code=result.response.status_code,
+                    media_type="text/event-stream",
+                )
+            try:
+                converted = chat_response_from_responses(
+                    result.response.body,
+                    request_model=model,
+                )
+            except ValueError:
+                return response_error(
+                    "invalid_downstream_response",
+                    "Responses gateway returned an invalid response.",
+                    502,
+                )
+            return Response(
+                content=converted,
+                status_code=result.response.status_code,
+                media_type="application/json",
+            )
+        gateway_error = result.error
+        if gateway_error is None:
+            return response_error("gateway_failed", "Responses gateway failed safely.", 500)
+        return response_error(gateway_error.code, gateway_error.message, result.http_status)
+
     async def models(_request: Request) -> JSONResponse:
         if model_registry is None:
             return response_error(
@@ -187,6 +262,7 @@ def build_http_app(
         routes.append(Route("/v1/models", models, methods=["GET"]))
     if responses_gateway is not None:
         routes.append(Route("/v1/responses", responses, methods=["POST"]))
+        routes.append(Route("/v1/chat/completions", chat_completions, methods=["POST"]))
     routes.append(Mount("/", app=mcp_app))
     app = Starlette(
         routes=routes,
