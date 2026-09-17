@@ -201,6 +201,8 @@ _SETTINGS_RESPONSE_HEADERS = {
 
 
 def _load_npm_config(path: Path) -> dict[str, Any]:
+    if not path.exists() and not path.is_symlink():
+        return {"runtimeMode": "personal", "host": "127.0.0.1", "port": 8642}
     try:
         status = path.lstat()
         if path.is_symlink() or not path.is_file() or status.st_size > 65_536:

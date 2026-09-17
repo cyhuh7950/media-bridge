@@ -764,3 +764,17 @@ async def test_real_provider_tester_runs_ocr_then_text_without_forwarding_media(
         "/v1/document-digitization",
         "/v1/chat/completions",
     ]
+
+@pytest.mark.asyncio
+async def test_missing_config_opens_initial_settings(tmp_path: Path) -> None:
+    config = tmp_path / "config.json"
+    app = build_personal_app(object(), config_file=config)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://localhost"
+    ) as client:
+        page = await client.get("/")
+        settings = await client.get("/api/settings")
+    assert page.status_code == 200
+    assert settings.status_code == 200
+    assert settings.json()["textLlm"]["model"] == "solar-pro4"
+    assert not config.exists()

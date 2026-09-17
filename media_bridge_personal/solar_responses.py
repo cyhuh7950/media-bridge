@@ -89,9 +89,10 @@ def _chat_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
     messages: list[dict[str, str]] = []
     instructions = payload.get("instructions")
     if instructions is not None:
-        if not isinstance(instructions, str) or not instructions.strip():
+        if not isinstance(instructions, str):
             raise DownstreamGuardError("Responses instructions are invalid")
-        messages.append({"role": "system", "content": instructions.strip()})
+        if instructions.strip():
+            messages.append({"role": "system", "content": instructions.strip()})
     input_value = payload.get("input")
     if isinstance(input_value, str):
         messages.append({"role": "user", "content": _text_content(input_value)})

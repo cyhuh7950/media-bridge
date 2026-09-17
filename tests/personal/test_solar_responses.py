@@ -62,8 +62,10 @@ def _downstream(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("instructions", [None, "", "   "])
 async def test_translates_text_only_responses_to_solar_chat_and_back(
     monkeypatch: pytest.MonkeyPatch,
+    instructions: str | None,
 ) -> None:
     recorded: list[dict[str, Any]] = []
 
@@ -88,6 +90,7 @@ async def test_translates_text_only_responses_to_solar_chat_and_back(
                 signer,
                 {
                     "model": "solar-pro4",
+                    "instructions": instructions,
                     "input": [
                         {
                             "role": "user",
@@ -223,7 +226,7 @@ async def test_rejects_remaining_media_before_solar_socket_call(
                     signer,
                     {
                         "model": "solar-pro4",
-                        "input": [
+                    "input": [
                             {
                                 "role": "user",
                                 "content": [
