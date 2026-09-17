@@ -2,7 +2,7 @@
 
 상태: 2026-09-15 확인 기준
 
-이 문서는 Media Bridge 소스를 변경하지 않고, ysna-server에 설치된 Media Bridge를 다른 프로그램에서 호출하기 위한 소비자 측 설정 절차를 설명합니다. 대상은 Daon2, Daon2-RAG, Eoul Agent, Eoul Gateway입니다.
+이 문서는 Media Bridge 소스를 변경하지 않고, Media Bridge 호스트에 설치된 Media Bridge를 다른 프로그램에서 호출하기 위한 소비자 측 설정 절차를 설명합니다. 대상은 Daon2, Daon2-RAG, Eoul Agent, Eoul Gateway입니다.
 
 ## 설치 순서와 주소 결정
 
@@ -36,7 +36,7 @@ mb service start
 
 ## 1. 현재 서버 연결 정보
 
-ysna-server에서 확인된 Media Bridge는 다음 주소에 바인딩되어 있습니다.
+Media Bridge 호스트에서 확인된 Media Bridge는 다음 주소에 바인딩되어 있습니다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -48,7 +48,7 @@ ysna-server에서 확인된 Media Bridge는 다음 주소에 바인딩되어 있
 | 상태 확인 | `mb status`, `mb health --json`, `mb ready` |
 | 현재 설치 버전 | `@cyhuh/media-bridge@0.1.12` |
 
-Media Bridge가 loopback(`127.0.0.1`)에만 열려 있으므로, 호출하는 프로그램이 ysna-server에서 실행될 때만 위 주소를 그대로 사용합니다. 노트북에서 연 SSH 터널(`ssh -L 18765:127.0.0.1:8642 ...`)은 노트북의 브라우저나 노트북에서 실행하는 시험 클라이언트용입니다. ysna-server에서 실행되는 Daon2나 Gateway의 설정값을 `18765`로 넣으면 안 됩니다.
+Media Bridge가 loopback(`127.0.0.1`)에만 열려 있으므로, 호출하는 프로그램이 Media Bridge 호스트에서 실행될 때만 위 주소를 그대로 사용합니다. 노트북에서 연 SSH 터널(`ssh -L 18765:127.0.0.1:8642 ...`)은 노트북의 브라우저나 노트북에서 실행하는 시험 클라이언트용입니다. Media Bridge 호스트에서 실행되는 Daon2나 Gateway의 설정값을 `18765`로 넣으면 안 됩니다.
 
 ### Docker 소비자를 같은 PC에서 호출하는 경우
 
@@ -68,12 +68,12 @@ mb service restart
 
 ### 다른 PC에서 지속적으로 사용하는 경우
 
-SSH 터널은 임시 점검이나 단기 사용에는 적합하지만, 프로세스 종료·네트워크 단절·재부팅 때 다시 열어야 합니다. 여러 PC의 Daon2, Daon2-RAG, Eoul Gateway 또는 Eoul Agent가 지속적으로 사용해야 한다면 ysna-server에 HTTPS Reverse Proxy를 등록하는 운영 구성이 적합합니다.
+SSH 터널은 임시 점검이나 단기 사용에는 적합하지만, 프로세스 종료·네트워크 단절·재부팅 때 다시 열어야 합니다. 여러 PC의 Daon2, Daon2-RAG, Eoul Gateway 또는 Eoul Agent가 지속적으로 사용해야 한다면 Media Bridge 호스트에 HTTPS Reverse Proxy를 등록하는 운영 구성이 적합합니다.
 
 ```text
 다른 PC의 소비자 프로그램
   -> HTTPS Reverse Proxy (허용된 DNS 이름과 TLS)
-  -> ysna-server의 127.0.0.1:8642
+  -> Media Bridge 호스트의 127.0.0.1:8642
   -> Media Bridge /v1/responses 또는 /v1/chat/completions
 ```
 
@@ -92,7 +92,7 @@ https://<Media-Bridge-허용-DNS>/v1
 - Media Bridge의 Bearer 토큰과 `X-Media-Bridge-Tenant` 헤더를 소비자에서 그대로 전달하되, 토큰을 URL query나 문서에 넣지 않습니다.
 - Proxy 등록 후 각 소비자에서 사용할 계약에 맞춰 `/v1/responses` 또는 `/v1/chat/completions` 최소 text 요청과 실제 Provider readiness를 별도로 확인합니다.
 
-Media Bridge의 HTTPS 경계와 예시 profile은 [`docs/install/https-reverse-proxy.md`](../../install/https-reverse-proxy.md)를 따릅니다. 이 구성은 Media Bridge 소스를 변경하는 작업이 아니라 ysna-server의 배포·네트워크 계층을 설정하는 작업입니다.
+Media Bridge의 HTTPS 경계와 예시 profile은 [`docs/install/https-reverse-proxy.md`](../../install/https-reverse-proxy.md)를 따릅니다. 이 구성은 Media Bridge 소스를 변경하는 작업이 아니라 Media Bridge 호스트의 배포·네트워크 계층을 설정하는 작업입니다.
 
 ## 2. 공통 인증 설정
 
@@ -107,7 +107,7 @@ OpenAI 호환 Provider가 모델을 자동으로 가져올 때는 `GET /v1/model
 이 조회에는 Bearer 토큰만 필요하고 tenant 헤더는 필요하지 않습니다. 실제
 `POST /v1/responses`와 `POST /v1/chat/completions` 호출에는 위 두 헤더가 모두 필요합니다.
 
-서비스 토큰 원문은 ysna-server의 Media Bridge runtime secret 저장 위치에서 읽어야 합니다. 토큰을 소스, Git, DB의 일반 문자열, 화면 캡처, 문서에 넣지 않습니다. 소비자 프로그램은 각 제품이 지원하는 Secret file 또는 Secret Store 참조로 주입합니다.
+서비스 토큰 원문은 Media Bridge 호스트의 Media Bridge runtime secret 저장 위치에서 읽어야 합니다. 토큰을 소스, Git, DB의 일반 문자열, 화면 캡처, 문서에 넣지 않습니다. 소비자 프로그램은 각 제품이 지원하는 Secret file 또는 Secret Store 참조로 주입합니다.
 
 최소 호출 형태는 다음과 같습니다.
 
@@ -147,7 +147,7 @@ Daon2의 Provider profile에 다음 의미를 등록합니다.
 | --- | --- |
 | provider code | `media_bridge` (소비자 측에서 승인할 내부 식별자) |
 | provider type | `external_api` |
-| base URL | `http://127.0.0.1:8642/v1` (Daon2가 ysna-server에서 실행될 때) |
+| base URL | `http://127.0.0.1:8642/v1` (Daon2가 Media Bridge 호스트에서 실행될 때) |
 | Responses 경로 | `/responses` (`POST /v1/responses`) |
 | Chat Completions 경로 | `/chat/completions` (`POST /v1/chat/completions`) |
 | 인증 | Bearer service token + `X-Media-Bridge-Tenant` 헤더 |
@@ -194,7 +194,7 @@ Gateway Console의 Provider 등록에서 다음 개념을 사용합니다.
 | 필드 | 값 또는 규칙 |
 | --- | --- |
 | adapterId | `openai-compatible` 또는 Responses를 지원하는 Gateway adapter의 실제 ID |
-| endpoint/base URL | `http://127.0.0.1:8642/v1` (Gateway가 ysna-server에서 실행될 때) |
+| endpoint/base URL | `http://127.0.0.1:8642/v1` (Gateway가 Media Bridge 호스트에서 실행될 때) |
 | protocol | 소비자가 선택한 Media Bridge Responses 또는 Chat Completions 계약과 일치하는 값 |
 | secretRef | Media Bridge service token을 가리키는 Secret reference |
 | local network | loopback `127.0.0.1`, TCP port `8642`, `http`를 명시적으로 허용 |
@@ -230,14 +230,14 @@ Eoul Agent를 직접 Media Bridge에 연결하려면 Eoul Agent에 Responses cli
 - Responses 요청·streaming 응답 처리
 - tool·follow-up 상태의 보존과 미지원 기능의 명시적 오류 처리
 
-이 구현이 없으면 Agent의 `EOUL_*` 포트 설정이나 recorded Connector 설정만 바꾸어도 Media Bridge 호출이 발생하지 않습니다. 직접 연결을 선택할 경우에는 Eoul Agent의 계획 승인, 구현, 실제 ysna-server E2E 검증이 별도 작업입니다.
+이 구현이 없으면 Agent의 `EOUL_*` 포트 설정이나 recorded Connector 설정만 바꾸어도 Media Bridge 호출이 발생하지 않습니다. 직접 연결을 선택할 경우에는 Eoul Agent의 계획 승인, 구현, 실제 Media Bridge 호스트 E2E 검증이 별도 작업입니다.
 
 ## 7. 연결 확인 순서
 
 각 소비자에서 다음 순서로 확인합니다.
 
-1. ysna-server에서 `mb status`, `mb health --json`, `mb ready`가 성공하는지 확인합니다.
-2. 호출 프로세스가 ysna-server에서 실행되는지 확인합니다. 다른 호스트이면 `127.0.0.1`을 사용하지 않습니다.
+1. Media Bridge 호스트에서 `mb status`, `mb health --json`, `mb ready`가 성공하는지 확인합니다.
+2. 호출 프로세스가 Media Bridge 호스트에서 실행되는지 확인합니다. 다른 호스트이면 `127.0.0.1`을 사용하지 않습니다.
 3. Secret file이 존재하고 호출 프로세스가 읽을 수 있는지만 확인합니다. 원문은 출력하지 않습니다.
 4. 최소 text Responses 요청을 1회 실행합니다.
 5. 소비자 쪽 Provider connection test/readiness가 성공하는지 확인합니다.
@@ -258,10 +258,11 @@ Eoul Agent를 직접 Media Bridge에 연결하려면 Eoul Agent에 Responses cli
 
 ## 8. 현재 판정
 
-- ysna-server의 Media Bridge runtime은 실행 중이며 health는 200입니다.
+- Media Bridge 호스트의 Media Bridge runtime은 실행 중이며 health는 200입니다.
 - Daon2/Daon2-RAG의 현재 Provider 카탈로그에는 Media Bridge가 없어 UI만으로 등록할 수 없습니다.
 - Daon2-RAG의 embedding·reranker 역할은 Media Bridge Responses endpoint로 대체된다고 확인되지 않았습니다.
 - Eoul Gateway는 Provider/Route 계층에서 Media Bridge를 소비하도록 구성하는 경로가 정합적입니다.
 - Eoul Agent는 현재 설정 파일만으로 직접 연결된다는 근거가 없으며, Gateway 경유 또는 별도 Responses connector 구현이 필요합니다.
 
 이 문서는 소비자 측 설정 절차를 기록한 것이며 Media Bridge 소스·배포·런타임 설정을 변경하지 않습니다.
+
