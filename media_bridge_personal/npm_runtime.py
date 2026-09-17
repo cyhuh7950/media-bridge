@@ -59,6 +59,9 @@ class _PersonalRuntimeLike(Protocol):
 
     async def close(self) -> None: ...
 
+    @property
+    def model_registry(self) -> CapabilityRegistry: ...
+
 
 class _HtmlTextExtractor(HTMLParser):
     def __init__(self) -> None:
@@ -745,6 +748,7 @@ class PersonalRuntime:
     transaction: GatewayTransaction
     asset_store: AssetStore
     downstream: _ClosableDownstream
+    model_registry: CapabilityRegistry
     clients: tuple[httpx.AsyncClient, ...] = field(default_factory=tuple)
 
     async def invoke(self, payload: object) -> GatewayResponse | tuple[int, dict[str, Any]]:
@@ -796,6 +800,10 @@ class ReloadablePersonalRuntime:
     async def invoke(self, payload: object) -> GatewayResponse | tuple[int, dict[str, Any]]:
         async with self._lock:
             return await self._runtime.invoke(payload)
+
+    @property
+    def model_registry(self) -> CapabilityRegistry:
+        return self._runtime.model_registry
 
     async def reload(self) -> None:
         replacement = self._factory()
@@ -851,6 +859,7 @@ def build_personal_runtime(
         transaction=transaction,
         asset_store=asset_store,
         downstream=downstream,
+        model_registry=registry,
         clients=clients,
     )
 
@@ -1087,6 +1096,18 @@ def build_personal_app(
             media_type=result.content_type,
         )
 
+    async def models(_request: Request) -> JSONResponse:
+        data = [
+            {
+                "id": capability.model_id,
+                "object": "model",
+                "created": int(datetime.now(UTC).timestamp()),
+                "owned_by": "media-bridge",
+            }
+            for capability in runtime.model_registry.available()
+        ]
+        return JSONResponse({"object": "list", "data": data})
+
     return Starlette(
         routes=[
             Route("/", settings_home, methods=["GET"]),
@@ -1099,6 +1120,7 @@ def build_personal_app(
             Route("/api/test/media-processor", run_provider_test, methods=["POST"]),
             Route("/api/test/pipeline", run_provider_test, methods=["POST"]),
             Route("/health", health, methods=["GET"]),
+            Route("/v1/models", models, methods=["GET"]),
             Route("/v1/responses", responses, methods=["POST"]),
         ]
     )

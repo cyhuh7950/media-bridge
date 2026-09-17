@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextvars
 import json
 import secrets
+from datetime import UTC, datetime
 from typing import Any
 
 from mcp.server import MCPServer
@@ -16,6 +17,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from media_bridge.assets import AssetAccessError, AssetStore, validate_tenant_id
 from media_bridge.backends import load_secret
+from media_bridge.capabilities import CapabilityRegistry
 from media_bridge.responses_gateway import ResponsesIngressGateway
 
 current_tenant: contextvars.ContextVar[str | None] = contextvars.ContextVar(
@@ -44,6 +46,9 @@ class BearerTenantMiddleware:
         if not secrets.compare_digest(headers.get("authorization", ""), expected):
             await JSONResponse({"error": "unauthorized"}, status_code=401)(scope, receive, send)
             return
+        if scope.get("method") == "GET" and scope.get("path") == "/v1/models":
+            await self._app(scope, receive, send)
+            return
         tenant_id = headers.get("x-media-bridge-tenant", "")
         try:
             validate_tenant_id(tenant_id)
@@ -63,6 +68,7 @@ def build_http_app(
     asset_store: AssetStore,
     max_upload_bytes: int = 2 * 1024 * 1024,
     responses_gateway: ResponsesIngressGateway | None = None,
+    model_registry: CapabilityRegistry | None = None,
     max_responses_body_bytes: int = 4 * 1024 * 1024,
     auth_value_env: str | None = None,
     auth_file_env: str | None = None,
@@ -149,6 +155,24 @@ def build_http_app(
             )
         return response_error(error.code, error.message, result.http_status)
 
+    async def models(_request: Request) -> JSONResponse:
+        if model_registry is None:
+            return response_error(
+                "model_catalog_unavailable",
+                "Model catalog is unavailable.",
+                503,
+            )
+        data = [
+            {
+                "id": capability.model_id,
+                "object": "model",
+                "created": int(datetime.now(UTC).timestamp()),
+                "owned_by": "media-bridge",
+            }
+            for capability in model_registry.available()
+        ]
+        return JSONResponse({"object": "list", "data": data})
+
     mcp_app = server.streamable_http_app(
         streamable_http_path="/mcp",
         json_response=True,
@@ -159,6 +183,8 @@ def build_http_app(
         Route("/health", health, methods=["GET"]),
         Route("/assets", upload_asset, methods=["POST"]),
     ]
+    if model_registry is not None:
+        routes.append(Route("/v1/models", models, methods=["GET"]))
     if responses_gateway is not None:
         routes.append(Route("/v1/responses", responses, methods=["POST"]))
     routes.append(Mount("/", app=mcp_app))

@@ -186,6 +186,40 @@ def _image_request(*, stream: bool = False) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
+async def test_npm_runtime_exposes_openai_model_catalog(
+    tmp_path: Path,
+) -> None:
+    runtime = build_personal_runtime(
+        model="solar-pro4",
+        asset_root=tmp_path / "assets",
+        receipt_secret=b"r" * 32,
+        ocr_backend=FakeOcr(),
+        downstream_factory=lambda signer: SolarResponsesDownstream(
+            endpoint="https://api.example.test/v1/chat/completions",
+            model="solar-pro4",
+            receipt_signer=signer,
+            api_key_env="TEST_SOLAR_API_KEY",
+            transport=httpx.MockTransport(lambda _request: httpx.Response(500)),
+        ),
+    )
+    app = build_personal_app(runtime)
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1"
+        ) as client:
+            response = await client.get("/v1/models")
+    finally:
+        await runtime.close()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["object"] == "list"
+    assert body["data"][0]["id"] == "solar-pro4"
+    assert body["data"][0]["object"] == "model"
+    assert body["data"][0]["owned_by"] == "media-bridge"
+
+
+@pytest.mark.asyncio
 async def test_image_request_reaches_solar_as_ocr_text_without_original_media(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

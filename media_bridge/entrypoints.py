@@ -40,6 +40,7 @@ def run_http() -> None:
         server=runtime.server,
         asset_store=runtime.asset_store,
         responses_gateway=runtime.responses_gateway,
+        model_registry=runtime.model_registry,
     )
     try:
         uvicorn.run(

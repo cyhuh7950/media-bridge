@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from media_bridge.assets import AssetStore
+from media_bridge.capabilities import CapabilityRegistry, ModelCapability
 from media_bridge.contracts import SafeError
 from media_bridge.http_app import build_http_app
 from media_bridge.mcp_server import build_mcp_server
@@ -44,6 +45,63 @@ def _app(
         responses_gateway=gateway,
         max_responses_body_bytes=max_body,
     )
+
+
+def _registry() -> CapabilityRegistry:
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime.now(UTC)
+    return CapabilityRegistry(
+        [
+            ModelCapability(
+                model_id="solar-pro4",
+                input_modalities={"text"},
+                expires_at=now + timedelta(hours=1),
+            ),
+            ModelCapability(
+                model_id="expired-model",
+                input_modalities={"text"},
+                expires_at=now - timedelta(seconds=1),
+            ),
+        ],
+        version="test",
+    )
+
+
+@pytest.mark.asyncio
+async def test_models_route_returns_openai_compatible_active_models(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("MEDIA_BRIDGE_SERVICE_TOKEN", "service-secret")
+    server = build_mcp_server(UnusedService(), tenant_provider=lambda: "tenant-a")
+    app = build_http_app(
+        server=server,
+        asset_store=AssetStore(tmp_path / "assets"),
+        model_registry=_registry(),
+    )
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        unauthorized = await client.get("/v1/models")
+        response = await client.get(
+            "/v1/models",
+            headers={
+                "Authorization": "Bearer service-secret",
+            },
+        )
+
+    assert unauthorized.status_code == 401
+    assert response.status_code == 200
+    body = response.json()
+    assert body["object"] == "list"
+    assert body["data"][0]["id"] == "solar-pro4"
+    assert body["data"][0]["object"] == "model"
+    assert isinstance(body["data"][0]["created"], int)
+    assert body["data"][0]["owned_by"] == "media-bridge"
+    assert [item["id"] for item in body["data"]] == ["solar-pro4"]
 
 
 @pytest.mark.asyncio

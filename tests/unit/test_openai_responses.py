@@ -169,6 +169,26 @@ def test_normalize_rebuilds_safe_followup_without_history_items() -> None:
     assert "resp_previous" not in normalized.request.model_dump_json()
 
 
+def test_normalize_accepts_standard_response_message_metadata() -> None:
+    normalized = normalize_responses_request(
+        {
+            "model": "text-model",
+            "input": [
+                {
+                    "id": "msg_current",
+                    "type": "message",
+                    "status": "completed",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Current question"}],
+                }
+            ],
+        },
+        state=None,
+    )
+
+    assert normalized.current_user_text == "Current question"
+
+
 def test_normalize_surfaces_tainted_state_for_capability_policy() -> None:
     normalized = normalize_responses_request(
         {

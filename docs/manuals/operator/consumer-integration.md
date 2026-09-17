@@ -42,6 +42,7 @@ ysna-server에서 확인된 Media Bridge는 다음 주소에 바인딩되어 있
 | --- | --- |
 | 주소 | `127.0.0.1:8642` |
 | Responses endpoint | `http://127.0.0.1:8642/v1/responses` |
+| Models endpoint | `http://127.0.0.1:8642/v1/models` |
 | API base URL | `http://127.0.0.1:8642/v1` |
 | 상태 확인 | `mb status`, `mb health --json`, `mb ready` |
 | 현재 설치 버전 | `@cyhuh/media-bridge@0.1.12` |
@@ -100,6 +101,10 @@ HTTP 호출에는 두 값이 필요합니다.
 Authorization: Bearer <Media Bridge service token>
 X-Media-Bridge-Tenant: <tenant id>
 ```
+
+OpenAI 호환 Provider가 모델을 자동으로 가져올 때는 `GET /v1/models`를 호출합니다.
+이 조회에는 Bearer 토큰만 필요하고 tenant 헤더는 필요하지 않습니다. 실제
+`POST /v1/responses` 호출에는 위 두 헤더가 모두 필요합니다.
 
 서비스 토큰 원문은 ysna-server의 Media Bridge runtime secret 저장 위치에서 읽어야 합니다. 토큰을 소스, Git, DB의 일반 문자열, 화면 캡처, 문서에 넣지 않습니다. 소비자 프로그램은 각 제품이 지원하는 Secret file 또는 Secret Store 참조로 주입합니다.
 

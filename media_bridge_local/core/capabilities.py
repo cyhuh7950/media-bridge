@@ -54,3 +54,12 @@ class CapabilityRegistry:
         if capability.input_modalities.intersection({"image", "pdf"}):
             return CapabilityResolution(CapabilityState.VISION, capability)
         return CapabilityResolution(CapabilityState.NON_VISION, capability)
+
+    def available(self, now: datetime | None = None) -> tuple[ModelCapability, ...]:
+        """Return non-stale capabilities for consumer model discovery."""
+        checked_at = now or datetime.now(UTC)
+        return tuple(
+            capability
+            for capability in self._capabilities.values()
+            if not capability.is_stale(checked_at)
+        )
