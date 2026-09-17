@@ -33,11 +33,14 @@ media, base64, URL, asset/local-path reference를 downstream payload에 남기�
 
 | 경로 | 메서드 | 필요한 scope | 계약 |
 |---|---|---|---|
+| `/v1/models` | `GET` | Bearer 인증 | OpenAI 호환 활성 모델 목록 |
 | `/v1/responses` | `POST` | `responses:invoke` | JSON 또는 downstream SSE 응답 |
 | `/assets` | `POST` | `assets:write` | tenant-scoped 임시 asset 발급 |
 | `/mcp` | MCP Streamable HTTP | `mcp:invoke` | 3개 Core 도구 |
 
-모든 알려진 경로는 `Authorization: Bearer <credential>`을 요구한다. Admin session cookie는
+모든 알려진 경로는 `Authorization: Bearer <credential>`을 요구한다. `/v1/models`는 모델
+목록 조회에 tenant 헤더가 필요하지 않으며, `/v1/responses`와 `/assets`는 tenant 경계를
+계속 요구한다. Admin session cookie는
 Data Plane 인증 수단이 아니며 cookie가 있으면 거부한다. 중복 Authorization/Cookie 헤더도
 거부한다. 알려지지 않은 경로는 MCP로 재해석하지 않고 bounded 404를 반환하며 trailing
 slash redirect는 허용하지 않는다. 기본 Responses body 상한은 4 MiB, asset upload 상한은

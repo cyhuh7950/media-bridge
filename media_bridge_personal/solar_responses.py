@@ -86,14 +86,13 @@ def _text_content(value: object) -> str:
 
 
 def _chat_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
-    if payload.get("tools"):
-        raise DownstreamGuardError("Solar personal runtime does not yet support Responses tools")
     messages: list[dict[str, str]] = []
     instructions = payload.get("instructions")
     if instructions is not None:
-        if not isinstance(instructions, str) or not instructions.strip():
+        if not isinstance(instructions, str):
             raise DownstreamGuardError("Responses instructions are invalid")
-        messages.append({"role": "system", "content": instructions.strip()})
+        if instructions.strip():
+            messages.append({"role": "system", "content": instructions.strip()})
     input_value = payload.get("input")
     if isinstance(input_value, str):
         messages.append({"role": "user", "content": _text_content(input_value)})
@@ -111,6 +110,36 @@ def _chat_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
     if not messages:
         raise DownstreamGuardError("Responses input is empty")
     return messages
+
+
+def _chat_tools(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
+    tools = payload.get("tools")
+    if tools is None:
+        return None
+    if not isinstance(tools, list):
+        raise DownstreamGuardError("Responses tools are invalid")
+    converted: list[dict[str, Any]] = []
+    for tool in tools:
+        if not isinstance(tool, dict) or tool.get("type") != "function":
+            raise DownstreamGuardError("Responses tool type is unsupported")
+        function_value = tool.get("function")
+        function_source = function_value if isinstance(function_value, dict) else tool
+        name = function_source.get("name")
+        parameters = function_source.get("parameters")
+        if not isinstance(name, str) or not name.strip() or not isinstance(parameters, dict):
+            raise DownstreamGuardError("Responses function tool is invalid")
+        function: dict[str, Any] = {"name": name, "parameters": parameters}
+        description = function_source.get("description")
+        if description is not None:
+            if not isinstance(description, str) or not description.strip():
+                raise DownstreamGuardError("Responses function tool description is invalid")
+            function["description"] = description
+        if "strict" in function_source:
+            if not isinstance(function_source["strict"], bool):
+                raise DownstreamGuardError("Responses function tool strict flag is invalid")
+            function["strict"] = function_source["strict"]
+        converted.append({"type": "function", "function": function})
+    return converted
 
 
 def _response_payload(
@@ -201,9 +230,14 @@ class SolarResponsesDownstream:
     async def invoke(self, sealed: SealedGatewayRequest) -> GatewayResponse:
         self._verify_seal(sealed)
         messages = _chat_messages(sealed.payload)
+        tools = _chat_tools(sealed.payload)
         solar_payload: dict[str, Any]
         if self._protocol == "openai-chat-completions":
             solar_payload = {"model": self._model, "messages": messages, "stream": False}
+            if tools is not None:
+                solar_payload["tools"] = tools
+            if "tool_choice" in sealed.payload:
+                solar_payload["tool_choice"] = sealed.payload["tool_choice"]
         else:
             solar_payload = {
                 "model": self._model,
@@ -217,6 +251,10 @@ class SolarResponsesDownstream:
                 ],
                 "stream": False,
             }
+            if "tools" in sealed.payload:
+                solar_payload["tools"] = sealed.payload["tools"]
+            if "tool_choice" in sealed.payload:
+                solar_payload["tool_choice"] = sealed.payload["tool_choice"]
         encoded = json.dumps(
             solar_payload,
             ensure_ascii=False,

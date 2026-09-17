@@ -28,6 +28,12 @@ from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingR
 from starlette.routing import Route
 from starlette.types import ASGIApp
 
+from media_bridge.openai_chat import (
+    ChatNormalizationError,
+    chat_request_to_responses,
+    chat_response_from_responses,
+    chat_stream_from_responses,
+)
 from media_bridge_local.core.acquisition import MediaAcquirer
 from media_bridge_local.core.assets import AssetStore
 from media_bridge_local.core.backends import BackendStatus, OcrBackend, OcrResult, VisionResult
@@ -58,6 +64,9 @@ class _PersonalRuntimeLike(Protocol):
     async def invoke(self, payload: object) -> GatewayResponse | tuple[int, dict[str, Any]]: ...
 
     async def close(self) -> None: ...
+
+    @property
+    def model_registry(self) -> CapabilityRegistry: ...
 
 
 class _HtmlTextExtractor(HTMLParser):
@@ -198,6 +207,8 @@ _SETTINGS_RESPONSE_HEADERS = {
 
 
 def _load_npm_config(path: Path) -> dict[str, Any]:
+    if not path.exists() and not path.is_symlink():
+        return {"runtimeMode": "personal", "host": "127.0.0.1", "port": 8642}
     try:
         status = path.lstat()
         if path.is_symlink() or not path.is_file() or status.st_size > 65_536:
@@ -745,6 +756,7 @@ class PersonalRuntime:
     transaction: GatewayTransaction
     asset_store: AssetStore
     downstream: _ClosableDownstream
+    model_registry: CapabilityRegistry
     clients: tuple[httpx.AsyncClient, ...] = field(default_factory=tuple)
 
     async def invoke(self, payload: object) -> GatewayResponse | tuple[int, dict[str, Any]]:
@@ -796,6 +808,10 @@ class ReloadablePersonalRuntime:
     async def invoke(self, payload: object) -> GatewayResponse | tuple[int, dict[str, Any]]:
         async with self._lock:
             return await self._runtime.invoke(payload)
+
+    @property
+    def model_registry(self) -> CapabilityRegistry:
+        return self._runtime.model_registry
 
     async def reload(self) -> None:
         replacement = self._factory()
@@ -851,6 +867,7 @@ def build_personal_runtime(
         transaction=transaction,
         asset_store=asset_store,
         downstream=downstream,
+        model_registry=registry,
         clients=clients,
     )
 
@@ -1087,6 +1104,52 @@ def build_personal_app(
             media_type=result.content_type,
         )
 
+    async def chat_completions(request: Request) -> Response:
+        content_type = request.headers.get("content-type", "").partition(";")[0].strip().lower()
+        if content_type != "application/json":
+            return JSONResponse({"error": {"type": "invalid_request_error", "message": "Content-Type must be application/json."}}, status_code=415)
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > max_request_bytes:
+                return JSONResponse({"error": {"type": "invalid_request_error", "message": "Request body is too large."}}, status_code=413)
+        try:
+            payload = json.loads(bytes(body))
+            responses_payload = chat_request_to_responses(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError, ChatNormalizationError) as error:
+            message = getattr(error, "safe_message", "Chat request is invalid.")
+            return JSONResponse({"error": {"type": "invalid_request_error", "message": message}}, status_code=400)
+        request_model = str(responses_payload["model"])
+        result = await runtime.invoke(responses_payload)
+        if isinstance(result, tuple):
+            status, error_payload = result
+            return JSONResponse(error_payload, status_code=status)
+        if result.stream is not None:
+            return StreamingResponse(
+                chat_stream_from_responses(
+                    result.stream, response_id=result.response_id, request_model=request_model
+                ),
+                status_code=result.status_code,
+                media_type="text/event-stream",
+            )
+        try:
+            converted = chat_response_from_responses(result.body, request_model=request_model)
+        except ValueError as error:
+            return JSONResponse({"error": {"type": "upstream_error", "message": str(error)}}, status_code=502)
+        return Response(converted, status_code=result.status_code, media_type="application/json")
+
+    async def models(_request: Request) -> JSONResponse:
+        data = [
+            {
+                "id": capability.model_id,
+                "object": "model",
+                "created": int(datetime.now(UTC).timestamp()),
+                "owned_by": "media-bridge",
+            }
+            for capability in runtime.model_registry.available()
+        ]
+        return JSONResponse({"object": "list", "data": data})
+
     return Starlette(
         routes=[
             Route("/", settings_home, methods=["GET"]),
@@ -1099,7 +1162,9 @@ def build_personal_app(
             Route("/api/test/media-processor", run_provider_test, methods=["POST"]),
             Route("/api/test/pipeline", run_provider_test, methods=["POST"]),
             Route("/health", health, methods=["GET"]),
+            Route("/v1/models", models, methods=["GET"]),
             Route("/v1/responses", responses, methods=["POST"]),
+            Route("/v1/chat/completions", chat_completions, methods=["POST"]),
         ]
     )
 

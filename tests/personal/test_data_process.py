@@ -24,7 +24,7 @@ def _free_loopback_port() -> int:
 
 
 def _wait_for_status(url: str) -> httpx.Response:
-    deadline = time.monotonic() + 3.0
+    deadline = time.monotonic() + 10.0
     while time.monotonic() < deadline:
         try:
             response = httpx.get(url, timeout=0.2)

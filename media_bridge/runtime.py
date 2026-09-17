@@ -69,6 +69,7 @@ class MediaBridgeRuntime:
     http_client: httpx.AsyncClient
     responses_gateway: ResponsesIngressGateway | None
     omniroute_adapter: GuardedOmniRouteAdapter | None
+    model_registry: CapabilityRegistry
 
     async def close(self) -> None:
         try:
@@ -205,4 +206,5 @@ def build_runtime_from_environment() -> MediaBridgeRuntime:
         http_client=client,
         responses_gateway=responses_gateway,
         omniroute_adapter=omniroute_adapter,
+        model_registry=registry,
     )

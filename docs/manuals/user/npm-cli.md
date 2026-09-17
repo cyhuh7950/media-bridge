@@ -54,8 +54,11 @@ mb service uninstall
 mb update
 ```
 
-`service`는 현재 CLI-managed lifecycle입니다. systemd 또는 Windows 서비스 등록은
-별도 운영 배포 범위입니다.
+`service install`은 재부팅 후에도 개인 runtime이 올라오도록 현재 사용자 계정의 자동 시작을
+등록합니다. Linux 사용자 systemd를 우선하고 WSL에서는 `.profile` fallback을 사용하며,
+Windows에서는 작업 스케줄러 또는 사용자 Startup 폴더를 사용합니다. `mb start`는 기존의
+오래된 service marker도 자동으로 보정합니다. 등록 여부와 실행 상태는 `mb service status`,
+실제 HTTP 준비 상태는 `mb health --json`으로 확인합니다.
 
 ## 제거
 

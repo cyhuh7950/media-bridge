@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,7 @@ import httpx
 import pytest
 
 from media_bridge.assets import AssetStore
+from media_bridge.capabilities import CapabilityRegistry, ModelCapability
 from media_bridge.contracts import SafeError
 from media_bridge.http_app import build_http_app
 from media_bridge.mcp_server import build_mcp_server
@@ -29,6 +31,29 @@ class FakeGateway:
         return self.result
 
 
+class StreamingGateway(FakeGateway):
+    async def invoke(self, payload: object, *, tenant_id: str) -> ResponsesGatewayResult:
+        self.calls.append((payload, tenant_id))
+
+        async def source() -> AsyncIterator[bytes]:
+            yield b'data: {"type":"response.output_text.delta","delta":"Hi"}\n\n'
+            yield b'data: {"type":"response.completed"}\n\n'
+
+        return ResponsesGatewayResult(
+            status="completed",
+            response=OmniRouteResponse(
+                b"",
+                "text/event-stream",
+                "resp_stream",
+                200,
+                stream=source(),
+            ),
+            gate_result=None,
+            error=None,
+            http_status=200,
+        )
+
+
 def _app(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -44,6 +69,63 @@ def _app(
         responses_gateway=gateway,
         max_responses_body_bytes=max_body,
     )
+
+
+def _registry() -> CapabilityRegistry:
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime.now(UTC)
+    return CapabilityRegistry(
+        [
+            ModelCapability(
+                model_id="solar-pro4",
+                input_modalities={"text"},
+                expires_at=now + timedelta(hours=1),
+            ),
+            ModelCapability(
+                model_id="expired-model",
+                input_modalities={"text"},
+                expires_at=now - timedelta(seconds=1),
+            ),
+        ],
+        version="test",
+    )
+
+
+@pytest.mark.asyncio
+async def test_models_route_returns_openai_compatible_active_models(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("MEDIA_BRIDGE_SERVICE_TOKEN", "service-secret")
+    server = build_mcp_server(UnusedService(), tenant_provider=lambda: "tenant-a")
+    app = build_http_app(
+        server=server,
+        asset_store=AssetStore(tmp_path / "assets"),
+        model_registry=_registry(),
+    )
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        unauthorized = await client.get("/v1/models")
+        response = await client.get(
+            "/v1/models",
+            headers={
+                "Authorization": "Bearer service-secret",
+            },
+        )
+
+    assert unauthorized.status_code == 401
+    assert response.status_code == 200
+    body = response.json()
+    assert body["object"] == "list"
+    assert body["data"][0]["id"] == "solar-pro4"
+    assert body["data"][0]["object"] == "model"
+    assert isinstance(body["data"][0]["created"], int)
+    assert body["data"][0]["owned_by"] == "media-bridge"
+    assert [item["id"] for item in body["data"]] == ["solar-pro4"]
 
 
 @pytest.mark.asyncio
@@ -113,6 +195,99 @@ async def test_responses_route_returns_bounded_upstream_body(
     assert response.content == body
     assert response.headers["content-type"].startswith("application/json")
     assert gateway.calls == [({"model": "text-model", "input": "hello"}, "tenant-a")]
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_route_translates_to_responses_and_back(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    gateway = FakeGateway(
+        ResponsesGatewayResult(
+            status="completed",
+            response=OmniRouteResponse(
+                b'{"id":"resp_chat","model":"text-model","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hi"}]}]}',
+                "application/json",
+                "resp_chat",
+                200,
+            ),
+            gate_result=None,
+            error=None,
+            http_status=200,
+        )
+    )
+    app = _app(monkeypatch, tmp_path, gateway)
+    headers = {
+        "Authorization": "Bearer service-secret",
+        "X-Media-Bridge-Tenant": "tenant-a",
+    }
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            headers=headers,
+            json={"model": "text-model", "messages": [{"role": "user", "content": "Hello"}]},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == "Hi"
+    assert gateway.calls == [
+        (
+            {
+                "model": "text-model",
+                "input": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "Hello"}],
+                    }
+                ],
+            },
+            "tenant-a",
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_route_translates_streaming_responses(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    gateway = StreamingGateway(
+        ResponsesGatewayResult(
+            status="completed",
+            response=None,
+            gate_result=None,
+            error=None,
+            http_status=200,
+        )
+    )
+    app = _app(monkeypatch, tmp_path, gateway)
+    headers = {
+        "Authorization": "Bearer service-secret",
+        "X-Media-Bridge-Tenant": "tenant-a",
+    }
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": "text-model",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "stream": True,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert b'"content":"Hi"' in response.content
+    assert response.content.endswith(b"data: [DONE]\n\n")
 
 
 @pytest.mark.asyncio
