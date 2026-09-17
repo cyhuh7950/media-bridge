@@ -6,6 +6,8 @@
 npm install -g @cyhuh/media-bridge
 mb init
 mb start
+# 재부팅 후 자동 시작 등록(처음 한 번)
+mb service install
 ```
 
 `mb gui`는 데스크톱에서 로컬 설정·시험 화면을 열고, 화면을 열 수 없는 서버에서는 접속 주소를
@@ -25,6 +27,12 @@ SHA-256을 검증합니다. manifest에 공개 산출물이 없는 플랫폼은 
 
 첫 시작 시 runtime 구동에 필요한 model registry, asset 디렉터리와 내부 인증 secret을
 `~/.media-bridge` 아래에 자동 생성합니다. Secret 원문은 `config.json`에 저장하지 않습니다.
+
+`mb service install`은 사용자 권한으로 운영체제의 로그인·사용자 세션 시작 훅을 등록합니다.
+Linux에서 사용자 systemd를 사용할 수 있으면 `~/.config/systemd/user/media-bridge.service`를
+활성화하고, WSL처럼 사용자 systemd가 없는 환경에서는 `~/.profile`에 사용자 훅을 둡니다.
+Windows에서는 작업 스케줄러를 우선 사용하고, 사용할 수 없으면 사용자 Startup 폴더에 등록합니다.
+기존 0.1.x 설치에서 `mb start`를 한 번 실행해도 자동 시작 등록이 보정됩니다.
 
 기존 자동화는 `mb init`에서 지정한 환경변수 이름(기본 `SOLAR_API_KEY`)을 계속 사용할 수 있고,
 일반 사용자는 설정 화면에서 API Key를 입력할 수 있습니다. OpenCodex provider의 base URL은 기본

@@ -30,6 +30,21 @@ mb service restart
 mb stop
 ```
 
+### 재부팅 후 자동 시작
+
+처음 설치한 뒤 한 번만 PowerShell에서 실행합니다.
+
+```powershell
+mb service install
+mb service start
+mb status
+mb health --json
+```
+
+Windows 작업 스케줄러 등록을 우선 시도하고, 권한이나 정책 때문에 사용할 수 없으면 사용자
+Startup 폴더를 사용합니다. 두 방식 모두 관리자 권한이 필요하지 않습니다. 기존 설치에서
+`mb start`를 실행하면 자동 시작 등록이 없거나 이전 형식이면 자동으로 보정합니다.
+
 `mb gui`는 현재 설정된 주소를 출력합니다. 현재 CLI에는 트레이 아이콘, 시작 메뉴
 바로가기 또는 별도 `8766/status` 웹 화면이 없습니다.
 

@@ -63,6 +63,22 @@ mb service uninstall
 mb update
 ```
 
+### 재부팅 후 자동 시작
+
+처음 설치한 뒤 한 번만 다음을 실행합니다.
+
+```bash
+mb service install
+mb service start
+mb status
+mb health --json
+```
+
+`mb service install`은 Linux 사용자 systemd를 우선 사용합니다. WSL에서 사용자 systemd가
+활성화되지 않은 경우에는 `$HOME/.profile`에 사용자 로그인 훅을 등록합니다. 기존 설치에서
+`mb start`만 실행해도 오래된 service marker가 자동으로 갱신됩니다. 설정을 바꾼 뒤에는
+`mb service restart`를 사용합니다.
+
 `mb gui`는 데스크톱에서는 로컬 설정 화면을 열고 headless 서버에서는 현재 설정된 Web 주소를
 표시합니다. 설정 저장 후 `mb service restart`로 적용합니다. `mb health`가 실패하면 Media Bridge가
 준비되지 않은 상태입니다. runtime artifact가 없는 경우에는 Python이나 `.deb`를 직접
@@ -78,4 +94,4 @@ checksum, `dpkg`, service와 운영 설치 검증은 운영자 절차 및 별도
 - npm registry 공개와 실제 원격 `npm install -g`
 - Linux 아키텍처별 runtime artifact release
 - 실제 OpenCodex 연결과 Solar Provider 호출
-- systemd 자동 시작과 다른 PC 브라우저
+- 실제 재부팅 후 자동 시작과 다른 PC 브라우저

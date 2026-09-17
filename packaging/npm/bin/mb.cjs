@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const readline = require('node:readline');
-const { spawn } = require('node:child_process');
+const { execFileSync, spawn } = require('node:child_process');
 const {
   applyHostOverride,
   applyPortOverride,
@@ -50,6 +50,115 @@ function readConfig() {
   return loadConfig({ homeDir: os.homedir() });
 }
 
+function cliPath() {
+  return path.resolve(process.argv[1]);
+}
+
+function runQuiet(command, args) {
+  try {
+    execFileSync(command, args, { stdio: 'ignore', windowsHide: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function systemdUnitPath(homeDir = os.homedir()) {
+  return path.join(homeDir, '.config', 'systemd', 'user', 'media-bridge.service');
+}
+
+function profilePath(homeDir = os.homedir()) {
+  return path.join(homeDir, '.profile');
+}
+
+function windowsStartupPath(homeDir = os.homedir()) {
+  const appData = path.join(homeDir, 'AppData', 'Roaming');
+  return path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'Media Bridge.cmd');
+}
+
+function profileBlock() {
+  return [
+    '# >>> media-bridge autostart >>>',
+    `if command -v node >/dev/null 2>&1; then nohup node ${shellQuote(cliPath())} service start >/dev/null 2>&1 & fi`,
+    '# <<< media-bridge autostart <<<',
+  ].join('\n');
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
+function installProfileAutostart(homeDir = os.homedir()) {
+  const target = profilePath(homeDir);
+  const existing = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+  const block = profileBlock();
+  if (!existing.includes('# >>> media-bridge autostart >>>')) {
+    fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(target, `${existing.replace(/\\s*$/, '')}\n\n${block}\n`, { mode: 0o600 });
+  }
+  return { backend: 'profile', path: target };
+}
+
+function removeProfileAutostart(homeDir = os.homedir()) {
+  const target = profilePath(homeDir);
+  if (!fs.existsSync(target)) return;
+  const existing = fs.readFileSync(target, 'utf8');
+  const cleaned = existing.replace(/\n?# >>> media-bridge autostart >>>[\s\S]*?# <<< media-bridge autostart <<<\n?/g, '\n');
+  fs.writeFileSync(target, cleaned.replace(/\n{3,}/g, '\n\n'), { mode: 0o600 });
+}
+
+function installAutostart(homeDir = os.homedir()) {
+  if (process.platform === 'linux') {
+    const unit = systemdUnitPath(homeDir);
+    const contents = `[Unit]\nDescription=Media Bridge personal runtime\nAfter=network-online.target\n\n[Service]\nType=oneshot\nExecStart=${process.execPath} ${cliPath()} service start\nRemainAfterExit=yes\n\n[Install]\nWantedBy=default.target\n`;
+    fs.mkdirSync(path.dirname(unit), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(unit, contents, { mode: 0o600 });
+    if (runQuiet('systemctl', ['--user', 'daemon-reload']) && runQuiet('systemctl', ['--user', 'enable', 'media-bridge.service'])) {
+      return { backend: 'systemd-user', path: unit };
+    }
+    return installProfileAutostart(homeDir);
+  }
+  if (process.platform === 'win32') {
+    const task = 'Media Bridge';
+    const created = runQuiet('schtasks.exe', ['/Create', '/TN', task, '/SC', 'ONLOGON', '/F', '/TR', `"${process.execPath}" "${cliPath()}" service start`]);
+    if (created) return { backend: 'task-scheduler', task };
+    const startup = windowsStartupPath(homeDir);
+    fs.mkdirSync(path.dirname(startup), { recursive: true });
+    fs.writeFileSync(startup, `@echo off\r\n"${process.execPath}" "${cliPath()}" service start\r\n`, { mode: 0o600 });
+    return { backend: 'windows-startup', path: startup };
+  }
+  return installProfileAutostart(homeDir);
+}
+
+function removeAutostart(homeDir = os.homedir()) {
+  if (process.platform === 'linux') {
+    const unit = systemdUnitPath(homeDir);
+    runQuiet('systemctl', ['--user', 'disable', '--now', 'media-bridge.service']);
+    if (fs.existsSync(unit)) fs.rmSync(unit);
+    removeProfileAutostart(homeDir);
+    return;
+  }
+  if (process.platform === 'win32') {
+    runQuiet('schtasks.exe', ['/Delete', '/TN', 'Media Bridge', '/F']);
+    const startup = windowsStartupPath(homeDir);
+    if (fs.existsSync(startup)) fs.rmSync(startup);
+  }
+  removeProfileAutostart(homeDir);
+}
+
+function ensureAutostart(homeDir = os.homedir()) {
+  let current = null;
+  if (fs.existsSync(serviceFile)) {
+    try { current = JSON.parse(fs.readFileSync(serviceFile, 'utf8')); } catch { current = null; }
+  }
+  if (current?.enabled === true) return current;
+  const autostart = installAutostart(homeDir);
+  fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+  const next = { version: 2, enabled: true, ...autostart };
+  fs.writeFileSync(serviceFile, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  return next;
+}
+
 async function init(argv = []) {
   const existing = fs.existsSync(configFile) ? readConfig() : defaultConfig();
   let config;
@@ -81,7 +190,11 @@ async function init(argv = []) {
     config = applyPortOverride(config, port);
   }
   saveConfig({ homeDir: os.homedir(), config });
+  const service = installAutostart(os.homedir());
+  fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(serviceFile, `${JSON.stringify({ version: 2, enabled: true, ...service }, null, 2)}\n`, { mode: 0o600 });
   process.stdout.write(`Media Bridge initialized: ${configFile}\n`);
+  process.stdout.write(`자동 시작 등록: ${service.backend}\n`);
 }
 
 async function start(argv) {
@@ -93,6 +206,7 @@ async function start(argv) {
   }
   const current = readStatus({ homeDir: os.homedir() });
   if (current.running) throw new Error(`Media Bridge is already running: ${current.pid}`);
+  ensureAutostart(os.homedir());
   if (portIndex >= 0) {
     config = applyPortOverride(config, port);
     saveConfig({ homeDir: os.homedir(), config });
@@ -158,14 +272,16 @@ async function service(action) {
     return;
   }
   if (action === 'install') {
+    const autostart = installAutostart(os.homedir());
     fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(serviceFile, `${JSON.stringify({ version: 1, enabled: false }, null, 2)}\n`, {
+    fs.writeFileSync(serviceFile, `${JSON.stringify({ version: 2, enabled: true, ...autostart }, null, 2)}\n`, {
       mode: 0o600,
     });
-    process.stdout.write(`service installed: ${serviceFile}\n`);
+    process.stdout.write(`service installed: ${autostart.backend}\n`);
     return;
   }
   if (action === 'uninstall') {
+    removeAutostart(os.homedir());
     if (fs.existsSync(serviceFile)) fs.rmSync(serviceFile);
     await stopProcess({ homeDir: os.homedir() });
     process.stdout.write('service uninstalled\n');
