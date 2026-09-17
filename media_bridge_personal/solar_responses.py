@@ -121,16 +121,22 @@ def _chat_tools(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
     for tool in tools:
         if not isinstance(tool, dict) or tool.get("type") != "function":
             raise DownstreamGuardError("Responses tool type is unsupported")
-        name = tool.get("name")
-        parameters = tool.get("parameters")
+        function_value = tool.get("function")
+        function_source = function_value if isinstance(function_value, dict) else tool
+        name = function_source.get("name")
+        parameters = function_source.get("parameters")
         if not isinstance(name, str) or not name.strip() or not isinstance(parameters, dict):
             raise DownstreamGuardError("Responses function tool is invalid")
         function: dict[str, Any] = {"name": name, "parameters": parameters}
-        description = tool.get("description")
+        description = function_source.get("description")
         if description is not None:
             if not isinstance(description, str) or not description.strip():
                 raise DownstreamGuardError("Responses function tool description is invalid")
             function["description"] = description
+        if "strict" in function_source:
+            if not isinstance(function_source["strict"], bool):
+                raise DownstreamGuardError("Responses function tool strict flag is invalid")
+            function["strict"] = function_source["strict"]
         converted.append({"type": "function", "function": function})
     return converted
 

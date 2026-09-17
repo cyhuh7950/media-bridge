@@ -169,6 +169,42 @@ async def test_forwards_responses_tools_to_solar_chat(
 
 
 @pytest.mark.asyncio
+async def test_accepts_chat_completions_nested_function_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={
+                "id": "chatcmpl-nested-tools-1",
+                "choices": [{"message": {"role": "assistant", "content": "answer"}}],
+            },
+        )
+
+    downstream, signer = _downstream(monkeypatch, handler)
+    tool = {
+        "type": "function",
+        "function": {
+            "name": "lookup",
+            "description": "Look up a value",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+    try:
+        await downstream.invoke(
+            _sealed(signer, {"model": "solar-pro4", "input": "hello", "tools": [tool]})
+        )
+    finally:
+        await downstream.close()
+
+    assert recorded[0]["tools"] == [tool]
+
+
+@pytest.mark.asyncio
 async def test_rejects_remaining_media_before_solar_socket_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
