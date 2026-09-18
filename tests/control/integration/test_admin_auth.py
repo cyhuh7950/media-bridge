@@ -20,36 +20,75 @@ def _client(database_url: str) -> tuple[TestClient, ControlPlaneService, Databas
         now=lambda: datetime(2026, 8, 24, 1, 0, tzinfo=UTC),
     )
     service.ensure_default_admin()
-    return TestClient(build_control_app(service=service, allowed_origin="https://control.test", allowed_host="control.test"), base_url="https://control.test"), service, database
+    return (
+        TestClient(
+            build_control_app(
+                service=service, allowed_origin="https://control.test", allowed_host="control.test"
+            ),
+            base_url="https://control.test",
+        ),
+        service,
+        database,
+    )
 
 
 def test_login_requires_totp_then_session_cookie_csrf_and_logout(migrated_postgres: str) -> None:
     client, _, database = _client(migrated_postgres)
     origin = {"origin": "https://control.test"}
-    pending = client.post("/admin/v1/auth/login", headers=origin, json={"username": "admin", "password": "admin"})
+    pending = client.post(
+        "/admin/v1/auth/login", headers=origin, json={"username": "admin", "password": "admin"}
+    )
     assert pending.status_code == 401
     assert pending.json() == {"error": {"code": "totp_required"}}
-    enrollment = client.post("/admin/v1/auth/totp/enroll", headers=origin, json={"username": "admin", "password": "admin"})
+    enrollment = client.post(
+        "/admin/v1/auth/totp/enroll",
+        headers=origin,
+        json={"username": "admin", "password": "admin"},
+    )
     assert enrollment.status_code == 200
     secret = enrollment.json()["secret"]
     counter = int(datetime(2026, 8, 24, 1, 0, tzinfo=UTC).timestamp()) // 30
     code = _hotp(base64.b32decode(secret + "=" * (-len(secret) % 8)), counter)
-    assert client.post("/admin/v1/auth/totp/confirm", headers=origin, json={"user_id": enrollment.json()["user_id"], "code": code}).status_code == 204
-    response = client.post("/admin/v1/auth/totp/login", headers=origin, json={"username": "admin", "password": "admin", "code": code})
+    assert (
+        client.post(
+            "/admin/v1/auth/totp/confirm",
+            headers=origin,
+            json={"user_id": enrollment.json()["user_id"], "code": code},
+        ).status_code
+        == 204
+    )
+    response = client.post(
+        "/admin/v1/auth/totp/login",
+        headers=origin,
+        json={"username": "admin", "password": "admin", "code": code},
+    )
     assert response.status_code == 200
     assert response.json()["role"] == "admin"
     csrf_token = response.json()["csrf_token"]
     assert "mb_admin_session=" in response.headers["set-cookie"]
     assert client.get("/admin/v1/me").json() == {"username": "admin", "role": "admin"}
     assert client.post("/admin/v1/auth/logout", headers=origin).status_code == 403
-    assert client.post("/admin/v1/auth/logout", headers={**origin, "x-csrf-token": csrf_token}).status_code == 204
+    assert (
+        client.post(
+            "/admin/v1/auth/logout", headers={**origin, "x-csrf-token": csrf_token}
+        ).status_code
+        == 204
+    )
     assert client.get("/admin/v1/me").status_code == 401
     database.close()
 
 
 def test_password_recovery_endpoint_is_disabled(migrated_postgres: str) -> None:
     client, _, database = _client(migrated_postgres)
-    response = client.post("/admin/v1/auth/recover", headers={"origin": "https://control.test"}, json={"username": "admin", "recovery_code": "unused-recovery-code", "new_password": "unused-password-value"})
+    response = client.post(
+        "/admin/v1/auth/recover",
+        headers={"origin": "https://control.test"},
+        json={
+            "username": "admin",
+            "recovery_code": "unused-recovery-code",
+            "new_password": "unused-password-value",
+        },
+    )
     assert response.status_code == 405
     assert response.json() == {"error": {"code": "password_change_disabled"}}
     database.close()

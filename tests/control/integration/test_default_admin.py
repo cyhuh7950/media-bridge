@@ -34,7 +34,7 @@ def test_default_admin_is_created_with_fixed_credentials_and_totp_pending(servic
         user = session.scalar(select(User).where(User.username == "admin"))
         assert user is not None
         assert user.password_hash.startswith("$argon2id$")
-        assert user.password_hash != "admin"
+        assert user.password_hash != "admin"  # noqa: S105
 
 
 def test_default_admin_cannot_change_password_or_be_disabled(service) -> None:
@@ -44,7 +44,7 @@ def test_default_admin_cannot_change_password_or_be_disabled(service) -> None:
     with pytest.raises(ControlPlaneError, match="default_admin_protected"):
         control.update_user(
             user_id=user.user_id,
-            password="another password",
+            password="another password",  # noqa: S106
             role=None,
             is_active=None,
         )

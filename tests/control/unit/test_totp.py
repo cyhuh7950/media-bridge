@@ -8,7 +8,7 @@ from media_bridge_control.totp import TotpError, generate_secret, provisioning_u
 
 
 def test_totp_code_verifies_for_known_secret_and_timestamp() -> None:
-    secret = "JBSWY3DPEHPK3PXP"
+    secret = "JBSWY3DPEHPK3PXP"  # noqa: S105
 
     assert verify_code(secret, "260025", at=datetime(2026, 1, 1, 0, 0, tzinfo=UTC))
 
@@ -20,7 +20,7 @@ def test_totp_rejects_wrong_code() -> None:
 
 def test_provisioning_uri_contains_only_registration_metadata() -> None:
     uri = provisioning_uri(
-        secret="JBSWY3DPEHPK3PXP",
+        secret="JBSWY3DPEHPK3PXP",  # noqa: S106
         account="admin",
         issuer="Media Bridge",
     )
