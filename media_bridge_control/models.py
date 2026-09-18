@@ -40,6 +40,7 @@ class User(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     username: Mapped[str] = mapped_column(String(128), unique=True)
     password_hash: Mapped[str] = mapped_column(Text)
+    totp_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     totp_secret_ciphertext: Mapped[str | None] = mapped_column(Text)
     recovery_email: Mapped[str | None] = mapped_column(String(320))
     role: Mapped[str] = mapped_column(String(16))

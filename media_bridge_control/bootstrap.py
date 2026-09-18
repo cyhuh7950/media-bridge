@@ -108,9 +108,11 @@ class ControlPlaneService:
                     ),
                     role=Role.ADMIN.value,
                     is_active=True,
+                    totp_required=True,
                 )
                 session.add(user)
                 session.flush()
+            user.totp_required = True
             if recovery_email is not None:
                 user.recovery_email = recovery_email
             return DefaultAdminResult(
@@ -272,7 +274,9 @@ class ControlPlaneService:
             ):
                 self._login_limiter.record_failure(rate_key, now=now)
                 raise AuthenticationError("invalid_credentials")
-            if user.totp_secret_ciphertext is None:
+            if user.totp_required and user.totp_secret_ciphertext is None:
+                raise AuthenticationError("totp_required")
+            if user.totp_secret_ciphertext is not None:
                 raise AuthenticationError("totp_required")
             session_token = self.security.issue_token(prefix="mbs", purpose="session")
             csrf_token = secrets.token_urlsafe(32)

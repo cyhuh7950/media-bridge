@@ -16,7 +16,6 @@ from starlette.routing import Route
 from media_bridge_control.audit import AuditEventWriter, OperationalEventWriter
 from media_bridge_control.bootstrap import (
     AuthenticationError,
-    BootstrapError,
     ControlPlaneError,
     ControlPlaneService,
     Principal,
@@ -30,7 +29,6 @@ from media_bridge_control.gateway_client import (
     HttpGatewayClient,
 )
 from media_bridge_control.schemas import (
-    BootstrapRequest,
     ConnectionCreate,
     ConnectionUpdate,
     CredentialCreate,
@@ -126,26 +124,7 @@ def build_control_app(
     async def bootstrap(request: Request) -> Response:
         if rejected := secure_request(request):
             return rejected
-        raw_token = request.headers.get("x-bootstrap-token", "")
-        try:
-            body = await _json(request, BootstrapRequest)
-            result = await run_in_threadpool(
-                service.complete_bootstrap,
-                token=raw_token,
-                username=body.username,
-                password=body.password,
-            )
-        except (BootstrapError, ControlPlaneError) as error:
-            status = 409 if error.code == "already_initialized" else 400
-            return _error(error.code, status)
-        return JSONResponse(
-            {
-                "user_id": result.user_id,
-                "role": result.role,
-                "recovery_codes": result.recovery_codes,
-            },
-            status_code=201,
-        )
+        return _error("bootstrap_disabled", 410)
 
     async def login(request: Request) -> Response:
         if rejected := secure_request(request):
