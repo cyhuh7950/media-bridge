@@ -29,6 +29,8 @@ interface AuthContextValue {
   verifyTotp: (code: string) => Promise<void>;
   beginTotpEnrollment: () => Promise<void>;
   confirmTotpEnrollment: (code: string) => Promise<void>;
+  requestRecoveryCode: () => Promise<void>;
+  loginWithRecoveryCode: (code: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -105,6 +107,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [state]);
 
+  const requestRecoveryCode = useCallback(async () => {
+    if (state.status !== "totp_required") return;
+    try {
+      await adminRequest("/auth/recovery/request", { method: "POST", body: { username: state.username } });
+      setState({ ...state, errorCode: "recovery_sent" });
+    } catch (error: unknown) {
+      setState({ ...state, errorCode: error instanceof SafeApiError ? error.code : "request_failed" });
+    }
+  }, [state]);
+
+  const loginWithRecoveryCode = useCallback(async (code: string) => {
+    if (state.status !== "totp_required") return;
+    try {
+      const response = await adminRequest<LoginResponse>("/auth/recovery/login", { method: "POST", body: { username: state.username, password: state.password, recovery_code: code } });
+      if (!isLoginResponse(response)) throw new SafeApiError(502, "invalid_response");
+      setState({ status: "authenticated", principal: { username: response.username, role: response.role }, csrfToken: response.csrf_token });
+    } catch (error: unknown) {
+      setState({ ...state, errorCode: error instanceof SafeApiError ? error.code : "request_failed" });
+    }
+  }, [state]);
+
   const logout = useCallback(async () => {
     if (state.status !== "authenticated" || state.csrfToken === null) {
       setState({ status: "anonymous" });
@@ -120,12 +143,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [state]);
 
-  const value = useMemo(() => ({ state, login, verifyTotp, beginTotpEnrollment, confirmTotpEnrollment, logout }), [state, login, verifyTotp, beginTotpEnrollment, confirmTotpEnrollment, logout]);
+  const value = useMemo(() => ({ state, login, verifyTotp, beginTotpEnrollment, confirmTotpEnrollment, requestRecoveryCode, loginWithRecoveryCode, logout }), [state, login, verifyTotp, beginTotpEnrollment, confirmTotpEnrollment, requestRecoveryCode, loginWithRecoveryCode, logout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function useAuth(): AuthState & Pick<AuthContextValue, "login" | "verifyTotp" | "beginTotpEnrollment" | "confirmTotpEnrollment" | "logout"> {
+export function useAuth(): AuthState & Pick<AuthContextValue, "login" | "verifyTotp" | "beginTotpEnrollment" | "confirmTotpEnrollment" | "requestRecoveryCode" | "loginWithRecoveryCode" | "logout"> {
   const context = useContext(AuthContext);
   if (context === null) throw new Error("AuthProvider is required");
   return { ...context.state, login: context.login, logout: context.logout };

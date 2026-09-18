@@ -26,6 +26,7 @@ function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,11 +42,12 @@ function LoginPage() {
         <h1 id="login-title">Media Bridge 로그인</h1>
         <p>모델의 미디어 호환성과 안전 차단 상태를 관리합니다.</p>
         {auth.status === "totp_required" || auth.status === "totp_enrollment" ? (
-          <form onSubmit={(event) => { event.preventDefault(); void auth.verifyTotp(code); }}>
+          <form onSubmit={(event) => { event.preventDefault(); void (recoveryMode ? auth.loginWithRecoveryCode(code) : auth.verifyTotp(code)); }}>
             {auth.status === "totp_enrollment" ? <><p>인증 앱에 다음 키를 등록하세요: <code>{auth.secret}</code></p><p><code>{auth.provisioningUri}</code></p><button type="button" onClick={() => { void auth.confirmTotpEnrollment(code); }}>등록 확인</button></> : <button type="button" onClick={() => { void auth.beginTotpEnrollment(); }}>인증 앱 등록</button>}
             <label htmlFor="totp-code">인증 앱 코드</label>
             <input id="totp-code" inputMode="numeric" value={code} onChange={(event) => { setCode(event.target.value); }} required />
-            <button type="submit">코드 확인</button>
+            <button type="submit">{recoveryMode ? "복구 코드 확인" : "코드 확인"}</button>
+            {auth.status === "totp_required" ? <><button type="button" onClick={() => { void auth.requestRecoveryCode(); }}>복구 이메일 보내기</button><button type="button" onClick={() => { setRecoveryMode(!recoveryMode); }}>인증 앱 코드 / 복구 코드 전환</button></> : null}
           </form>
         ) : <form onSubmit={(event) => { void submit(event); }}>
           <label htmlFor="username">사용자 이름</label>
