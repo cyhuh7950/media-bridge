@@ -8,7 +8,7 @@ import hashlib
 import hmac
 import secrets
 import struct
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import quote
 
 
@@ -35,7 +35,7 @@ def verify_code(secret: str, code: str, *, at: datetime, window: int = 1) -> boo
     if not code.isdigit() or len(code) != 6 or window < 0:
         raise TotpError("invalid_code")
     key = _decode_secret(secret)
-    timestamp = at.astimezone(timezone.utc).timestamp()
+    timestamp = at.astimezone(UTC).timestamp()
     counter = int(timestamp // 30)
     expected = {
         _hotp(key, counter + offset)
