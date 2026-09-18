@@ -122,7 +122,9 @@ class ControlSettings:
             if smtp_username
             else None
         )
-        admin_recovery_email = os.environ.get("MEDIA_BRIDGE_ADMIN_RECOVERY_EMAIL", "").strip() or None
+        admin_recovery_email = (
+            os.environ.get("MEDIA_BRIDGE_ADMIN_RECOVERY_EMAIL", "").strip() or None
+        )
         return cls(
             database_url=database_url,
             security_pepper=pepper,
