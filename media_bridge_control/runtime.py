@@ -54,7 +54,7 @@ def build_control_runtime(
             else None
         ),
     )
-    service.ensure_default_admin()
+    service.ensure_default_admin(recovery_email=settings.admin_recovery_email)
     signer = SnapshotSigner(
         key_id=settings.snapshot_key_id,
         private_key_pem=settings.snapshot_private_key_pem,

@@ -97,7 +97,7 @@ class ControlPlaneService:
     def now(self) -> datetime:
         return self._now()
 
-    def ensure_default_admin(self) -> DefaultAdminResult:
+    def ensure_default_admin(self, *, recovery_email: str | None = None) -> DefaultAdminResult:
         with self.database.session() as session:
             user = session.scalar(select(User).where(User.username == "admin").with_for_update())
             if user is None:
@@ -111,6 +111,8 @@ class ControlPlaneService:
                 )
                 session.add(user)
                 session.flush()
+            if recovery_email is not None:
+                user.recovery_email = recovery_email
             return DefaultAdminResult(
                 user_id=str(user.id),
                 username=user.username,
