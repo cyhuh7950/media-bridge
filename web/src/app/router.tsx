@@ -132,6 +132,9 @@ function AuthenticatedRoutes() {
       </Routes>
     );
   }
+  if (auth.status === "totp_required" || auth.status === "totp_enrollment") {
+    return <LoginPage />;
+  }
   return (
     <Routes>
       <Route path="/login" element={<Navigate to="/" replace />} />
