@@ -54,6 +54,11 @@ class ControlSettings:
     allowed_origin: str
     allowed_host: str
     console_static_root: Path | None = None
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_sender: str | None = None
+    smtp_username: str | None = None
+    smtp_password: bytes | None = field(default=None, repr=False)
 
     @classmethod
     def from_environment(cls) -> ControlSettings:
@@ -101,6 +106,21 @@ class ControlSettings:
             not console_static_root.is_absolute() or console_static_root.is_symlink()
         ):
             raise ControlSettingsError("Web Console static root is invalid")
+        smtp_host = os.environ.get("MEDIA_BRIDGE_SMTP_HOST", "").strip() or None
+        smtp_sender = os.environ.get("MEDIA_BRIDGE_SMTP_SENDER", "").strip() or None
+        smtp_port = int(os.environ.get("MEDIA_BRIDGE_SMTP_PORT", "587"))
+        if smtp_host is not None and smtp_sender is None:
+            raise ControlSettingsError("MEDIA_BRIDGE_SMTP_SENDER is not configured")
+        smtp_username = os.environ.get("MEDIA_BRIDGE_SMTP_USERNAME", "").strip() or None
+        smtp_password = (
+            _secret(
+                "MEDIA_BRIDGE_SMTP_PASSWORD",
+                "MEDIA_BRIDGE_SMTP_PASSWORD_FILE",
+                max_bytes=4_096,
+            )
+            if smtp_username
+            else None
+        )
         return cls(
             database_url=database_url,
             security_pepper=pepper,
@@ -110,4 +130,9 @@ class ControlSettings:
             allowed_origin=origin,
             allowed_host=host,
             console_static_root=console_static_root,
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
+            smtp_sender=smtp_sender,
+            smtp_username=smtp_username,
+            smtp_password=smtp_password,
         )

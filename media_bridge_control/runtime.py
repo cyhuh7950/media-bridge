@@ -14,6 +14,7 @@ from media_bridge_control.gateway_client import GatewayClient
 from media_bridge_control.secrets import GatewaySecretResolver
 from media_bridge_control.security import SecurityContext
 from media_bridge_control.settings import ControlSettings
+from media_bridge_control.smtp import SmtpMailer
 from media_bridge_control.snapshots import SnapshotPublisher, SnapshotSigner
 from media_bridge_control.static import build_console_app
 
@@ -41,6 +42,17 @@ def build_control_runtime(
         database=database,
         security=security,
         now=lambda: datetime.now(UTC),
+        recovery_mailer=(
+            SmtpMailer(
+                host=settings.smtp_host,
+                port=settings.smtp_port,
+                sender=settings.smtp_sender or "",
+                username=settings.smtp_username,
+                password=settings.smtp_password.decode() if settings.smtp_password else None,
+            )
+            if settings.smtp_host
+            else None
+        ),
     )
     service.ensure_default_admin()
     signer = SnapshotSigner(

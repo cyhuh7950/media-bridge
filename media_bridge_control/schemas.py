@@ -58,6 +58,12 @@ class RecoveryCodeRequest(AdminStrictModel):
     username: Username
 
 
+class RecoveryLoginRequest(AdminStrictModel):
+    username: Username
+    password: Annotated[str, StringConstraints(min_length=1, max_length=1_024)]
+    recovery_code: Annotated[str, StringConstraints(min_length=16, max_length=128)]
+
+
 class UserCreate(AdminStrictModel):
     username: Username
     password: Password

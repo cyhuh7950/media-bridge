@@ -43,6 +43,7 @@ from media_bridge_control.schemas import (
     ProviderUpdate,
     PublishSnapshotRequest,
     RecoveryCodeRequest,
+    RecoveryLoginRequest,
     TestLabPreviewRequest,
     TestLabRunRequest,
     TotpCodeRequest,
@@ -278,6 +279,36 @@ def build_control_app(
             status = 429 if error.code == "recovery_rate_limited" else 400
             return _error(error.code, status)
         return Response(status_code=202)
+
+    async def recovery_login(request: Request) -> Response:
+        if rejected := secure_request(request):
+            return rejected
+        try:
+            body = await _json(request, RecoveryLoginRequest)
+            client_host = request.client.host if request.client is not None else "unknown"
+            result = await run_in_threadpool(
+                service.login_with_recovery_code,
+                username=body.username,
+                password=body.password,
+                recovery_code=body.recovery_code,
+                client_key=client_host,
+            )
+        except AuthenticationError as error:
+            status = 429 if error.code == "recovery_rate_limited" else 401
+            return _error(error.code, status)
+        response = JSONResponse(
+            {"username": result.username, "role": result.role, "csrf_token": result.csrf_token}
+        )
+        response.set_cookie(
+            "mb_admin_session",
+            result.session_token,
+            max_age=int(service.SESSION_TTL.total_seconds()),
+            path="/admin/v1",
+            secure=True,
+            httponly=True,
+            samesite="strict",
+        )
+        return response
 
     async def logout(request: Request) -> Response:
         if rejected := secure_request(request):
@@ -1002,6 +1033,7 @@ def build_control_app(
             Route("/admin/v1/auth/totp/confirm", totp_confirm, methods=["POST"]),
             Route("/admin/v1/auth/recover", recover, methods=["POST"]),
             Route("/admin/v1/auth/recovery/request", recovery_request, methods=["POST"]),
+            Route("/admin/v1/auth/recovery/login", recovery_login, methods=["POST"]),
             Route("/admin/v1/auth/logout", logout, methods=["POST"]),
             Route("/admin/v1/me", me, methods=["GET"]),
             Route("/admin/v1/users", users, methods=["GET", "POST"]),

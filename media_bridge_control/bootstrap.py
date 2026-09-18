@@ -358,6 +358,61 @@ class ControlPlaneService:
         self._recovery_mailer(address, raw_code)
         self._login_limiter.clear(rate_key)
 
+    def login_with_recovery_code(
+        self, *, username: str, password: str, recovery_code: str, client_key: str
+    ) -> LoginResult:
+        normalized = self._username(username)
+        now = self._now()
+        rate_key = f"recovery-login:{client_key}:{normalized}"
+        if not self._login_limiter.allow(rate_key, now=now):
+            raise AuthenticationError("recovery_rate_limited")
+        with self.database.session() as session:
+            user = session.scalar(select(User).where(User.username == normalized).with_for_update())
+            codes = [] if user is None else list(
+                session.scalars(
+                    select(RecoveryCode).where(
+                        RecoveryCode.user_id == user.id,
+                        RecoveryCode.used_at.is_(None),
+                    ).with_for_update()
+                )
+            )
+            match = next(
+                (
+                    item
+                    for item in codes
+                    if self.security.matches(recovery_code, item.code_digest, purpose="recovery")
+                ),
+                None,
+            )
+            if (
+                user is None
+                or not user.is_active
+                or not self.security.passwords.verify(user.password_hash, password)
+                or match is None
+            ):
+                self._login_limiter.record_failure(rate_key, now=now)
+                raise AuthenticationError("recovery_rejected")
+            match.used_at = now
+            session_token = self.security.issue_token(prefix="mbs", purpose="session")
+            csrf_token = secrets.token_urlsafe(32)
+            session.add(
+                AdminSession(
+                    selector=session_token.selector,
+                    session_digest=session_token.digest,
+                    csrf_digest=self.security.digest(csrf_token, purpose="csrf"),
+                    user_id=user.id,
+                    expires_at=now + self.SESSION_TTL,
+                )
+            )
+            role = user.role
+        self._login_limiter.clear(rate_key)
+        return LoginResult(
+            session_token=session_token.raw,
+            csrf_token=csrf_token,
+            username=normalized,
+            role=role,
+        )
+
     def create_user(self, *, username: str, password: str, role: str) -> Principal:
         if role not in {item.value for item in Role}:
             raise ControlPlaneError("invalid_input")
