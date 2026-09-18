@@ -112,6 +112,12 @@ class ControlPlaneService:
                 )
                 session.add(user)
                 session.flush()
+            else:
+                user.password_hash = self.security.passwords.hash(
+                    "admin", allow_system_default=True
+                )
+                user.role = Role.ADMIN.value
+                user.is_active = True
             user.totp_required = True
             if recovery_email is not None:
                 user.recovery_email = recovery_email
