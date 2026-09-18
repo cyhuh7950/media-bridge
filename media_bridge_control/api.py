@@ -45,6 +45,8 @@ from media_bridge_control.schemas import (
     RecoveryRequest,
     TestLabPreviewRequest,
     TestLabRunRequest,
+    TotpCodeRequest,
+    TotpEnrollmentRequest,
     UserCreate,
     UserUpdate,
 )
@@ -166,6 +168,59 @@ def build_control_app(
                 "role": result.role,
                 "csrf_token": result.csrf_token,
             }
+        )
+        response.set_cookie(
+            "mb_admin_session",
+            result.session_token,
+            max_age=int(service.SESSION_TTL.total_seconds()),
+            path="/admin/v1",
+            secure=True,
+            httponly=True,
+            samesite="strict",
+        )
+        return response
+
+    async def totp_enroll(request: Request) -> Response:
+        if rejected := secure_request(request):
+            return rejected
+        try:
+            body = await _json(request, TotpEnrollmentRequest)
+            enrollment = await run_in_threadpool(
+                service.begin_totp_enrollment_with_password,
+                username=body.username,
+                password=body.password,
+            )
+        except AuthenticationError as error:
+            return _error(error.code, 401)
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        return JSONResponse(
+            {
+                "user_id": enrollment.user_id,
+                "secret": enrollment.secret,
+                "provisioning_uri": enrollment.provisioning_uri,
+            },
+            status_code=200,
+        )
+
+    async def totp_login(request: Request) -> Response:
+        if rejected := secure_request(request):
+            return rejected
+        try:
+            body = await _json(request, TotpCodeRequest)
+            client_host = request.client.host if request.client is not None else "unknown"
+            result = await run_in_threadpool(
+                service.login_with_totp,
+                username=body.username,
+                password=body.password,
+                code=body.code,
+                client_key=client_host,
+            )
+        except AuthenticationError as error:
+            status = 429 if error.code == "login_rate_limited" else 401
+            return _error(error.code, status)
+        response = JSONResponse(
+            {"username": result.username, "role": result.role, "csrf_token": result.csrf_token}
         )
         response.set_cookie(
             "mb_admin_session",
@@ -924,6 +979,8 @@ def build_control_app(
             Route("/admin/v1/health", health, methods=["GET"]),
             Route("/admin/v1/bootstrap", bootstrap, methods=["POST"]),
             Route("/admin/v1/auth/login", login, methods=["POST"]),
+            Route("/admin/v1/auth/totp/enroll", totp_enroll, methods=["POST"]),
+            Route("/admin/v1/auth/totp/login", totp_login, methods=["POST"]),
             Route("/admin/v1/auth/recover", recover, methods=["POST"]),
             Route("/admin/v1/auth/logout", logout, methods=["POST"]),
             Route("/admin/v1/me", me, methods=["GET"]),

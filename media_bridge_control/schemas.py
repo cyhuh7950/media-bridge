@@ -32,6 +32,17 @@ class LoginRequest(AdminStrictModel):
     password: Annotated[str, StringConstraints(min_length=1, max_length=1_024)]
 
 
+class TotpCodeRequest(AdminStrictModel):
+    username: Username
+    password: Annotated[str, StringConstraints(min_length=1, max_length=1_024)]
+    code: Annotated[str, StringConstraints(min_length=6, max_length=6)]
+
+
+class TotpEnrollmentRequest(AdminStrictModel):
+    username: Username
+    password: Annotated[str, StringConstraints(min_length=1, max_length=1_024)]
+
+
 class RecoveryRequest(AdminStrictModel):
     username: Username
     recovery_code: Annotated[str, StringConstraints(min_length=16, max_length=128)]

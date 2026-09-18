@@ -42,6 +42,7 @@ def build_control_runtime(
         security=security,
         now=lambda: datetime.now(UTC),
     )
+    service.ensure_default_admin()
     signer = SnapshotSigner(
         key_id=settings.snapshot_key_id,
         private_key_pem=settings.snapshot_private_key_pem,

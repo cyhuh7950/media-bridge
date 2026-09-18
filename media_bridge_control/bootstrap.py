@@ -133,6 +133,21 @@ class ControlPlaneService:
                 ),
             )
 
+    def begin_totp_enrollment_with_password(
+        self, *, username: str, password: str
+    ) -> TotpEnrollment:
+        normalized = self._username(username)
+        with self.database.session() as session:
+            user = session.scalar(select(User).where(User.username == normalized).with_for_update())
+            if (
+                user is None
+                or not user.is_active
+                or not self.security.passwords.verify(user.password_hash, password)
+            ):
+                raise AuthenticationError("invalid_credentials")
+            user_id = str(user.id)
+        return self.begin_totp_enrollment(user_id=user_id)
+
     def confirm_totp_enrollment(self, *, user_id: str, code: str) -> None:
         with self.database.session() as session:
             user = session.scalar(select(User).where(User.id == user_id).with_for_update())
@@ -253,6 +268,8 @@ class ControlPlaneService:
             ):
                 self._login_limiter.record_failure(rate_key, now=now)
                 raise AuthenticationError("invalid_credentials")
+            if user.totp_secret_ciphertext is None:
+                raise AuthenticationError("totp_required")
             session_token = self.security.issue_token(prefix="mbs", purpose="session")
             csrf_token = secrets.token_urlsafe(32)
             session.add(
@@ -266,6 +283,50 @@ class ControlPlaneService:
             )
             role = user.role
         self._login_limiter.clear(rate_key)
+        return LoginResult(
+            session_token=session_token.raw,
+            csrf_token=csrf_token,
+            username=normalized,
+            role=role,
+        )
+
+    def login_with_totp(
+        self, *, username: str, password: str, code: str, client_key: str
+    ) -> LoginResult:
+        now = self._now()
+        try:
+            normalized = self._username(username)
+        except ControlPlaneError as error:
+            raise AuthenticationError("invalid_credentials") from error
+        with self.database.session() as session:
+            user = session.scalar(select(User).where(User.username == normalized))
+            if (
+                user is None
+                or not user.is_active
+                or not self.security.passwords.verify(user.password_hash, password)
+                or user.totp_secret_ciphertext is None
+            ):
+                raise AuthenticationError("invalid_credentials")
+            try:
+                verify_code(
+                    self.security.decrypt_secret(user.totp_secret_ciphertext),
+                    code,
+                    at=now,
+                )
+            except (TotpError, ValueError) as error:
+                raise AuthenticationError("totp_invalid") from error
+            session_token = self.security.issue_token(prefix="mbs", purpose="session")
+            csrf_token = secrets.token_urlsafe(32)
+            session.add(
+                AdminSession(
+                    selector=session_token.selector,
+                    session_digest=session_token.digest,
+                    csrf_digest=self.security.digest(csrf_token, purpose="csrf"),
+                    user_id=user.id,
+                    expires_at=now + self.SESSION_TTL,
+                )
+            )
+            role = user.role
         return LoginResult(
             session_token=session_token.raw,
             csrf_token=csrf_token,
