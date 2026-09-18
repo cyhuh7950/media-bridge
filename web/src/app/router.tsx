@@ -1,4 +1,5 @@
-import { useState, type SyntheticEvent } from "react";
+import { useEffect, useState, type SyntheticEvent } from "react";
+import QRCode from "qrcode";
 import {
   BrowserRouter,
   Navigate,
@@ -43,7 +44,7 @@ function LoginPage() {
         <p>모델의 미디어 호환성과 안전 차단 상태를 관리합니다.</p>
         {auth.status === "totp_required" || auth.status === "totp_enrollment" ? (
           <form onSubmit={(event) => { event.preventDefault(); void (recoveryMode ? auth.loginWithRecoveryCode(code) : auth.verifyTotp(code)); }}>
-            {auth.status === "totp_enrollment" ? <><p>인증 앱에 다음 키를 등록하세요: <code>{auth.secret}</code></p><p><code>{auth.provisioningUri}</code></p><button type="button" onClick={() => { void auth.confirmTotpEnrollment(code); }}>등록 확인</button></> : <button type="button" onClick={() => { void auth.beginTotpEnrollment(); }}>인증 앱 등록</button>}
+            {auth.status === "totp_enrollment" ? <><p>인증 앱에서 아래 QR 코드를 스캔하세요.</p><TotpQrCode value={auth.provisioningUri} /><p>스캔할 수 없으면 다음 키를 직접 입력하세요: <code>{auth.secret}</code></p><button type="button" onClick={() => { void auth.confirmTotpEnrollment(code); }}>등록 확인</button></> : <button type="button" onClick={() => { void auth.beginTotpEnrollment(); }}>인증 앱 등록</button>}
             <label htmlFor="totp-code">인증 앱 코드</label>
             <input id="totp-code" inputMode="numeric" value={code} onChange={(event) => { setCode(event.target.value); }} required />
             <button type="submit">{recoveryMode ? "복구 코드 확인" : "코드 확인"}</button>
@@ -75,6 +76,18 @@ function LoginPage() {
       </section>
     </main>
   );
+}
+
+function TotpQrCode({ value }: { value: string }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let active = true;
+    void QRCode.toDataURL(value, { width: 220, margin: 1 })
+      .then((url) => { if (active) setSrc(url); })
+      .catch(() => { if (active) setSrc(""); });
+    return () => { active = false; };
+  }, [value]);
+  return src ? <img className="totp-qr" src={src} alt="인증 앱 등록용 QR 코드" /> : <p role="status">QR 코드를 생성하고 있습니다.</p>;
 }
 
 function ConsoleLayout() {

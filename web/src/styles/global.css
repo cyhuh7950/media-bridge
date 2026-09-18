@@ -10,6 +10,7 @@ input, textarea { min-height: 2.75rem; border: 1px solid var(--border); border-r
 .auth-card { width: min(100%, 28rem); min-width: 0; overflow: hidden; padding: clamp(1.25rem, 4vw, 2.5rem); border: 1px solid var(--border); border-radius: 1rem; background: var(--panel); box-shadow: 0 1rem 3rem rgb(19 33 31 / 10%); }
 .auth-card p { overflow-wrap: anywhere; }
 .auth-card code { display: block; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; }
+.totp-qr { display: block; width: 220px; height: 220px; max-width: 100%; margin: 0 auto 1rem; }
 .auth-card form { display: grid; gap: .7rem; margin-top: 1.5rem; }
 .eyebrow { margin: 0; color: var(--accent); font-size: .8rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .app-shell { min-height: 100vh; display: grid; grid-template: auto 1fr / 14rem 1fr; }
