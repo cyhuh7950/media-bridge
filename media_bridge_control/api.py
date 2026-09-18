@@ -28,6 +28,7 @@ from media_bridge_control.gateway_client import (
     GatewayClientError,
     HttpGatewayClient,
 )
+from media_bridge_control.provider_catalog import provider_catalog_payload
 from media_bridge_control.schemas import (
     ConnectionCreate,
     ConnectionUpdate,
@@ -438,6 +439,18 @@ def build_control_app(
         except ConfigurationError as error:
             return _error(error.code, 409)
         return JSONResponse(result, status_code=201)
+
+    async def provider_catalog(request: Request) -> Response:
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator", "viewer"}),
+        )
+        if rejected is not None:
+            return rejected
+        kind = request.query_params.get("kind", "analysis")
+        if kind not in {"analysis", "llm"}:
+            return _error("invalid_provider_catalog_kind", 400)
+        return JSONResponse(provider_catalog_payload(kind))
 
     async def provider_item(request: Request) -> Response:
         principal, rejected = await authorize(
@@ -1022,6 +1035,7 @@ def build_control_app(
                 methods=["PATCH"],
             ),
             Route("/admin/v1/providers", providers, methods=["GET", "POST"]),
+            Route("/admin/v1/provider-catalog", provider_catalog, methods=["GET"]),
             Route(
                 "/admin/v1/providers/{item_id:uuid}",
                 provider_item,

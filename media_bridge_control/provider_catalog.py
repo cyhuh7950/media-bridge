@@ -205,3 +205,19 @@ def get_provider_catalog_entry(provider_id: str) -> ProviderCatalogEntry:
     except KeyError as exc:
         raise ProviderCatalogError("provider_catalog_entry_unknown") from exc
 
+
+def provider_catalog_payload(kind: ProviderKind) -> list[dict[str, object]]:
+    """Serialize catalog metadata without including any credential value."""
+
+    return [
+        {
+            "provider_id": entry.provider_id,
+            "display_name": entry.display_name,
+            "kind": entry.kind,
+            "protocol": entry.protocol,
+            "capabilities": list(entry.capabilities),
+            "default_endpoint": entry.default_endpoint,
+            "secret_env": entry.secret_env,
+        }
+        for entry in get_provider_catalog(kind)
+    ]

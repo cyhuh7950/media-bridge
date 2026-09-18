@@ -4,6 +4,7 @@ from media_bridge_control.provider_catalog import (
     ProviderCatalogError,
     get_provider_catalog,
     get_provider_catalog_entry,
+    provider_catalog_payload,
 )
 
 
@@ -57,3 +58,18 @@ def test_provider_catalog_entry_is_lookupable_and_unknown_id_is_safe() -> None:
     with pytest.raises(ProviderCatalogError, match="provider_catalog_entry_unknown"):
         get_provider_catalog_entry("does-not-exist")
 
+
+def test_provider_catalog_payload_is_safe_for_admin_api() -> None:
+    payload = provider_catalog_payload("llm")
+
+    omniroute = next(item for item in payload if item["provider_id"] == "omniroute")
+    assert omniroute == {
+        "provider_id": "omniroute",
+        "display_name": "OmniRoute",
+        "kind": "llm",
+        "protocol": "openai-responses",
+        "capabilities": ["text"],
+        "default_endpoint": None,
+        "secret_env": "MEDIA_BRIDGE_OMNIROUTE_API_KEY",
+    }
+    assert all("api_key" not in item for item in payload)
