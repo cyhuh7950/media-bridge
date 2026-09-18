@@ -33,7 +33,7 @@ export function ProviderStep({ csrfToken, onSaved }: { csrfToken: string; onSave
     <section className="setup-card" aria-labelledby="provider-step-title">
       <p className="step-label">3 · Provider</p>
       <h1 id="provider-step-title">분석 Provider 등록</h1>
-      <p>API Secret 원문이 아닌 환경변수 이름만 저장합니다.</p>
+      <p>API Secret 원문이 아닌 환경변수 이름만 저장합니다. 실제 LLM 연동이 필요할 때 등록하면 됩니다.</p>
       <form className="form-grid" onSubmit={(event) => { void submit(event); }}>
         <label htmlFor="provider-name">Provider 이름</label>
         <input id="provider-name" value={name} onChange={(event) => { setName(event.target.value); }} required />
@@ -44,6 +44,7 @@ export function ProviderStep({ csrfToken, onSaved }: { csrfToken: string; onSave
         {error ? <p role="alert">Provider를 저장할 수 없습니다.</p> : null}
         <button type="submit">Provider 저장</button>
       </form>
+      <p><a href="/">Provider 없이 콘솔로 이동</a></p>
     </section>
   );
 }
