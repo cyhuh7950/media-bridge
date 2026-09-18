@@ -83,6 +83,7 @@ class ControlPlaneService:
         security: SecurityContext,
         now: Callable[[], datetime],
         login_limiter: LoginRateLimiter | None = None,
+        recovery_mailer: Callable[[str, str], None] | None = None,
     ) -> None:
         self.database = database
         self.security = security
@@ -91,6 +92,7 @@ class ControlPlaneService:
             limit=5,
             window=timedelta(minutes=5),
         )
+        self._recovery_mailer = recovery_mailer
 
     def now(self) -> datetime:
         return self._now()
@@ -289,7 +291,6 @@ class ControlPlaneService:
             username=normalized,
             role=role,
         )
-
     def login_with_totp(
         self, *, username: str, password: str, code: str, client_key: str
     ) -> LoginResult:
@@ -333,6 +334,29 @@ class ControlPlaneService:
             username=normalized,
             role=role,
         )
+
+    def request_recovery_code(self, *, username: str, client_key: str) -> None:
+        if self._recovery_mailer is None:
+            raise AuthenticationError("smtp_not_configured")
+        normalized = self._username(username)
+        now = self._now()
+        rate_key = f"recovery-request:{client_key}:{normalized}"
+        if not self._login_limiter.allow(rate_key, now=now):
+            raise AuthenticationError("recovery_rate_limited")
+        raw_code = secrets.token_urlsafe(18)
+        with self.database.session() as session:
+            user = session.scalar(select(User).where(User.username == normalized).with_for_update())
+            if user is None or not user.is_active or not user.recovery_email:
+                raise AuthenticationError("recovery_unavailable")
+            session.add(
+                RecoveryCode(
+                    user_id=user.id,
+                    code_digest=self.security.digest(raw_code, purpose="recovery"),
+                )
+            )
+            address = user.recovery_email
+        self._recovery_mailer(address, raw_code)
+        self._login_limiter.clear(rate_key)
 
     def create_user(self, *, username: str, password: str, role: str) -> Principal:
         if role not in {item.value for item in Role}:

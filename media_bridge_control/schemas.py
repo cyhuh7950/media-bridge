@@ -54,6 +54,10 @@ class RecoveryRequest(AdminStrictModel):
     new_password: Password
 
 
+class RecoveryCodeRequest(AdminStrictModel):
+    username: Username
+
+
 class UserCreate(AdminStrictModel):
     username: Username
     password: Password

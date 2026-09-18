@@ -42,7 +42,7 @@ from media_bridge_control.schemas import (
     ProviderCreate,
     ProviderUpdate,
     PublishSnapshotRequest,
-    RecoveryRequest,
+    RecoveryCodeRequest,
     TestLabPreviewRequest,
     TestLabRunRequest,
     TotpCodeRequest,
@@ -261,22 +261,23 @@ def build_control_app(
     async def recover(request: Request) -> Response:
         if rejected := secure_request(request):
             return rejected
+        return _error("password_change_disabled", 405)
+
+    async def recovery_request(request: Request) -> Response:
+        if rejected := secure_request(request):
+            return rejected
         try:
-            body = await _json(request, RecoveryRequest)
+            body = await _json(request, RecoveryCodeRequest)
             client_host = request.client.host if request.client is not None else "unknown"
             await run_in_threadpool(
-                service.recover_password,
+                service.request_recovery_code,
                 username=body.username,
-                recovery_code=body.recovery_code,
-                new_password=body.new_password,
                 client_key=client_host,
             )
         except AuthenticationError as error:
             status = 429 if error.code == "recovery_rate_limited" else 400
             return _error(error.code, status)
-        except ControlPlaneError as error:
-            return _error(error.code, 400)
-        return Response(status_code=204)
+        return Response(status_code=202)
 
     async def logout(request: Request) -> Response:
         if rejected := secure_request(request):
@@ -1000,6 +1001,7 @@ def build_control_app(
             Route("/admin/v1/auth/totp/login", totp_login, methods=["POST"]),
             Route("/admin/v1/auth/totp/confirm", totp_confirm, methods=["POST"]),
             Route("/admin/v1/auth/recover", recover, methods=["POST"]),
+            Route("/admin/v1/auth/recovery/request", recovery_request, methods=["POST"]),
             Route("/admin/v1/auth/logout", logout, methods=["POST"]),
             Route("/admin/v1/me", me, methods=["GET"]),
             Route("/admin/v1/users", users, methods=["GET", "POST"]),
