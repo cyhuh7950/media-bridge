@@ -13,7 +13,9 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
-SUPPORTED_REVISIONS = frozenset({None, "0001_control_plane", "0002_connections"})
+SUPPORTED_REVISIONS = frozenset(
+    {None, "0001_control_plane", "0002_connections", "0003_deployment_auth"}
+)
 
 
 class MigrationError(RuntimeError):
@@ -31,7 +33,7 @@ def run_migration(
         raise MigrationError("schema_revision_unsupported")
     if current_revision == target_revision:
         return "schema_current"
-    if current_revision == "0002_connections" and target_revision != current_revision:
+    if current_revision == "0003_deployment_auth" and target_revision != current_revision:
         raise MigrationError("schema_revision_unsupported")
     if not apply:
         return "migration_required"
@@ -76,11 +78,11 @@ def apply_database_migration(*, database_url: str, alembic_ini: Path, apply: boo
 
     result = run_migration(
         current_revision=current,
-        target_revision="0002_connections",
+        target_revision="0003_deployment_auth",
         apply=apply,
         upgrade=upgrade,
     )
-    if apply and current_revision(database_url) != "0002_connections":
+    if apply and current_revision(database_url) != "0003_deployment_auth":
         raise MigrationError("migration_verification_failed")
     return result
 

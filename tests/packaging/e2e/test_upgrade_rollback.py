@@ -26,7 +26,7 @@ def test_image_recreate_and_rollback_preserve_schema_and_snapshot(
         "-Atqc",
         "SELECT version_num FROM alembic_version",
     )
-    assert schema.stdout.strip() == "0002_connections"
+    assert schema.stdout.strip() == "0003_deployment_auth"
     candidate = {
         "MEDIA_BRIDGE_TEST_CONTROL_IMAGE": "media-bridge-control:p5-candidate",
         "MEDIA_BRIDGE_TEST_DATA_IMAGE": "media-bridge-data:p5-candidate",
