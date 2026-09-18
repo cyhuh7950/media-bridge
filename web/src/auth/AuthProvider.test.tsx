@@ -21,6 +21,7 @@ function AuthProbe() {
       </button>
     );
   }
+  if (auth.status !== "authenticated") return <p>second factor required</p>;
   return (
     <>
       <p>{auth.principal.username}:{auth.principal.role}</p>
