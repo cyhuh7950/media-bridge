@@ -90,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (state.status !== "totp_required") return;
     try {
       const response = await adminRequest<{ user_id: string; secret: string; provisioning_uri: string }>("/auth/totp/enroll", { method: "POST", body: { username: state.username, password: state.password } });
-      if (!response || typeof response.user_id !== "string") throw new SafeApiError(502, "invalid_response");
+      if (typeof response.user_id !== "string") throw new SafeApiError(502, "invalid_response");
       setState({ status: "totp_enrollment", username: state.username, password: state.password, userId: response.user_id, provisioningUri: response.provisioning_uri, secret: response.secret });
     } catch (error: unknown) {
       setState({ ...state, errorCode: error instanceof SafeApiError ? error.code : "request_failed" });
@@ -151,5 +151,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth(): AuthState & Pick<AuthContextValue, "login" | "verifyTotp" | "beginTotpEnrollment" | "confirmTotpEnrollment" | "requestRecoveryCode" | "loginWithRecoveryCode" | "logout"> {
   const context = useContext(AuthContext);
   if (context === null) throw new Error("AuthProvider is required");
-  return { ...context.state, login: context.login, logout: context.logout };
+  return {
+    ...context.state,
+    login: context.login,
+    verifyTotp: context.verifyTotp,
+    beginTotpEnrollment: context.beginTotpEnrollment,
+    confirmTotpEnrollment: context.confirmTotpEnrollment,
+    requestRecoveryCode: context.requestRecoveryCode,
+    loginWithRecoveryCode: context.loginWithRecoveryCode,
+    logout: context.logout,
+  };
 }

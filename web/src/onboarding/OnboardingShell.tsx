@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { adminRequest } from "../api/client";
 import { useAuth } from "../auth/AuthProvider";
@@ -66,6 +66,7 @@ export function OnboardingShell() {
   if (auth.status === "anonymous") {
     return <SetupLoginStep onLogin={auth.login} />;
   }
+  if (auth.status !== "authenticated") return <p role="status">2단계 인증을 완료한 뒤 온보딩을 시작하세요.</p>;
   if (auth.principal.role !== "admin") return <p role="alert">온보딩은 admin만 수행할 수 있습니다.</p>;
   if (auth.csrfToken === null) {
     return <section className="setup-card"><h1>재인증 필요</h1><p>새 설정을 저장하려면 로그아웃 후 다시 로그인하세요.</p><button type="button" onClick={() => { void auth.logout(); }}>로그아웃</button></section>;
