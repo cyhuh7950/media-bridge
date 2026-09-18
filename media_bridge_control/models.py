@@ -40,6 +40,8 @@ class User(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     username: Mapped[str] = mapped_column(String(128), unique=True)
     password_hash: Mapped[str] = mapped_column(Text)
+    totp_secret_ciphertext: Mapped[str | None] = mapped_column(Text)
+    recovery_email: Mapped[str | None] = mapped_column(String(320))
     role: Mapped[str] = mapped_column(String(16))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(

@@ -18,6 +18,7 @@ from media_bridge_control.models import (
     User,
 )
 from media_bridge_control.security import LoginRateLimiter, SecurityContext
+from media_bridge_control.totp import TotpError, generate_secret, provisioning_uri, verify_code
 
 
 class ControlPlaneError(RuntimeError):
@@ -50,6 +51,20 @@ class LoginResult:
 
 
 @dataclass(frozen=True, slots=True)
+class DefaultAdminResult:
+    user_id: str
+    username: str
+    totp_required: bool
+
+
+@dataclass(frozen=True, slots=True)
+class TotpEnrollment:
+    user_id: str
+    secret: str
+    provisioning_uri: str
+
+
+@dataclass(frozen=True, slots=True)
 class Principal:
     user_id: str
     username: str
@@ -79,6 +94,58 @@ class ControlPlaneService:
 
     def now(self) -> datetime:
         return self._now()
+
+    def ensure_default_admin(self) -> DefaultAdminResult:
+        with self.database.session() as session:
+            user = session.scalar(select(User).where(User.username == "admin").with_for_update())
+            if user is None:
+                user = User(
+                    username="admin",
+                    password_hash=self.security.passwords.hash(
+                        "admin", allow_system_default=True
+                    ),
+                    role=Role.ADMIN.value,
+                    is_active=True,
+                )
+                session.add(user)
+                session.flush()
+            return DefaultAdminResult(
+                user_id=str(user.id),
+                username=user.username,
+                totp_required=user.totp_secret_ciphertext is None,
+            )
+
+    def begin_totp_enrollment(self, *, user_id: str) -> TotpEnrollment:
+        secret = generate_secret()
+        with self.database.session() as session:
+            user = session.scalar(select(User).where(User.id == user_id).with_for_update())
+            if user is None or not user.is_active:
+                raise ControlPlaneError("user_not_found")
+            user.totp_secret_ciphertext = self.security.encrypt_secret(secret)
+            session.flush()
+            return TotpEnrollment(
+                user_id=str(user.id),
+                secret=secret,
+                provisioning_uri=provisioning_uri(
+                    secret=secret,
+                    account=user.username,
+                    issuer="Media Bridge",
+                ),
+            )
+
+    def confirm_totp_enrollment(self, *, user_id: str, code: str) -> None:
+        with self.database.session() as session:
+            user = session.scalar(select(User).where(User.id == user_id).with_for_update())
+            if user is None or not user.totp_secret_ciphertext:
+                raise AuthenticationError("totp_not_enrolled")
+            try:
+                verify_code(
+                    self.security.decrypt_secret(user.totp_secret_ciphertext),
+                    code,
+                    at=self._now(),
+                )
+            except (TotpError, ValueError) as error:
+                raise AuthenticationError("totp_invalid") from error
 
     @staticmethod
     def _username(value: str) -> str:
@@ -250,6 +317,8 @@ class ControlPlaneService:
                 )
                 if user is None:
                     raise ControlPlaneError("user_not_found")
+                if user.username == "admin" and (password is not None or is_active is False):
+                    raise ControlPlaneError("default_admin_protected")
                 next_role = role if role is not None else user.role
                 next_active = is_active if is_active is not None else user.is_active
                 if user.role == Role.ADMIN.value and user.is_active and (

@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+from base64 import urlsafe_b64encode
 from collections import OrderedDict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from argon2 import PasswordHasher as Argon2PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
+from cryptography.fernet import Fernet, InvalidToken
 
 
 class PasswordHasher:
@@ -19,8 +21,8 @@ class PasswordHasher:
     def __init__(self) -> None:
         self._hasher = Argon2PasswordHasher()
 
-    def hash(self, password: str) -> str:
-        if len(password) < 12 or len(password) > 1_024:
+    def hash(self, password: str, *, allow_system_default: bool = False) -> str:
+        if (len(password) < 12 and not allow_system_default) or len(password) > 1_024:
             raise ValueError("password length is outside the allowed range")
         return self._hasher.hash(password)
 
@@ -46,6 +48,7 @@ class SecurityContext:
             raise ValueError("security pepper must contain at least 32 bytes")
         self._pepper = pepper
         self.passwords = PasswordHasher()
+        self._fernet = Fernet(urlsafe_b64encode(hashlib.sha256(pepper).digest()))
 
     def digest(self, value: str, *, purpose: str) -> str:
         payload = f"{purpose}\0{value}".encode()
@@ -73,6 +76,15 @@ class SecurityContext:
     def matches(self, raw: str, expected_digest: str, *, purpose: str) -> bool:
         candidate = self.digest(raw, purpose=purpose)
         return hmac.compare_digest(candidate, expected_digest)
+
+    def encrypt_secret(self, value: str) -> str:
+        return self._fernet.encrypt(value.encode()).decode("ascii")
+
+    def decrypt_secret(self, value: str) -> str:
+        try:
+            return self._fernet.decrypt(value.encode("ascii")).decode()
+        except (InvalidToken, UnicodeDecodeError, ValueError) as error:
+            raise ValueError("encrypted secret is invalid") from error
 
 
 class LoginRateLimiter:
