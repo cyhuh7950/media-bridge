@@ -1,7 +1,7 @@
 # Media Bridge 배포형 운영 플랫폼 설계
 
 > 상태: 제안·검토중
-> 버전: 0.1
+> 버전: 0.2
 > 작성: 어울
 > 기준: 신산님 요구사항 정리, 2026-09-18
 
@@ -89,6 +89,37 @@ Anthropic 호환 요청은 내부 정규화 후 동일한 미디어·라우팅 �
 - 지원 목록 밖의 OpenAI 호환·Anthropic 호환 endpoint는 고급 등록에서 endpoint·protocol·모델 capability·Secret 참조를 명시하고 연결 시험을 통과해야 활성화한다.
 - OmniRoute는 Non-Vision LLM Provider 후보로 등록할 수 있다. 이는 분석 Provider 등록과 분리한다.
 
+#### OmniRoute 참조 결과와 Media Bridge 1차 목록
+
+2026-09-19 OmniRoute `공급자` 화면의 현재 카테고리와 Provider 카드를 확인했다. OmniRoute에는 `API 키 호환 제공자`, `API 키 제공자`, `Image Providers`, `Local Providers` 등이 있으며, `OpenAI 호환 추가`와 `Anthropic 호환 추가`로 알려지지 않은 endpoint를 등록할 수 있다. `Image Providers`의 Black Forest Labs·Recraft·Stability AI 등은 이미지 생성 Provider이므로 Media Bridge의 이미지 **분석** Provider 목록에 자동 포함하지 않는다.
+
+Media Bridge 카탈로그는 OmniRoute 전체 348개를 복사하지 않고, 실제 계약과 capability가 확인된 항목만 다음처럼 제공한다.
+
+| 유형 | 1차 선택 목록 | Media Bridge 역할 | 기본 프로토콜/확인 |
+| --- | --- | --- | --- |
+| 분석 | Upstage Document Parse | 문서·PDF·스크린샷 OCR | `document-digitization`; 현재 설치형·배포형 기본 분석 계약 |
+| 분석 | OpenAI Vision endpoint | 이미지 장면·텍스트 분석 | OpenAI Chat Completions 또는 Responses; vision capability 모델 확인 필요 |
+| 분석 | Anthropic Vision endpoint | 이미지 분석 | Anthropic Messages; vision capability 모델 확인 필요 |
+| 분석 | Google Gemini Vision endpoint | 이미지 분석 | Gemini 호환; 모델별 이미지 capability 확인 필요 |
+| 분석 | 사용자 정의 OpenAI/Anthropic 호환 Vision endpoint | 사내·자체 호스팅 분석 | 고급 등록에서 protocol·capability·모델을 명시하고 연결 시험 |
+| Non-Vision LLM | OmniRoute | 여러 LLM으로의 배포형 downstream | OpenAI 호환 endpoint; 배포형 Media Bridge에서 우선 연결 |
+| Non-Vision LLM | OpenAI | 텍스트 생성 | OpenAI Chat Completions/Responses; text-only 모델 선택 |
+| Non-Vision LLM | Anthropic | 텍스트 생성 | Anthropic Messages; text-only 모델 선택 |
+| Non-Vision LLM | Google Gemini | 텍스트 생성 | Gemini 호환; text-only 모델 선택 |
+| Non-Vision LLM | Upstage Solar | 텍스트 생성 | OpenAI 호환; 현재 설치형 기본 Solar profile |
+| Non-Vision LLM | Mistral | 텍스트 생성 | OpenAI 호환 또는 Provider native contract 확인 |
+| Non-Vision LLM | Groq | 텍스트 생성 | OpenAI 호환; 모델별 capability 확인 |
+| Non-Vision LLM | DeepSeek | 텍스트 생성 | OpenAI 호환; 모델별 capability 확인 |
+| Non-Vision LLM | OpenRouter | 다중 모델 gateway | OpenAI 호환; 실제 route/model readiness 확인 |
+| Non-Vision LLM | Ollama·vLLM·LM Studio | 사설망·자체 호스팅 텍스트 모델 | OpenAI 호환; 배포형에서 endpoint 접근성 확인 |
+| Non-Vision LLM | 사용자 정의 OpenAI/Anthropic 호환 endpoint | OmniRoute에 아직 없는 LLM | endpoint·protocol·모델·Secret 참조를 입력하고 connection test 후 활성화 |
+
+위 목록의 Provider 선택과 모델 활성화는 별개다. Provider를 선택한 뒤에도 실제 모델 ID, text-only/vision capability, protocol, endpoint health를 확인해야 한다. OmniRoute의 `API 키 제공자`에 포함된 230개 항목은 Media Bridge에서 자동 노출하지 않고, 카탈로그 확장 검토 대상으로 둔다. API 키가 없거나 이미지 생성만 제공하는 Provider는 분석·Non-Vision 목록에서 제외한다.
+
+#### 키 입력과 자동 설정
+
+카탈로그 선택 시 endpoint, protocol, 지원 endpoint, 기본 capability와 Secret 환경변수 참조를 자동으로 채운다. 사용자는 API 키 또는 승인된 Secret 참조만 입력한다. Provider의 실제 키 원문은 서버 Secret에 저장하고, 화면에는 selector·상태·마지막 연결 시험 결과만 표시한다. 알려지지 않은 LLM은 `OpenAI 호환 추가` 또는 `Anthropic 호환 추가`로 등록하되, 동일한 connection test와 모델 capability 확인을 통과해야 한다.
+
 ### 라우팅·모델
 
 - Provider, 모델, capability, tenant, 분석기 조합을 참조하는 라우팅 프로필을 생성·수정·비활성화한다.
@@ -168,4 +199,3 @@ Dashboard
 - PostgreSQL migration·snapshot·Secret 경계 검증
 - 설치형 회귀 테스트와 배포형 통합·브라우저·Provider 검증
 - 사용자·운영·연결·복구 매뉴얼 갱신
-

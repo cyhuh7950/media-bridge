@@ -1,6 +1,6 @@
 # 배포형 운영 플랫폼 구현 작업계획서
 
-> 기준 설계: `docs/design/DESIGN.md` v0.1
+> 기준 설계: `docs/design/DESIGN.md` v0.2
 > 상태: 제안·검토중
 > 담당: Project Main 단일 writer
 > 작업 규칙: 최신 `origin/main`에서 `codex/` branch와 `.worktree/`를 하나만 사용하고, checkpoint마다 commit·push한다. PR로만 main에 병합한다.
@@ -69,7 +69,7 @@
 - Web: `web/src/operations/ProvidersPage.tsx`, `web/src/onboarding/ProviderStep.tsx`, `web/src/app/router.tsx`
 - Test: `tests/unit/test_provider_catalog.py`, `web/src/operations/Operations.test.tsx`
 
-**산출물:** 분석 Provider와 Non-Vision LLM Provider 카탈로그, endpoint/protocol/model/capability 자동 채움, API 키·Secret 참조 입력, 연결 시험, 고급 호환 endpoint 등록.
+**산출물:** OmniRoute 2026-09-19 카탈로그 조사 결과를 반영한 분석 Provider·Non-Vision LLM Provider 카탈로그, endpoint/protocol/model/capability 자동 채움, API 키·Secret 참조 입력, 연결 시험, OpenAI/Anthropic 고급 호환 endpoint 등록. 이미지 생성 전용 Provider는 분석 목록에서 제외한다.
 
 **RED:** 임의 endpoint만 입력하고 catalog 없이 활성화, secret 원문 응답, kind가 분석/LLM과 불일치한 저장을 실패시킨다.
 
@@ -146,4 +146,3 @@
 | 일시 | 변경 | 이유 | 승인 |
 | --- | --- | --- | --- |
 | 2026-09-18 | 초안 작성 | 설치형과 차별되는 배포형 운영 범위 확정 | 검토중 |
-
