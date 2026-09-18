@@ -46,6 +46,7 @@ from media_bridge_control.schemas import (
     TestLabPreviewRequest,
     TestLabRunRequest,
     TotpCodeRequest,
+    TotpConfirmRequest,
     TotpEnrollmentRequest,
     UserCreate,
     UserUpdate,
@@ -232,6 +233,22 @@ def build_control_app(
             samesite="strict",
         )
         return response
+
+    async def totp_confirm(request: Request) -> Response:
+        if rejected := secure_request(request):
+            return rejected
+        try:
+            body = await _json(request, TotpConfirmRequest)
+            await run_in_threadpool(
+                service.confirm_totp_enrollment,
+                user_id=str(body.user_id),
+                code=body.code,
+            )
+        except AuthenticationError as error:
+            return _error(error.code, 401)
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        return Response(status_code=204)
 
     async def me(request: Request) -> Response:
         raw = request.cookies.get("mb_admin_session", "")
@@ -981,6 +998,7 @@ def build_control_app(
             Route("/admin/v1/auth/login", login, methods=["POST"]),
             Route("/admin/v1/auth/totp/enroll", totp_enroll, methods=["POST"]),
             Route("/admin/v1/auth/totp/login", totp_login, methods=["POST"]),
+            Route("/admin/v1/auth/totp/confirm", totp_confirm, methods=["POST"]),
             Route("/admin/v1/auth/recover", recover, methods=["POST"]),
             Route("/admin/v1/auth/logout", logout, methods=["POST"]),
             Route("/admin/v1/me", me, methods=["GET"]),

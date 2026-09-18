@@ -9,6 +9,18 @@ export interface LoginResponse extends Principal {
   csrf_token: string;
 }
 
+export interface TotpEnrollmentResponse {
+  user_id: string;
+  secret: string;
+  provisioning_uri: string;
+}
+
+export function isTotpEnrollmentResponse(value: unknown): value is TotpEnrollmentResponse {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.user_id === "string" && typeof candidate.secret === "string" && typeof candidate.provisioning_uri === "string";
+}
+
 export function isRole(value: unknown): value is Role {
   return value === "admin" || value === "operator" || value === "viewer";
 }

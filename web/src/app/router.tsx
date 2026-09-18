@@ -25,6 +25,7 @@ function LoginPage() {
   const auth = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,7 +40,14 @@ function LoginPage() {
         <p className="eyebrow">Media Governance Gateway</p>
         <h1 id="login-title">Media Bridge 로그인</h1>
         <p>모델의 미디어 호환성과 안전 차단 상태를 관리합니다.</p>
-        <form onSubmit={(event) => { void submit(event); }}>
+        {auth.status === "totp_required" || auth.status === "totp_enrollment" ? (
+          <form onSubmit={(event) => { event.preventDefault(); void auth.verifyTotp(code); }}>
+            {auth.status === "totp_enrollment" ? <><p>인증 앱에 다음 키를 등록하세요: <code>{auth.secret}</code></p><p><code>{auth.provisioningUri}</code></p><button type="button" onClick={() => { void auth.confirmTotpEnrollment(code); }}>등록 확인</button></> : <button type="button" onClick={() => { void auth.beginTotpEnrollment(); }}>인증 앱 등록</button>}
+            <label htmlFor="totp-code">인증 앱 코드</label>
+            <input id="totp-code" inputMode="numeric" value={code} onChange={(event) => { setCode(event.target.value); }} required />
+            <button type="submit">코드 확인</button>
+          </form>
+        ) : <form onSubmit={(event) => { void submit(event); }}>
           <label htmlFor="username">사용자 이름</label>
           <input
             id="username"
@@ -61,7 +69,7 @@ function LoginPage() {
             <p role="alert">로그인 요청을 완료하지 못했습니다.</p>
           ) : null}
           <button type="submit">로그인</button>
-        </form>
+        </form>}
       </section>
     </main>
   );

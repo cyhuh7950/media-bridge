@@ -43,6 +43,11 @@ class TotpEnrollmentRequest(AdminStrictModel):
     password: Annotated[str, StringConstraints(min_length=1, max_length=1_024)]
 
 
+class TotpConfirmRequest(AdminStrictModel):
+    user_id: UUID
+    code: Annotated[str, StringConstraints(min_length=6, max_length=6)]
+
+
 class RecoveryRequest(AdminStrictModel):
     username: Username
     recovery_code: Annotated[str, StringConstraints(min_length=16, max_length=128)]

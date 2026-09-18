@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 
 import { adminRequest } from "../api/client";
 import { useAuth } from "../auth/AuthProvider";
-import { AdminStep } from "./AdminStep";
 import { ConnectionStep } from "./ConnectionStep";
 import { ModelsStep } from "./ModelsStep";
 import { PolicyStep } from "./PolicyStep";
 import { ProviderStep } from "./ProviderStep";
 import { PublishStep } from "./PublishStep";
 import { SetupLoginStep } from "./SetupLoginStep";
-import { SystemCheckStep } from "./SystemCheckStep";
 import { deriveOnboardingStep, type OnboardingInventory } from "./onboardingState";
 
 async function loadInventory(): Promise<OnboardingInventory> {
@@ -64,12 +62,8 @@ export function OnboardingWorkflow({ csrfToken }: { csrfToken: string }) {
 
 export function OnboardingShell() {
   const auth = useAuth();
-  const [systemReady, setSystemReady] = useState(false);
-  const [bootstrapComplete, setBootstrapComplete] = useState(false);
   if (auth.status === "loading") return <p role="status">세션을 확인하고 있습니다.</p>;
   if (auth.status === "anonymous") {
-    if (!systemReady) return <SystemCheckStep onReady={() => { setSystemReady(true); }} />;
-    if (!bootstrapComplete) return <AdminStep onComplete={() => { setBootstrapComplete(true); }} />;
     return <SetupLoginStep onLogin={auth.login} />;
   }
   if (auth.principal.role !== "admin") return <p role="alert">온보딩은 admin만 수행할 수 있습니다.</p>;
