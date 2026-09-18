@@ -42,7 +42,7 @@ def test_fresh_upgrade_creates_control_plane_schema(clean_postgres: str) -> None
     with engine.connect() as connection:
         revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
     engine.dispose()
-    assert revision == "0002_connections"
+    assert revision == "0003_deployment_auth"
 
 
 def test_migration_round_trip_is_reversible(clean_postgres: str) -> None:

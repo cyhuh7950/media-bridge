@@ -24,8 +24,9 @@ def test_control_runtime_uses_injected_secrets_and_migrated_postgres(
     try:
         client = TestClient(runtime.app, base_url="https://control.test")
         assert client.get("/admin/v1/health").json() == {"status": "ok"}
-        token = runtime.service.issue_bootstrap_token()
-        assert token not in repr(runtime)
+        default_admin = runtime.service.ensure_default_admin()
+        assert default_admin.username == "admin"
+        assert default_admin.totp_required is True
         assert migrated_postgres not in repr(settings)
         assert "PRIVATE KEY" not in repr(settings)
     finally:

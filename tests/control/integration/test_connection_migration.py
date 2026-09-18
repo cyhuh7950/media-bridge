@@ -41,7 +41,7 @@ def test_connection_migration_is_reversible_and_contains_no_raw_credential_colum
     assert not columns & {"credential", "token", "secret", "password", "api_key"}
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-            "0002_connections"
+            "0003_deployment_auth"
         )
     engine.dispose()
 

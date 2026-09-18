@@ -18,7 +18,6 @@ def upgrade() -> None:
         "users",
         sa.Column("totp_required", sa.Boolean(), nullable=False, server_default=sa.false()),
     )
-    op.alter_column("users", "totp_required", server_default=None)
     op.add_column("users", sa.Column("totp_secret_ciphertext", sa.Text(), nullable=True))
     op.add_column("users", sa.Column("recovery_email", sa.String(320), nullable=True))
 
