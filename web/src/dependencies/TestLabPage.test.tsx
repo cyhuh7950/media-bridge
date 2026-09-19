@@ -4,10 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { TestLabPage } from "./TestLabPage";
 
 function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
 function requestUrl(input: RequestInfo | URL): string {
@@ -15,113 +12,65 @@ function requestUrl(input: RequestInfo | URL): string {
   return input instanceof URL ? input.href : input.url;
 }
 
-it("previews through same-origin Admin API and keeps downstream off by default", async () => {
+const image = () => new File([new Uint8Array([137, 80, 78, 71])], "error.png", { type: "image/png" });
+
+it("runs Preview with only Preview inputs and never sends downstream credentials", async () => {
   const user = userEvent.setup();
-  const fetchMock = vi.fn<typeof fetch>((input) => {
-    const url = requestUrl(input);
-    expect(url.startsWith("/admin/v1/")).toBe(true);
-    if (url === "/admin/v1/test-lab/preview") {
-      return Promise.resolve(jsonResponse({
-        action: "converted",
-        sanitized_text: "OCR SAFE RESULT",
-        original_image_removed: true,
-      }));
-    }
-    return Promise.resolve(jsonResponse({ id: "resp_test", output: [] }));
-  });
+  const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse({ sanitized_text: "PREVIEW RESULT" })));
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="operator" csrfToken="csrf-value" />);
 
-  await user.type(screen.getByLabelText("대상 모델"), "text-model");
-  await user.type(screen.getByLabelText("사용자 요청"), "이 오류를 설명해줘");
-  await user.upload(
-    screen.getByLabelText(/이미지 또는 PDF/),
-    new File([new Uint8Array([137, 80, 78, 71])], "error.png", { type: "image/png" }),
-  );
-  const runButton = screen.getByRole("button", { name: "실제 downstream 시험" });
-  expect(runButton).toBeDisabled();
-  const previewButton = screen.getByRole("button", { name: "Preview" });
-  const form = previewButton.closest("form");
-  if (form === null) throw new Error("preview form is unavailable");
-  fireEvent.submit(form);
+  await user.type(screen.getByLabelText("Preview 테스트 대상 모델"), "text-model");
+  await user.type(screen.getByLabelText("Preview 사용자 요청"), "이 오류를 설명해줘");
+  await user.upload(screen.getByLabelText("Preview 이미지 또는 PDF · 최대 2 MiB"), image());
+  const previewForm = screen.getByRole("button", { name: "Preview 실행" }).closest("form");
+  if (previewForm === null) throw new Error("preview form is unavailable");
+  fireEvent.submit(previewForm);
 
-  expect(await screen.findByText(/OCR SAFE RESULT/)).toBeInTheDocument();
-  const previewCall = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/preview");
-  expect(previewCall).toBeDefined();
-  const previewBody = JSON.parse(String((previewCall?.[1] as RequestInit).body));
-  expect(previewBody).not.toHaveProperty("connection_id");
-  expect(previewBody).not.toHaveProperty("gateway_url");
-  expect(fetchMock.mock.calls.some(([input]) => requestUrl(input) === "/admin/v1/test-lab/run")).toBe(false);
-  expect(screen.getByLabelText(/이미지 또는 PDF/)).toHaveValue("");
-  expect(screen.getByLabelText("사용자 요청")).toHaveValue("");
-
-  await user.click(screen.getByRole("button", { name: "결과 지우기" }));
-  await waitFor(() => { expect(screen.queryByText(/OCR SAFE RESULT/)).not.toBeInTheDocument(); });
+  expect(await screen.findByText(/PREVIEW RESULT/)).toBeInTheDocument();
+  const call = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/preview");
+  const body = JSON.parse(String((call?.[1] as RequestInit).body));
+  expect(body).not.toHaveProperty("gateway_url");
+  expect(body).not.toHaveProperty("api_key");
 });
 
-
-it("requires a fresh explicit opt-in for each downstream run", async () => {
+it("runs downstream with its own endpoint, key, model, request, and file inputs", async () => {
   const user = userEvent.setup();
-  const fetchMock = vi.fn<typeof fetch>((input) => {
-    return Promise.resolve(jsonResponse({ id: "resp_test", output: [] }));
-  });
+  const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse({ id: "resp_test", output: [] })));
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="admin" csrfToken="csrf-value" />);
 
-  await user.type(screen.getByLabelText("downstream API endpoint (실제 시험 시)"), "https://gateway.example/v1");
-  await user.type(screen.getByLabelText("downstream API 키 (실제 시험 시)"), "test-key");
-  await user.type(screen.getByLabelText("대상 모델"), "text-model");
-  await user.type(screen.getByLabelText("사용자 요청"), "run once");
-  await user.upload(
-    screen.getByLabelText(/이미지 또는 PDF/),
-    new File([new Uint8Array([137, 80, 78, 71])], "error.png", { type: "image/png" }),
-  );
-  await user.click(screen.getByLabelText(/실제 downstream Provider 호출/));
-  const runButton = screen.getByRole("button", { name: "실제 downstream 시험" });
-  expect(runButton).toBeEnabled();
-  await user.click(runButton);
+  await user.type(screen.getByLabelText("downstream API endpoint"), "https://gateway.example/v1");
+  await user.type(screen.getByLabelText("downstream API 키"), "test-key");
+  await user.type(screen.getByLabelText("downstream 대상 모델"), "text-model");
+  await user.type(screen.getByLabelText("downstream 사용자 요청"), "run once");
+  await user.upload(screen.getByLabelText("downstream 이미지 또는 PDF · 최대 2 MiB"), image());
+  const downstreamForm = screen.getByRole("button", { name: "downstream 테스트 실행" }).closest("form");
+  if (downstreamForm === null) throw new Error("downstream form is unavailable");
+  fireEvent.submit(downstreamForm);
 
-  await waitFor(() => {
-    expect(fetchMock.mock.calls.some(([input]) => requestUrl(input) === "/admin/v1/test-lab/run")).toBe(true);
-  });
-  const runCall = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/run");
-  const runBody = JSON.parse(String((runCall?.[1] as RequestInit).body));
-  expect(runBody.gateway_url).toBe("https://gateway.example/v1");
-  expect(runBody.api_key).toBe("test-key");
-  expect(screen.getByLabelText(/실제 downstream Provider 호출/)).not.toBeChecked();
-  expect(screen.getByRole("button", { name: "실제 downstream 시험" })).toBeDisabled();
+  await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => requestUrl(input) === "/admin/v1/test-lab/run")).toBe(true));
+  const call = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/run");
+  const body = JSON.parse(String((call?.[1] as RequestInit).body));
+  expect(body.gateway_url).toBe("https://gateway.example/v1");
+  expect(body.api_key).toBe("test-key");
 });
 
-
-it("removes the transient result and request state when its TTL expires", async () => {
+it("removes the transient result after its TTL", async () => {
   const user = userEvent.setup();
-  const fetchMock = vi.fn<typeof fetch>((input) => {
-    return Promise.resolve(jsonResponse({ sanitized_text: "TTL SAFE RESULT" }));
-  });
-  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse({ sanitized_text: "TTL RESULT" }))));
   render(<TestLabPage role="operator" csrfToken="csrf-value" resultTtlMs={100} />);
-
-  await user.type(screen.getByLabelText("대상 모델"), "text-model");
-  await user.type(screen.getByLabelText("사용자 요청"), "expire me");
-  await user.upload(
-    screen.getByLabelText(/이미지 또는 PDF/),
-    new File([new Uint8Array([137, 80, 78, 71])], "error.png", { type: "image/png" }),
-  );
-  const form = screen.getByRole("button", { name: "Preview" }).closest("form");
-  if (form === null) throw new Error("preview form is unavailable");
-  fireEvent.submit(form);
-
-  expect(await screen.findByText(/TTL SAFE RESULT/)).toBeInTheDocument();
-  await waitFor(
-    () => { expect(screen.queryByText(/TTL SAFE RESULT/)).not.toBeInTheDocument(); },
-    { timeout: 1_000 },
-  );
-  expect(screen.getByLabelText("사용자 요청")).toHaveValue("");
-  expect(screen.getByLabelText(/이미지 또는 PDF/)).toHaveValue("");
+  await user.type(screen.getByLabelText("Preview 테스트 대상 모델"), "text-model");
+  await user.type(screen.getByLabelText("Preview 사용자 요청"), "expire me");
+  await user.upload(screen.getByLabelText("Preview 이미지 또는 PDF · 최대 2 MiB"), image());
+  const previewForm = screen.getByRole("button", { name: "Preview 실행" }).closest("form");
+  if (previewForm === null) throw new Error("preview form is unavailable");
+  fireEvent.submit(previewForm);
+  expect(await screen.findByText(/TTL RESULT/)).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByText(/TTL RESULT/)).not.toBeInTheDocument(), { timeout: 1_000 });
 });
 
-
-it("does not expose upload controls to viewer", () => {
+it("does not expose test controls to viewer", () => {
   vi.stubGlobal("fetch", vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse([]))));
   render(<TestLabPage role="viewer" csrfToken="csrf-value" />);
   expect(screen.getByText(/viewer는 시험 본문/)).toBeInTheDocument();

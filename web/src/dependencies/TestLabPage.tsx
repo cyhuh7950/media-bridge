@@ -29,125 +29,109 @@ function resultRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-interface TestLabPageProps extends OperationsProps {
-  resultTtlMs?: number;
-}
+interface TestLabPageProps extends OperationsProps { resultTtlMs?: number; }
 
 export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: TestLabPageProps) {
-  const [gatewayUrl, setGatewayUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [targetModel, setTargetModel] = useState("");
-  const [profile, setProfile] = useState("generic");
-  const [userRequest, setUserRequest] = useState("");
-  const [media, setMedia] = useState<File | null>(null);
-  const [executeDownstream, setExecuteDownstream] = useState(false);
+  const [previewModel, setPreviewModel] = useState("");
+  const [previewProfile, setPreviewProfile] = useState("generic");
+  const [previewRequest, setPreviewRequest] = useState("");
+  const [previewMedia, setPreviewMedia] = useState<File | null>(null);
+  const [downstreamUrl, setDownstreamUrl] = useState("");
+  const [downstreamKey, setDownstreamKey] = useState("");
+  const [downstreamModel, setDownstreamModel] = useState("");
+  const [downstreamProfile, setDownstreamProfile] = useState("generic");
+  const [downstreamRequest, setDownstreamRequest] = useState("");
+  const [downstreamMedia, setDownstreamMedia] = useState<File | null>(null);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const previewFileInput = useRef<HTMLInputElement>(null);
+  const downstreamFileInput = useRef<HTMLInputElement>(null);
   const writable = role !== "viewer" && csrfToken !== null;
 
   useEffect(() => {
     if (result === null) return;
     const timer = window.setTimeout(() => {
-      setResult(null);
-      setUserRequest("");
-      setMedia(null);
-      setExecuteDownstream(false);
-      if (fileInput.current) fileInput.current.value = "";
+      setResult(null); setPreviewRequest(""); setPreviewMedia(null);
+      setDownstreamRequest(""); setDownstreamMedia(null);
+      if (previewFileInput.current) previewFileInput.current.value = "";
+      if (downstreamFileInput.current) downstreamFileInput.current.value = "";
     }, resultTtlMs);
     return () => { window.clearTimeout(timer); };
   }, [result, resultTtlMs]);
 
   function clearTransient() {
-    setResult(null);
-    setUserRequest("");
-    setMedia(null);
-    setExecuteDownstream(false);
-    if (fileInput.current) fileInput.current.value = "";
+    setResult(null); setPreviewRequest(""); setPreviewMedia(null);
+    setDownstreamRequest(""); setDownstreamMedia(null);
+    if (previewFileInput.current) previewFileInput.current.value = "";
+    if (downstreamFileInput.current) downstreamFileInput.current.value = "";
   }
 
   async function submit(event: SyntheticEvent, run: boolean) {
     event.preventDefault();
-    if (!writable || media === null || (run && (!executeDownstream || !gatewayUrl || !apiKey))) return;
-    if (media.size < 1 || media.size > MAX_MEDIA_BYTES) {
-      setError(true);
-      clearTransient();
-      return;
-    }
-    const currentMedia = media;
-    const currentRequest = userRequest;
-    setResult(null);
-    setError(false);
-    setMedia(null);
-    setUserRequest("");
-    setExecuteDownstream(false);
-    if (fileInput.current) fileInput.current.value = "";
+    const media = run ? downstreamMedia : previewMedia;
+    const userRequest = run ? downstreamRequest : previewRequest;
+    const targetModel = run ? downstreamModel : previewModel;
+    const profile = run ? downstreamProfile : previewProfile;
+    if (!writable || media === null || (run && (!downstreamUrl || !downstreamKey))) return;
+    if (media.size < 1 || media.size > MAX_MEDIA_BYTES) { setError(true); clearTransient(); return; }
+    setResult(null); setError(false);
     try {
-      const mediaBase64 = await toBase64(currentMedia);
-      const mediaType = currentMedia.type === "application/pdf" ? "pdf" : "image";
+      const mediaBase64 = await toBase64(media);
+      const mediaType = media.type === "application/pdf" ? "pdf" : "image";
       const response = await adminRequest<unknown>(run ? "/test-lab/run" : "/test-lab/preview", {
-        method: "POST",
-        csrfToken,
+        method: "POST", csrfToken,
         body: {
-          ...(run ? { gateway_url: gatewayUrl, api_key: apiKey } : {}),
-          target_model: targetModel,
-          conversion_profile: profile,
-          user_request: currentRequest,
-          media_type: mediaType,
-          filename: currentMedia.name,
-          declared_mime: currentMedia.type,
-          media_base64: mediaBase64,
-          ...(run ? { execute_downstream: true } : {}),
+          ...(run ? { gateway_url: downstreamUrl, api_key: downstreamKey, execute_downstream: true } : {}),
+          target_model: targetModel, conversion_profile: profile, user_request: userRequest,
+          media_type: mediaType, filename: media.name, declared_mime: media.type, media_base64: mediaBase64,
         },
       });
       setResult(resultRecord(response));
-    } catch {
-      setError(true);
-    }
+    } catch { setError(true); }
   }
 
-  if (!writable) {
-    return <section aria-labelledby="test-lab-title"><h1 id="test-lab-title">테스트 랩</h1><p>viewer는 시험 본문을 만들거나 downstream을 호출할 수 없습니다.</p></section>;
-  }
+  if (!writable) return <section aria-labelledby="test-lab-title"><h1 id="test-lab-title">테스트 랩</h1><p>viewer는 시험 본문을 만들거나 downstream을 호출할 수 없습니다.</p></section>;
 
-  return (
-    <section aria-labelledby="test-lab-title">
-      <h1 id="test-lab-title">테스트 랩</h1>
-      <p>Preview는 provider를 호출하지 않습니다. 실제 downstream 시험은 매번 명시적으로 허용해야 합니다.</p>
-      <section aria-labelledby="deployment-endpoints-title" className="result-panel">
-        <h2 id="deployment-endpoints-title">배포형 Media Bridge API endpoint</h2>
-        <p>기본 주소: <code>https://media-bridge.sinsan.kr</code></p>
-        <ul>
-          <li>OpenAI Responses API: <code>https://media-bridge.sinsan.kr/v1/responses</code></li>
-          <li>OpenAI Chat Completions: <code>https://media-bridge.sinsan.kr/v1/chat/completions</code></li>
-          <li>모델 조회: <code>https://media-bridge.sinsan.kr/v1/models</code></li>
-          <li>MCP: <code>https://media-bridge.sinsan.kr/mcp</code></li>
-          <li>Asset 업로드: <code>https://media-bridge.sinsan.kr/assets</code></li>
-        </ul>
-        <p>Provider 등록용 기본 endpoint: <code>https://media-bridge.sinsan.kr/v1</code></p>
-        <p>실제 downstream 시험은 아래에 endpoint와 API 키를 직접 입력합니다.</p>
-      </section>
-      <form className="form-grid compact-form" onSubmit={(event) => { void submit(event, false); }}>
-        <label htmlFor="test-lab-endpoint">downstream API endpoint (실제 시험 시)</label>
-        <input id="test-lab-endpoint" type="url" value={gatewayUrl} onChange={(event) => { setGatewayUrl(event.target.value); }} placeholder="https://gateway.example/v1" pattern="https://.*" />
-        <label htmlFor="test-lab-api-key">downstream API 키 (실제 시험 시)</label>
-        <input id="test-lab-api-key" type="password" value={apiKey} onChange={(event) => { setApiKey(event.target.value); }} autoComplete="off" />
-        <label htmlFor="test-lab-model">대상 모델</label>
-        <input id="test-lab-model" value={targetModel} onChange={(event) => { setTargetModel(event.target.value); }} pattern="[a-z0-9][a-z0-9./:_-]*" required />
-        <label htmlFor="test-lab-profile">변환 profile</label>
-        <select id="test-lab-profile" value={profile} onChange={(event) => { setProfile(event.target.value); }}>
-          <option value="generic">generic</option><option value="error_screenshot">error_screenshot</option><option value="document">document</option>
-        </select>
-        <label htmlFor="test-lab-request">사용자 요청</label>
-        <textarea id="test-lab-request" value={userRequest} onChange={(event) => { setUserRequest(event.target.value); }} required />
-        <label htmlFor="test-lab-media">이미지 또는 PDF · 최대 2 MiB</label>
-        <input ref={fileInput} id="test-lab-media" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(event) => { setMedia(event.target.files?.[0] ?? null); }} required />
-        <div className="inline-actions"><button type="submit">Preview</button></div>
-        <label className="checkbox-row" htmlFor="test-lab-downstream"><input id="test-lab-downstream" type="checkbox" checked={executeDownstream} onChange={(event) => { setExecuteDownstream(event.target.checked); }} /><span>실제 downstream Provider 호출과 비용 발생을 이번 1회에 한해 허용합니다.</span></label>
-        <button type="button" disabled={!executeDownstream} onClick={(event) => { void submit(event, true); }}>실제 downstream 시험</button>
-      </form>
-      {error ? <p role="alert">시험을 안전하게 완료하지 못했습니다.</p> : null}
-      {result ? <section className="result-panel" aria-label="시험 결과"><div className="inline-actions"><strong>일시 결과</strong><button className="secondary-button" type="button" onClick={clearTransient}>결과 지우기</button></div><pre>{JSON.stringify(result, null, 2)}</pre></section> : null}
+  return <section aria-labelledby="test-lab-title">
+    <h1 id="test-lab-title">테스트 랩</h1>
+    <p>Preview와 실제 downstream 테스트는 입력과 실행을 분리합니다.</p>
+    <section aria-labelledby="deployment-endpoints-title" className="result-panel">
+      <h2 id="deployment-endpoints-title">배포형 Media Bridge API endpoint</h2>
+      <p>기본 주소: <code>https://media-bridge.sinsan.kr</code></p>
+      <ul>
+        <li>OpenAI Responses API: <code>https://media-bridge.sinsan.kr/v1/responses</code></li>
+        <li>OpenAI Chat Completions: <code>https://media-bridge.sinsan.kr/v1/chat/completions</code></li>
+        <li>모델 조회: <code>https://media-bridge.sinsan.kr/v1/models</code></li>
+        <li>MCP: <code>https://media-bridge.sinsan.kr/mcp</code></li>
+        <li>Asset 업로드: <code>https://media-bridge.sinsan.kr/assets</code></li>
+      </ul>
+      <p>Provider 등록용 기본 endpoint: <code>https://media-bridge.sinsan.kr/v1</code></p>
     </section>
-  );
+    <section aria-labelledby="preview-test-title" className="result-panel">
+      <h2 id="preview-test-title">Preview 테스트</h2>
+      <p>Provider나 downstream을 호출하지 않고 입력과 변환 결과만 확인합니다.</p>
+      <form className="form-grid compact-form" onSubmit={(event) => { void submit(event, false); }}>
+        <label htmlFor="preview-model">Preview 테스트 대상 모델</label><input id="preview-model" value={previewModel} onChange={(event) => { setPreviewModel(event.target.value); }} pattern="[a-z0-9][a-z0-9./:_-]*" required />
+        <label htmlFor="preview-profile">변환 profile</label><select id="preview-profile" value={previewProfile} onChange={(event) => { setPreviewProfile(event.target.value); }}><option value="generic">generic</option><option value="error_screenshot">error_screenshot</option><option value="document">document</option></select>
+        <label htmlFor="preview-request">Preview 사용자 요청</label><textarea id="preview-request" value={previewRequest} onChange={(event) => { setPreviewRequest(event.target.value); }} required />
+        <label htmlFor="preview-media">Preview 이미지 또는 PDF · 최대 2 MiB</label><input ref={previewFileInput} id="preview-media" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(event) => { setPreviewMedia(event.target.files?.[0] ?? null); }} required />
+        <button type="submit">Preview 실행</button>
+      </form>
+    </section>
+    <section aria-labelledby="downstream-test-title" className="result-panel">
+      <h2 id="downstream-test-title">실제 downstream 테스트</h2>
+      <p>입력한 endpoint로 실제 호출합니다. 호출할 때마다 API 키를 직접 입력합니다.</p>
+      <form className="form-grid compact-form" onSubmit={(event) => { void submit(event, true); }}>
+        <label htmlFor="downstream-endpoint">downstream API endpoint</label><input id="downstream-endpoint" type="url" value={downstreamUrl} onChange={(event) => { setDownstreamUrl(event.target.value); }} placeholder="https://gateway.example/v1" pattern="https://.*" required />
+        <label htmlFor="downstream-api-key">downstream API 키</label><input id="downstream-api-key" type="password" value={downstreamKey} onChange={(event) => { setDownstreamKey(event.target.value); }} autoComplete="off" required />
+        <label htmlFor="downstream-model">downstream 대상 모델</label><input id="downstream-model" value={downstreamModel} onChange={(event) => { setDownstreamModel(event.target.value); }} pattern="[a-z0-9][a-z0-9./:_-]*" required />
+        <label htmlFor="downstream-profile">변환 profile</label><select id="downstream-profile" value={downstreamProfile} onChange={(event) => { setDownstreamProfile(event.target.value); }}><option value="generic">generic</option><option value="error_screenshot">error_screenshot</option><option value="document">document</option></select>
+        <label htmlFor="downstream-request">downstream 사용자 요청</label><textarea id="downstream-request" value={downstreamRequest} onChange={(event) => { setDownstreamRequest(event.target.value); }} required />
+        <label htmlFor="downstream-media">downstream 이미지 또는 PDF · 최대 2 MiB</label><input ref={downstreamFileInput} id="downstream-media" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(event) => { setDownstreamMedia(event.target.files?.[0] ?? null); }} required />
+        <button type="submit">downstream 테스트 실행</button>
+      </form>
+    </section>
+    {error ? <p role="alert">시험을 안전하게 완료하지 못했습니다.</p> : null}
+    {result ? <section className="result-panel" aria-label="시험 결과"><div className="inline-actions"><strong>일시 결과</strong><button className="secondary-button" type="button" onClick={clearTransient}>결과 지우기</button></div><pre>{JSON.stringify(result, null, 2)}</pre></section> : null}
+  </section>;
 }

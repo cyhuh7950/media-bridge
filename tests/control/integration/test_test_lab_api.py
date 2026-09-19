@@ -74,7 +74,7 @@ def test_preview_has_zero_downstream_and_run_requires_literal_opt_in(
     )
     assert missing_opt_in.status_code == 400
     assert false_opt_in.status_code == 400
-    assert gateway.calls == ["upload", "prepare", "delete"]
+    assert gateway.calls == []
 
     run = client.post(
         "/admin/v1/test-lab/run",

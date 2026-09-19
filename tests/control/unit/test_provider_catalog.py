@@ -71,5 +71,6 @@ def test_provider_catalog_payload_is_safe_for_admin_api() -> None:
         "capabilities": ["text"],
         "default_endpoint": None,
         "secret_env": "MEDIA_BRIDGE_OMNIROUTE_API_KEY",
+        "default_model_id": "auto",
     }
     assert all("api_key" not in item for item in payload)

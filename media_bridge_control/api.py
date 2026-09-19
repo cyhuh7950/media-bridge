@@ -709,6 +709,34 @@ def build_control_app(
             return _error(error.code, status)
         return Response(status_code=204)
 
+    async def credential_revoke(request: Request) -> Response:
+        principal, rejected = await authorize(
+            request,
+            roles=frozenset({"admin"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
+        if await request.body() not in {b"", b"{}"}:
+            return _error("invalid_request", 400)
+        selector = request.path_params["selector"]
+        try:
+            await run_in_threadpool(credentials.revoke, selector)
+            await run_in_threadpool(
+                audit.write,
+                actor_id=principal.user_id,
+                action="credential.revoked",
+                target_type="credential",
+                target_id=selector,
+                details={"status": "revoked"},
+            )
+        except CredentialError as error:
+            status = 404 if error.code == "credential_not_found" else 400
+            return _error(error.code, status)
+        return Response(status_code=204)
+
     async def connection_collection(request: Request) -> Response:
         writable = request.method == "POST"
         principal, rejected = await authorize(
@@ -1124,6 +1152,11 @@ def build_control_app(
                 "/admin/v1/credentials/{selector:str}",
                 credential_item,
                 methods=["DELETE"],
+            ),
+            Route(
+                "/admin/v1/credentials/{selector:str}/revoke",
+                credential_revoke,
+                methods=["POST"],
             ),
             Route(
                 "/admin/v1/connections",

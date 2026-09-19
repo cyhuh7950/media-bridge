@@ -125,6 +125,18 @@ class CredentialService:
                 raise CredentialError("credential_not_found")
             session.delete(stored)
 
+    def revoke(self, selector: str) -> None:
+        with self._database.session() as session:
+            stored = session.scalar(
+                select(ClientCredential)
+                .where(ClientCredential.selector == selector)
+                .with_for_update()
+            )
+            if stored is None:
+                raise CredentialError("credential_not_found")
+            if stored.revoked_at is None:
+                stored.revoked_at = self._now()
+
     def list(self) -> list[dict[str, Any]]:
         with self._database.session() as session:
             rows = list(
