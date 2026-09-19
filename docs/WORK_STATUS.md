@@ -85,3 +85,11 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - `0006_provider_api_keys` adds the encrypted column and permits DB-backed references. The migration was applied on ysna-server after replacing the existing provider secret constraint transactionally.
 - Control image rebuilt and redeployed; Control and PostgreSQL containers are healthy. Data Plane remains snapshot-dependent.
 - Web targeted tests (10), lint, TypeScript check, and production build passed before deployment.
+
+## 2026-09-19 — Provider CRUD 화면 표준 수정·ysna-server 재배포
+
+- `7998cb3` adds the standard Providers list actions: `Provider 등록` opens a dialog, each writable row has `수정`, and selected rows can be removed with `선택 삭제` after confirmation. Viewer remains read-only.
+- Regression coverage added for registration dialog, edit dialog prefill, and bulk DELETE requests. Web tests `29 passed`, lint passed, TypeScript check and production build passed.
+- Rebuilt and redeployed `media-bridge-control:0.1.0-deploy` on ysna-server from the pushed branch commit.
+- Deployment initially restarted because existing Secret files were `ubuntu:ubuntu 0400` while the image runs as UID `10001`; values were not changed. Secret ownership was corrected to `10001:10001` with mode `0400`; Control and PostgreSQL are healthy afterward.
+- Data Plane remains restarting because the signed snapshot is still absent; this is outside the Provider screen change and requires initial snapshot publish before gateway traffic.
