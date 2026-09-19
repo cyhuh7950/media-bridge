@@ -225,3 +225,10 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - Provider 카탈로그의 base endpoint(`/v1`)는 downstream protocol에 맞는 `/chat/completions` 또는 `/responses`로 보정하고, Document Parse OCR 옵션을 함께 전송한다.
 - 웹 Test Lab 테스트 3개, TypeScript/build, Python ruff·compileall 통과. `317b012` 기준 ysna-server 재배포 후 `/test-lab` HTTP 200 확인.
 - PostgreSQL integration `test_test_lab_api.py`는 기존 preview 검증 계약을 전제로 해 새 실제 호출 계약에 맞춘 별도 갱신이 필요하며, 이번 확인에서 실행이 정체되어 PASS로 판정하지 않았다.
+
+## 2026-09-20 — Test Lab managed access-key selection
+
+- OmniRoute → Media Bridge 시험의 키 라벨을 OmniRoute API key에서 Media Bridge 접근 키로 수정했다.
+- 접근 키 관리 목록에서 `responses:invoke` 권한이 있고 폐기되지 않은 키를 선택할 수 있게 했다. 원문 키는 일회성 발급 정책상 서버에서 복구하지 않고, 사용자가 보관한 `mbc_...` 원문을 별도 입력한다.
+- TestLabPage 웹 테스트 4개와 TypeScript/build 통과.
+- `033295c`를 ysna-server `/home/ubuntu/deploy/media-bridge-033295c`에 배포했고 Control 컨테이너 `healthy`를 확인했다. 기존 `tests/control/integration/test_configuration_api.py`와 `.pr-body.md`는 미관련 dirty 상태로 보존했다.
