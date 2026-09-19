@@ -77,3 +77,11 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - `37aad3d` allows the administrative console and setup navigation before the first signed snapshot; the snapshot remains required only for gateway traffic.
 - Targeted guard/API tests (10 passed), lint, TypeScript check, and production build passed.
 - Rebuilt and redeployed Control on ysna-server; container is healthy.
+
+## 2026-09-19 — encrypted Provider API key deployment
+
+- `e051d8a` adds encrypted Provider API key persistence using the existing SecurityContext Fernet key; Provider responses expose only `has_api_key`.
+- Provider create/onboarding and operations forms accept an API key without requiring an environment-variable reference.
+- `0006_provider_api_keys` adds the encrypted column and permits DB-backed references. The migration was applied on ysna-server after replacing the existing provider secret constraint transactionally.
+- Control image rebuilt and redeployed; Control and PostgreSQL containers are healthy. Data Plane remains snapshot-dependent.
+- Web targeted tests (10), lint, TypeScript check, and production build passed before deployment.
