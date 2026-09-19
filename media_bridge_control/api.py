@@ -916,10 +916,10 @@ def build_control_app(
             await run_in_threadpool(
                 audit.write,
                 actor_id=principal.user_id,
-                action="test_lab.previewed",
+                action="test_lab.executed",
                 target_type="test_lab",
-                target_id=body.gateway_url,
-                details={"status": str(result.get("action", "completed"))},
+                target_id=target_id,
+                details={"status": "completed", "ok": bool(result.get("ok"))},
             )
         except ControlPlaneError as error:
             return _error(error.code, 400)
@@ -927,7 +927,7 @@ def build_control_app(
             await run_in_threadpool(
                 audit.write,
                 actor_id=principal.user_id,
-                action="test_lab.preview_failed",
+                action="test_lab.execution_failed",
                 target_type="test_lab",
                 target_id=target_id,
                 details={"reason_code": error.code, "status": "failed"},
