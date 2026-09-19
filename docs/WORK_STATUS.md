@@ -163,3 +163,11 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - Provider 응답에 적용 모델을 표시하고 `0007_provider_models` migration으로 사용자 지정 모델을 저장한다.
 - Web 테스트 30 passed, lint·TypeScript·build·ruff·compileall 통과. 기존 PostgreSQL 통합 테스트는 로컬 fixture 기동 지연으로 미검증이다.
 - 다음 단계: 커밋 후 ysna-server에 migration 적용과 Control 재배포, 공개 URL 확인.
+
+## 2026-09-19 — Provider 기준 모델 migration guard 수정 및 재배포
+
+- `9e69566`에서 배포 마이그레이션 스크립트가 `0007_provider_models`를 지원하고 해당 head까지 자동 적용하도록 수정했다.
+- ysna-server 재배포 시 `0006_provider_api_keys -> 0007_provider_models`가 적용되었고 DB `alembic_version`은 `0007_provider_models`이다.
+- Control 및 PostgreSQL 컨테이너는 `healthy`이며 Control 로그에서 migration 완료와 Uvicorn 기동을 확인했다.
+- 서버 내부 공개 URL 확인: `/`, `/providers`, `/routing`, `/models` 모두 HTTP 200. Data Plane은 기존과 같이 서명된 초기 snapshot 부재로 재시작 중이다.
+- 로컬 Windows에는 Python 실행기가 없어 migration pytest를 실행하지 못했다. Web 30 tests, lint, TypeScript/build와 배포 전 compileall 결과는 앞선 커밋 검증을 유지한다.
