@@ -133,3 +133,4 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - 수정: 실제 오류 코드가 있는 경우에만 경고를 표시하고, 로그아웃 후 로그인 화면은 깨끗하게 표시한다.
 - Web 테스트 `30 passed`, lint, TypeScript 검사와 production build 통과.
 - ysna-server 배포 설정에 프록시 `FORWARDED_ALLOW_IPS=172.26.0.3`을 복구해 공개 로그인 요청이 `https_required`로 거부되지 않도록 했다. `admin/admin` API 응답은 이제 예상된 `totp_required`다.
+- 배포 완료: `1cd737c` 기준 Control 이미지를 재빌드·재기동했고 health가 `healthy`; 공개 `/`와 `/providers`는 HTTP 200이다. 브라우저에서 로그아웃 후 로그인 화면에 오류 경고가 남지 않는 것을 확인했다.
