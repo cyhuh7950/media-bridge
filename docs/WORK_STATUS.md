@@ -107,3 +107,5 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - 수정: 세션 복구 시 백엔드가 새 CSRF 토큰을 발급하고, 프런트가 이를 메모리 상태에 반영하도록 했다. 기존 CSRF 검증은 유지한다.
 - 검증: Web 테스트 `29 passed`, lint, TypeScript 검사, production build, Python `compileall` 통과. PostgreSQL 통합 테스트는 Windows 로컬 fixture 기동이 멈춰 미검증이며 통과로 표시하지 않았다.
 - 다음 조치: 이 커밋을 ysna-server Control 이미지로 배포하고 공개 `/providers`에서 새로고침 후 관리자 등록 버튼과 실제 등록/수정/삭제를 확인한다.
+- 배포 완료: `7fcf220` 기준 Control 이미지를 ysna-server에서 재빌드·재기동했고 컨테이너 health가 `healthy`가 되었다. 공개 `/`와 `/providers`는 HTTP 200을 반환했다.
+- Data Plane은 서명된 초기 snapshot 부재로 계속 재시작 중이며, 이번 관리자 콘솔 수정과 무관하다. 브라우저 관리자 smoke는 신산님이 수행한다.
