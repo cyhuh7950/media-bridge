@@ -254,6 +254,7 @@ class DataPlaneAuthMiddleware:
             "/assets": "gateway.assets",
             "/status": "gateway.status",
             "/v1/prepare": "gateway.prepare",
+            "/v1/models": "gateway.models",
             "/v1/responses": "gateway.responses",
             "/mcp": "gateway.mcp",
         }[route_key]
@@ -285,6 +286,8 @@ class DataPlaneAuthMiddleware:
             return "mcp:invoke", "/status"
         if path == "/v1/prepare":
             return "mcp:invoke", "/v1/prepare"
+        if path == "/v1/models":
+            return "responses:invoke", "/v1/models"
         if path == "/v1/responses":
             return "responses:invoke", "/v1/responses"
         if path == "/mcp":
@@ -355,6 +358,21 @@ def build_gateway_app(
         if generation is None:
             return _error("gateway_unavailable", "Gateway is unavailable.", 503)
         return JSONResponse({"status": "ready", "snapshot_version": generation.version})
+
+    async def models(_: Request) -> JSONResponse:
+        generation = current_generation.get()
+        if generation is None:
+            return _error("gateway_unavailable", "Gateway is unavailable.", 503)
+        configured = generation.models
+        return JSONResponse(
+            {
+                "object": "list",
+                "data": [
+                    {"id": model_id, "object": "model", "owned_by": "media-bridge"}
+                    for model_id in configured
+                ],
+            }
+        )
 
     async def upload_asset(request: Request) -> JSONResponse:
         body = bytearray()
@@ -520,6 +538,7 @@ def build_gateway_app(
     )
     routes: list[Route | Mount] = [
         Route("/status", status, methods=["GET"]),
+        Route("/v1/models", models, methods=["GET"]),
         Route("/assets", upload_asset, methods=["POST"]),
         Route("/assets/{asset_id:str}", delete_asset, methods=["DELETE"]),
         Route("/v1/prepare", prepare, methods=["POST"]),

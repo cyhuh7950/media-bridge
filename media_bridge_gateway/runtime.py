@@ -39,6 +39,7 @@ class GatewayGeneration:
     service: MediaBridgeService
     state_store: GatewayStateStore
     transaction: GatewayTransaction
+    models: tuple[str, ...] = ()
 
 
 class GenerationFactory(Protocol):
@@ -98,6 +99,11 @@ class GatewayTransactionFactory:
             service=service,
             state_store=state_store,
             transaction=transaction,
+            models=tuple(
+                item
+                for item in snapshot.body.get("models", [])
+                if isinstance(item, str) and item
+            ),
         )
 
 
