@@ -49,6 +49,7 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
   const [error, setError] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const writable = role !== "viewer" && csrfToken !== null;
+  const selectedConnection = (connections ?? []).find((item) => textField(item, "id") === connectionId);
 
   useEffect(() => {
     if (result === null) return;
@@ -123,8 +124,9 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
         <label htmlFor="test-lab-connection">Connection</label>
         <select id="test-lab-connection" value={connectionId} onChange={(event) => { setConnectionId(event.target.value); }} required>
           <option value="">선택</option>
-          {(connections ?? []).filter((item) => textField(item, "status") !== "revoked").map((item) => <option key={textField(item, "id")} value={textField(item, "id")}>{textField(item, "name")}</option>)}
+          {(connections ?? []).filter((item) => textField(item, "status") !== "revoked").map((item) => <option key={textField(item, "id")} value={textField(item, "id")}>{textField(item, "name")} — {textField(item, "gateway_url")}</option>)}
         </select>
+        {selectedConnection ? <p role="status">API endpoint: {textField(selectedConnection, "gateway_url")}</p> : null}
         <label htmlFor="test-lab-model">대상 모델</label>
         <input id="test-lab-model" value={targetModel} onChange={(event) => { setTargetModel(event.target.value); }} pattern="[a-z0-9][a-z0-9./:_-]*" required />
         <label htmlFor="test-lab-profile">변환 profile</label>
