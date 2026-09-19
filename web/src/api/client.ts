@@ -34,7 +34,7 @@ function adminUrl(path: string): string {
   if (!path.startsWith("/") || path.startsWith("//") || path.includes("://")) {
     throw new SafeApiError(0, "invalid_admin_path");
   }
-  const root = path.slice(1).split("/", 1)[0];
+  const root = path.slice(1).split(/[/?]/, 1)[0];
   if (!root || !ADMIN_ROOTS.has(root)) {
     throw new SafeApiError(0, "invalid_admin_path");
   }

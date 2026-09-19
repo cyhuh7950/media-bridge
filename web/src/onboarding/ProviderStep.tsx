@@ -41,7 +41,7 @@ export function ProviderStep({ csrfToken, onSaved }: { csrfToken: string; onSave
     <section className="setup-card" aria-labelledby="provider-step-title">
       <p className="step-label">3 · Provider</p>
       <h1 id="provider-step-title">Provider 연결 설정</h1>
-      <p>분석 Provider 또는 Non-Vision LLM Provider를 선택하고 API Secret의 환경변수 이름만 등록합니다.</p>
+      <p>Provider 연결은 선택 사항입니다. 지금 설정하거나 나중에 콘솔에서 등록할 수 있습니다.</p>
       <form className="form-grid" onSubmit={(event) => { void submit(event); }}>
         <label htmlFor="provider-kind">Provider 유형</label>
         <select id="provider-kind" value={kind} onChange={(event) => { setKind(event.target.value as ManagedProviderKind); setCatalogId(""); }}>
@@ -65,7 +65,7 @@ export function ProviderStep({ csrfToken, onSaved }: { csrfToken: string; onSave
         {error ? <p role="alert">Provider를 저장할 수 없습니다.</p> : null}
         <button type="submit">Provider 저장</button>
       </form>
-      <p><a href="/">Provider 없이 콘솔로 이동</a></p>
+      <p><a href="/">지금은 건너뛰고 콘솔로 이동</a></p>
     </section>
   );
 }

@@ -37,6 +37,17 @@ describe("adminRequest", () => {
     },
   );
 
+  it("allows query parameters on approved admin paths", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse([]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(adminRequest("/provider-catalog?kind=analysis")).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/admin/v1/provider-catalog?kind=analysis",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
   it("reduces 401 and 403 responses to a safe code without retaining the body", async () => {
     const marker = "browser-secret-marker";
     vi.stubGlobal(
