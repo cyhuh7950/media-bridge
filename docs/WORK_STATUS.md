@@ -140,3 +140,4 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - 좌측 메뉴, 대시보드·Provider·라우팅·모델·정책·스냅샷·감사·시스템·연결·테스트 랩 화면의 사용자 노출 문구를 한국어로 통일한다.
 - `upstage-document-parse`, `upstage-solar`, Endpoint URL과 같은 Provider 식별자·고유명사·기술 값은 원문을 유지한다.
 - Web 테스트 `30 passed`, lint, TypeScript 검사와 production build 통과 후 ysna-server에 재배포한다.
+- 배포 완료: `8c6e555` 기준 Control 이미지를 재빌드·재기동했고 health가 `healthy`; 공개 HTML은 최신 한국어 UI 번들을 제공하며 `/`·`/providers`는 HTTP 200이다.
