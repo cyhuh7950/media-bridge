@@ -1,50 +1,17 @@
 import { useState, type SyntheticEvent } from "react";
-
 import { adminRequest } from "../api/client";
 import { textField, type OperationsProps } from "./operationTypes";
 import { useAdminList } from "./useAdminList";
 
+type Model = Record<string, unknown>;
 export function ModelsPage({ role, csrfToken }: OperationsProps) {
   const { items, failed, reload } = useAdminList("/models");
-  const [modelId, setModelId] = useState("");
-  const [evidence, setEvidence] = useState("");
-  const [saveFailed, setSaveFailed] = useState(false);
-  const writable = role !== "viewer" && csrfToken !== null;
-
-  async function submit(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!writable) return;
-    const reviewed = new Date();
-    try {
-      await adminRequest("/models", {
-        method: "POST",
-        csrfToken,
-        body: {
-          model_id: modelId,
-          aliases: [],
-          input_modalities: ["text"],
-          evidence,
-          reviewed_at: reviewed.toISOString(),
-          expires_at: new Date(reviewed.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          pdf_passthrough_verified: false,
-        },
-      });
-      setModelId("");
-      setEvidence("");
-      setSaveFailed(false);
-      await reload();
-    } catch {
-      setSaveFailed(true);
-    }
-  }
-
-  return (
-    <section aria-labelledby="models-title">
-      <h1 id="models-title">모델</h1>
-      <p>Capability가 확인되지 않거나 만료되면 fail-closed로 처리됩니다.</p>
-      {failed ? <p role="alert">Model 목록을 불러올 수 없습니다.</p> : null}
-      {items ? <table><thead><tr><th>Model ID</th><th>근거</th><th>만료</th></tr></thead><tbody>{items.map((item) => <tr key={textField(item, "id")}><td>{textField(item, "model_id")}</td><td>{textField(item, "evidence")}</td><td>{textField(item, "expires_at")}</td></tr>)}</tbody></table> : null}
-      {writable ? <form className="form-grid compact-form" onSubmit={(event) => { void submit(event); }}><h2>Non-Vision model 추가</h2><label htmlFor="operation-model-id">Model ID</label><input id="operation-model-id" value={modelId} onChange={(event) => { setModelId(event.target.value); }} required /><label htmlFor="operation-model-evidence">Capability 근거</label><textarea id="operation-model-evidence" value={evidence} onChange={(event) => { setEvidence(event.target.value); }} required />{saveFailed ? <p role="alert">Model을 저장할 수 없습니다.</p> : null}<button type="submit">Model 추가</button></form> : <p>viewer는 Model capability를 읽기만 할 수 있습니다.</p>}
-    </section>
-  );
+  const [dialog, setDialog] = useState<"create" | "edit" | null>(null); const [editingId, setEditingId] = useState("");
+  const [modelId, setModelId] = useState(""); const [evidence, setEvidence] = useState(""); const [selected, setSelected] = useState<string[]>([]); const [actionFailed, setActionFailed] = useState(false);
+  const writable = role !== "viewer" && csrfToken !== null; const allSelected = !!items?.length && selected.length === items.length;
+  function openCreate() { setDialog("create"); setEditingId(""); setModelId(""); setEvidence(""); setActionFailed(false); }
+  function openEdit(item: Model) { setDialog("edit"); setEditingId(textField(item, "id")); setModelId(textField(item, "model_id")); setEvidence(textField(item, "evidence")); setActionFailed(false); }
+  async function submit(event: SyntheticEvent<HTMLFormElement>) { event.preventDefault(); if (!writable || !dialog) return; try { const now = new Date(); const body = { model_id: modelId, aliases: [], input_modalities: ["text"], evidence, reviewed_at: now.toISOString(), expires_at: new Date(now.getTime() + 30 * 86400000).toISOString(), pdf_passthrough_verified: false }; if (dialog === "edit") await adminRequest(`/models/${editingId}`, { method: "PATCH", csrfToken, body }); else await adminRequest("/models", { method: "POST", csrfToken, body }); setDialog(null); await reload(); } catch { setActionFailed(true); } }
+  async function removeSelected() { if (!writable || !selected.length || !window.confirm("선택한 모델을 삭제하시겠습니까?")) return; try { await Promise.all(selected.map((id) => adminRequest(`/models/${id}`, { method: "DELETE", csrfToken }))); setSelected([]); await reload(); } catch { setActionFailed(true); } }
+  return <section aria-labelledby="models-title"><div className="page-heading"><div><h1 id="models-title">모델 관리</h1><p>Provider의 기준 모델과 선택 모델의 capability를 관리합니다.</p></div>{writable ? <button type="button" onClick={openCreate}>모델 등록</button> : null}</div>{failed ? <p role="alert">모델 목록을 불러올 수 없습니다.</p> : null}{actionFailed ? <p role="alert">모델 작업을 완료하지 못했습니다.</p> : null}{items?.length === 0 && !failed ? <p role="status">등록된 모델이 없습니다.</p> : null}{items && items.length > 0 ? <>{writable && selected.length ? <div className="inline-actions"><button type="button" className="danger-button" onClick={() => { void removeSelected(); }}>선택 삭제 ({selected.length})</button></div> : null}<table><thead><tr>{writable ? <th><input aria-label="전체 모델 선택" type="checkbox" checked={allSelected} onChange={(e) => { setSelected(e.target.checked ? items.map((i) => textField(i, "id")) : []); }} /></th> : null}<th>모델 ID</th><th>근거</th><th>만료</th>{writable ? <th>작업</th> : null}</tr></thead><tbody>{items.map((item) => { const id = textField(item, "id"); return <tr key={id}>{writable ? <td><input aria-label={`${textField(item, "model_id")} 선택`} type="checkbox" checked={selected.includes(id)} onChange={(e) => { setSelected((s) => e.target.checked ? [...s, id] : s.filter((v) => v !== id)); }} /></td> : null}<td>{textField(item, "model_id")}</td><td>{textField(item, "evidence")}</td><td>{textField(item, "expires_at")}</td>{writable ? <td><button type="button" className="secondary-button" onClick={() => { openEdit(item); }}>수정</button></td> : null}</tr>; })}</tbody></table></> : null}{!writable ? <p>viewer는 모델 설정을 읽기만 할 수 있습니다.</p> : null}{dialog ? <section className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="model-dialog-title"><form className="dialog-card form-grid" onSubmit={(e) => { void submit(e); }}><h2 id="model-dialog-title">{dialog === "create" ? "모델 등록" : "모델 수정"}</h2><label htmlFor="operation-model-id">모델 ID</label><input id="operation-model-id" value={modelId} onChange={(e) => { setModelId(e.target.value); }} required /><label htmlFor="operation-model-evidence">Capability 근거</label><textarea id="operation-model-evidence" value={evidence} onChange={(e) => { setEvidence(e.target.value); }} required /><div className="inline-actions"><button type="submit">{dialog === "create" ? "등록" : "저장"}</button><button type="button" className="secondary-button" onClick={() => { setDialog(null); }}>취소</button></div></form></section> : null}</section>;
 }

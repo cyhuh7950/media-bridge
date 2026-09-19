@@ -144,10 +144,11 @@ it("shows an issued credential once and clears it on close", async () => {
   const user = userEvent.setup();
 
   render(<CredentialsPage role="admin" csrfToken="csrf-memory-only" />);
-  await user.type(await screen.findByLabelText("credential 이름"), "agent");
+  await user.click(await screen.findByRole("button", { name: "접근 키 발급" }));
+  await user.type(screen.getByLabelText("접근 키 이름"), "agent");
   await user.click(screen.getByLabelText("Asset 업로드 (assets:write)"));
-  await user.click(screen.getByLabelText("Responses downstream 실행 (responses:invoke)"));
-  await user.click(screen.getByRole("button", { name: "접근 credential 생성" }));
+  await user.click(screen.getByLabelText("Responses 실행 (responses:invoke)"));
+  await user.click(screen.getByRole("button", { name: "발급" }));
 
   expect(await screen.findByText(credential)).toBeInTheDocument();
   const createCall = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");

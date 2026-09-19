@@ -1,39 +1,9 @@
 import { useState, type SyntheticEvent } from "react";
-
 import { adminRequest } from "../api/client";
 import { booleanField, numberField, textField, type OperationsProps } from "./operationTypes";
 import { useAdminList } from "./useAdminList";
-
-export function PoliciesPage({ role, csrfToken }: OperationsProps) {
-  const { items, failed, reload } = useAdminList("/policies");
-  const [name, setName] = useState("");
-  const [saveFailed, setSaveFailed] = useState(false);
-  const writable = role !== "viewer" && csrfToken !== null;
-
-  async function submit(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!writable) return;
-    try {
-      await adminRequest("/policies", {
-        method: "POST",
-        csrfToken,
-        body: { name, max_files: 4, max_media_bytes: 2_097_152, max_pdf_pages: 20, allow_url: false, allow_base64: true, allow_asset: true, allow_local_path: false, fail_closed: true },
-      });
-      setName("");
-      setSaveFailed(false);
-      await reload();
-    } catch {
-      setSaveFailed(true);
-    }
-  }
-
-  return (
-    <section aria-labelledby="policies-title">
-      <h1 id="policies-title">정책</h1>
-      <p>Fail-closed와 미디어 입력 경계를 확인합니다.</p>
-      {failed ? <p role="alert">Policy 목록을 불러올 수 없습니다.</p> : null}
-      {items ? <table><thead><tr><th>이름</th><th>최대 파일</th><th>PDF 페이지</th><th>Fail closed</th></tr></thead><tbody>{items.map((item) => <tr key={textField(item, "id")}><td>{textField(item, "name")}</td><td>{numberField(item, "max_files") ?? "—"}</td><td>{numberField(item, "max_pdf_pages") ?? "—"}</td><td>{booleanField(item, "fail_closed") === true ? "true" : "invalid"}</td></tr>)}</tbody></table> : null}
-      {writable ? <form className="form-grid compact-form" onSubmit={(event) => { void submit(event); }}><h2>Fail-closed policy 추가</h2><label htmlFor="operation-policy-name">Policy 이름</label><input id="operation-policy-name" value={name} onChange={(event) => { setName(event.target.value); }} required />{saveFailed ? <p role="alert">Policy를 저장할 수 없습니다.</p> : null}<button type="submit">Policy 추가</button></form> : <p>viewer는 Policy를 읽기만 할 수 있습니다.</p>}
-    </section>
-  );
-}
+export function PoliciesPage({ role, csrfToken }: OperationsProps) { const { items, failed, reload } = useAdminList("/policies"); const [dialog, setDialog] = useState<"create" | "edit" | null>(null); const [editingId, setEditingId] = useState(""); const [name, setName] = useState(""); const [selected, setSelected] = useState<string[]>([]); const [actionFailed, setActionFailed] = useState(false); const writable = role !== "viewer" && csrfToken !== null; const allSelected = !!items?.length && selected.length === items.length;
+  function openCreate() { setDialog("create"); setEditingId(""); setName(""); } function openEdit(item: Record<string, unknown>) { setDialog("edit"); setEditingId(textField(item, "id")); setName(textField(item, "name")); }
+  async function submit(e: SyntheticEvent<HTMLFormElement>) { e.preventDefault(); if (!writable || !dialog) return; try { const body = { name, max_files: 4, max_media_bytes: 2097152, max_pdf_pages: 20, allow_url: false, allow_base64: true, allow_asset: true, allow_local_path: false, fail_closed: true }; if (dialog === "edit") await adminRequest(`/policies/${editingId}`, { method: "PATCH", csrfToken, body }); else await adminRequest("/policies", { method: "POST", csrfToken, body }); setDialog(null); await reload(); } catch { setActionFailed(true); } }
+  async function remove() { if (!writable || !selected.length || !window.confirm("선택한 정책을 삭제하시겠습니까?")) return; try { await Promise.all(selected.map((id) => adminRequest(`/policies/${id}`, { method: "DELETE", csrfToken }))); setSelected([]); await reload(); } catch { setActionFailed(true); } }
+  return <section aria-labelledby="policies-title"><div className="page-heading"><div><h1 id="policies-title">정책 관리</h1><p>미디어 입력 경계와 fail‑closed 정책을 관리합니다.</p></div>{writable ? <button type="button" onClick={openCreate}>정책 등록</button> : null}</div>{failed ? <p role="alert">정책 목록을 불러올 수 없습니다.</p> : null}{actionFailed ? <p role="alert">정책 작업을 완료하지 못했습니다.</p> : null}{items?.length === 0 && !failed ? <p role="status">등록된 정책이 없습니다.</p> : null}{items && items.length > 0 ? <>{writable && selected.length ? <div className="inline-actions"><button type="button" className="danger-button" onClick={() => { void remove(); }}>선택 삭제 ({selected.length})</button></div> : null}<table><thead><tr>{writable ? <th><input aria-label="전체 정책 선택" type="checkbox" checked={allSelected} onChange={(e) => { setSelected(e.target.checked ? items.map((i) => textField(i, "id")) : []); }} /></th> : null}<th>이름</th><th>최대 파일</th><th>PDF 페이지</th><th>Fail‑closed</th>{writable ? <th>작업</th> : null}</tr></thead><tbody>{items.map((item) => { const id = textField(item, "id"); return <tr key={id}>{writable ? <td><input aria-label={`${textField(item, "name")} 선택`} type="checkbox" checked={selected.includes(id)} onChange={(e) => { setSelected((s) => e.target.checked ? [...s, id] : s.filter((v) => v !== id)); }} /></td> : null}<td>{textField(item, "name")}</td><td>{numberField(item, "max_files") ?? "—"}</td><td>{numberField(item, "max_pdf_pages") ?? "—"}</td><td>{booleanField(item, "fail_closed") === true ? "활성" : "비활성"}</td>{writable ? <td><button type="button" className="secondary-button" onClick={() => { openEdit(item); }}>수정</button></td> : null}</tr>; })}</tbody></table></> : null}{!writable ? <p>viewer는 정책 설정을 읽기만 할 수 있습니다.</p> : null}{dialog ? <section className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="policy-dialog-title"><form className="dialog-card form-grid" onSubmit={(e) => { void submit(e); }}><h2 id="policy-dialog-title">{dialog === "create" ? "정책 등록" : "정책 수정"}</h2><label htmlFor="operation-policy-name">정책 이름</label><input id="operation-policy-name" value={name} onChange={(e) => { setName(e.target.value); }} required /><p>기본 미디어 제한과 fail‑closed가 적용됩니다.</p><div className="inline-actions"><button type="submit">{dialog === "create" ? "등록" : "저장"}</button><button type="button" className="secondary-button" onClick={() => { setDialog(null); }}>취소</button></div></form></section> : null}</section>; }

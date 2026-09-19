@@ -38,14 +38,15 @@ it("uses only same-origin Admin API, clears the Secret reference, and exposes ro
   render(<ConnectionsPage role="admin" csrfToken="csrf-value" />);
 
   expect(await screen.findByText("primary")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "연결 등록" }));
   await user.type(screen.getByLabelText("이름"), "secondary");
   await user.type(screen.getByLabelText("Gateway HTTPS URL"), "https://gateway.example.test");
   await user.selectOptions(screen.getByLabelText("Secret 참조 종류"), "docker_secret");
   const secretInput = screen.getByLabelText("Secret 식별자");
   await user.type(secretInput, "gateway_client_credential");
-  await user.click(screen.getByRole("button", { name: "Connection 추가" }));
+  await user.click(screen.getByRole("button", { name: "등록" }));
 
-  await waitFor(() => { expect(secretInput).toHaveValue(""); });
+  await waitFor(() => { expect(screen.queryByLabelText("Secret 식별자")).not.toBeInTheDocument(); });
   const createCall = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
   expect(createCall?.[0]).toBe("/admin/v1/connections");
   const createBody = createCall?.[1]?.body;
@@ -59,7 +60,8 @@ it("uses only same-origin Admin API, clears the Secret reference, and exposes ro
   });
   expect(document.body.textContent).not.toContain("gateway_client_credential");
   expect(screen.getByRole("button", { name: "연결 시험" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "폐기" })).toBeInTheDocument();
+  await user.click(screen.getByLabelText("primary 선택"));
+  expect(screen.getByRole("button", { name: /선택 폐기/ })).toBeInTheDocument();
 });
 
 
@@ -67,7 +69,7 @@ it("keeps viewer read-only at the UI while loading actual API state", async () =
   vi.stubGlobal("fetch", vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse([]))));
   render(<ConnectionsPage role="viewer" csrfToken="csrf-value" />);
 
-  expect(await screen.findByText(/viewer는 Connection을 읽기만/)).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Connection 추가" })).not.toBeInTheDocument();
+  expect(await screen.findByText(/viewer는 연결을 읽기만/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "연결 등록" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "연결 시험" })).not.toBeInTheDocument();
 });

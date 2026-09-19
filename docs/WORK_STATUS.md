@@ -141,3 +141,11 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - `upstage-document-parse`, `upstage-solar`, Endpoint URL과 같은 Provider 식별자·고유명사·기술 값은 원문을 유지한다.
 - Web 테스트 `30 passed`, lint, TypeScript 검사와 production build 통과 후 ysna-server에 재배포한다.
 - 배포 완료: `8c6e555` 기준 Control 이미지를 재빌드·재기동했고 health가 `healthy`; 공개 HTML은 최신 한국어 UI 번들을 제공하며 `/`·`/providers`는 HTTP 200이다.
+
+## 2026-09-19 — 관리 화면 표준화 및 라우팅 프로필 일괄 삭제
+
+- 라우팅 프로필, 모델, 정책, 접근 키, 연결 화면을 목록 중심으로 정리하고 등록·수정은 팝업, 삭제·폐기는 선택 일괄 작업으로 통일했다.
+- 라우팅 프로필은 분석 Provider와 Non‑Vision LLM Provider의 N:N 연결을 유지하며 우선순위·대체 경로·상태 우선·비용 우선 전략을 한국어로 표시한다.
+- 라우팅 프로필 DELETE API를 추가했다.
+- Web 테스트 30 passed, lint와 TypeScript/build 통과. Python compileall·git diff --check 통과.
+- ysna-server 재배포와 실제 브라우저 smoke는 다음 단계다.

@@ -521,6 +521,12 @@ def build_control_app(
         if rejected is not None:
             return rejected
         try:
+            if request.method == "DELETE":
+                await run_in_threadpool(
+                    configuration.delete_routing_profile,
+                    request.path_params["item_id"],
+                )
+                return Response(status_code=204)
             body = await _json(request, RoutingProfileUpdate)
             result = await run_in_threadpool(
                 configuration.update_routing_profile,
@@ -1092,7 +1098,7 @@ def build_control_app(
             Route(
                 "/admin/v1/routing-profiles/{item_id:uuid}",
                 routing_profile_item,
-                methods=["PATCH"],
+                methods=["PATCH", "DELETE"],
             ),
             Route(
                 "/admin/v1/providers/{item_id:uuid}",

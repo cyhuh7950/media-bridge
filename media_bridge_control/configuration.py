@@ -134,7 +134,11 @@ class ConfigurationService:
             "protocol": protocol,
             "capabilities": sorted(capabilities),
             "secret_ref_kind": "db" if request.api_key is not None else request.secret_ref.kind,
-            "secret_ref_identifier": "provider_api_key" if request.api_key is not None else request.secret_ref.identifier,
+            "secret_ref_identifier": (
+                "provider_api_key"
+                if request.api_key is not None
+                else request.secret_ref.identifier
+            ),
             "enabled": request.enabled,
         }
 
@@ -216,6 +220,13 @@ class ConfigurationService:
             raise ConfigurationError("configuration_conflict") from error
         except (ValidationError, ValueError) as error:
             raise ConfigurationError("invalid_configuration") from error
+
+    def delete_routing_profile(self, profile_id: UUID) -> None:
+        with self._database.session() as session:
+            row = session.get(RoutingProfile, profile_id)
+            if row is None:
+                raise ConfigurationError("configuration_not_found")
+            session.delete(row)
 
     @staticmethod
     def _routing_provider_ids(

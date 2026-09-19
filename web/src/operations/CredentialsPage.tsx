@@ -1,75 +1,13 @@
 import { useState, type SyntheticEvent } from "react";
-
 import { adminRequest } from "../api/client";
 import { SecretOnceDialog } from "../components/SecretOnceDialog";
 import { safeItemPath, textField, type OperationsProps } from "./operationTypes";
 import { useAdminList } from "./useAdminList";
-
-interface CredentialResponse {
-  credential: string;
-}
-
-type CredentialScope = "assets:write" | "mcp:invoke" | "responses:invoke";
-
-const SCOPE_OPTIONS: readonly { value: CredentialScope; label: string }[] = [
-  { value: "assets:write", label: "Asset 업로드 (assets:write)" },
-  { value: "mcp:invoke", label: "MCP 호출 (mcp:invoke)" },
-  { value: "responses:invoke", label: "Responses downstream 실행 (responses:invoke)" },
-];
-
-export function CredentialsPage({ role, csrfToken }: OperationsProps) {
-  const allowed = role === "admin";
-  const { items, failed, reload } = useAdminList(allowed ? "/credentials" : null);
-  const [name, setName] = useState("");
-  const [scopes, setScopes] = useState<CredentialScope[]>(["mcp:invoke"]);
-  const [credential, setCredential] = useState<string | null>(null);
-  const [saveFailed, setSaveFailed] = useState(false);
-
-  if (!allowed) return <p role="alert">Client credential 관리는 admin만 수행할 수 있습니다.</p>;
-
-  async function submit(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (csrfToken === null || scopes.length === 0) return;
-    try {
-      const selectedScopes = SCOPE_OPTIONS
-        .filter((option) => scopes.includes(option.value))
-        .map((option) => option.value);
-      const issued = await adminRequest<CredentialResponse>("/credentials", { method: "POST", csrfToken, body: { name, scopes: selectedScopes } });
-      if (typeof issued.credential !== "string") throw new Error("invalid response");
-      setCredential(issued.credential);
-      setName("");
-      setScopes(["mcp:invoke"]);
-      setSaveFailed(false);
-    } catch {
-      setSaveFailed(true);
-    }
-  }
-
-  async function revoke(selector: string) {
-    if (csrfToken === null || !window.confirm("이 credential을 폐기하시겠습니까?")) return;
-    await adminRequest(safeItemPath("credentials", selector), { method: "DELETE", csrfToken });
-    await reload();
-  }
-
-  async function closeSecret() {
-    setCredential(null);
-    await reload();
-  }
-
-  function toggleScope(scope: CredentialScope, checked: boolean) {
-    setScopes((current) => checked
-      ? [...current.filter((item) => item !== scope), scope]
-      : current.filter((item) => item !== scope));
-  }
-
-  return (
-    <section aria-labelledby="credentials-title">
-      <h1 id="credentials-title">접근 키</h1>
-      <p>발급된 원문은 한 번만 표시되며, 이 화면은 연결 성공을 의미하지 않습니다.</p>
-      {failed ? <p role="alert">Credential 목록을 불러올 수 없습니다.</p> : null}
-      {items ? <table><thead><tr><th>이름</th><th>Selector</th><th>상태</th><th>작업</th></tr></thead><tbody>{items.map((item) => { const selector = textField(item, "selector"); return <tr key={selector}><td>{textField(item, "name")}</td><td>{selector}</td><td>{textField(item, "revoked_at") === "—" ? "active" : "revoked"}</td><td><button type="button" onClick={() => { void revoke(selector); }}>폐기</button></td></tr>; })}</tbody></table> : null}
-      {csrfToken ? <form className="form-grid compact-form" onSubmit={(event) => { void submit(event); }}><label htmlFor="operation-credential-name">credential 이름</label><input id="operation-credential-name" value={name} onChange={(event) => { setName(event.target.value); }} required /><fieldset><legend>권한 scope</legend>{SCOPE_OPTIONS.map((option) => <label className="checkbox-row" key={option.value}><input type="checkbox" checked={scopes.includes(option.value)} onChange={(event) => { toggleScope(option.value, event.target.checked); }} /><span>{option.label}</span></label>)}</fieldset><p>Test Lab media Preview에는 assets:write, downstream 실행에는 responses:invoke가 추가로 필요합니다.</p>{saveFailed ? <p role="alert">Credential을 생성할 수 없습니다.</p> : null}<button type="submit" disabled={scopes.length === 0}>접근 credential 생성</button></form> : <p role="alert">변경하려면 다시 로그인하세요.</p>}
-      {credential ? <SecretOnceDialog title="일회용 client credential" values={[credential]} closeLabel="확인하고 닫기" onClose={() => { void closeSecret(); }} /> : null}
-    </section>
-  );
-}
+interface CredentialResponse { credential: string; }
+type Scope = "assets:write" | "mcp:invoke" | "responses:invoke";
+const scopes: readonly { value: Scope; label: string }[] = [{ value: "assets:write", label: "Asset 업로드" }, { value: "mcp:invoke", label: "MCP 호출" }, { value: "responses:invoke", label: "Responses 실행" }];
+export function CredentialsPage({ role, csrfToken }: OperationsProps) { const allowed = role === "admin"; const { items, failed, reload } = useAdminList(allowed ? "/credentials" : null); const [dialog, setDialog] = useState(false); const [name, setName] = useState(""); const [selectedScopes, setSelectedScopes] = useState<Scope[]>(["mcp:invoke"]); const [selected, setSelected] = useState<string[]>([]); const [credential, setCredential] = useState<string | null>(null); const [failedAction, setFailedAction] = useState(false); const writable = allowed && csrfToken !== null; if (!allowed) return <p role="alert">접근 키 관리는 관리자만 수행할 수 있습니다.</p>; const allSelected = !!items?.length && selected.length === items.length;
+  function openCreate() { setDialog(true); setName(""); setSelectedScopes(["mcp:invoke"]); setFailedAction(false); } function toggleScope(scope: Scope, checked: boolean) { setSelectedScopes((current) => checked ? [...current, scope].filter((v, i, a) => a.indexOf(v) === i) : current.filter((v) => v !== scope)); }
+  async function submit(e: SyntheticEvent<HTMLFormElement>) { e.preventDefault(); if (!writable || !selectedScopes.length) return; try { const orderedScopes = scopes.filter((scope) => selectedScopes.includes(scope.value)).map((scope) => scope.value); const result = await adminRequest<CredentialResponse>("/credentials", { method: "POST", csrfToken, body: { name, scopes: orderedScopes } }); setCredential(result.credential); setDialog(false); await reload(); } catch { setFailedAction(true); } }
+  async function revokeSelected() { if (!writable || !selected.length || !window.confirm("선택한 접근 키를 폐기하시겠습니까?")) return; try { await Promise.all(selected.map((id) => adminRequest(safeItemPath("credentials", id), { method: "DELETE", csrfToken }))); setSelected([]); await reload(); } catch { setFailedAction(true); } }
+  return <section aria-labelledby="credentials-title"><div className="page-heading"><div><h1 id="credentials-title">접근 키 관리</h1><p>발급된 원문은 한 번만 표시되며, 키 상태와 권한만 관리합니다.</p></div>{writable ? <button type="button" onClick={openCreate}>접근 키 발급</button> : null}</div>{failed ? <p role="alert">접근 키 목록을 불러올 수 없습니다.</p> : null}{failedAction ? <p role="alert">접근 키 작업을 완료하지 못했습니다.</p> : null}{items?.length === 0 && !failed ? <p role="status">발급된 접근 키가 없습니다.</p> : null}{items && items.length > 0 ? <>{selected.length ? <div className="inline-actions"><button type="button" className="danger-button" onClick={() => { void revokeSelected(); }}>선택 폐기 ({selected.length})</button></div> : null}<table><thead><tr><th><input aria-label="전체 접근 키 선택" type="checkbox" checked={allSelected} onChange={(e) => { setSelected(e.target.checked ? items.map((i) => textField(i, "selector")) : []); }} /></th><th>이름</th><th>Selector</th><th>상태</th></tr></thead><tbody>{items.map((item) => { const id = textField(item, "selector"); return <tr key={id}><td><input aria-label={`${textField(item, "name")} 선택`} type="checkbox" checked={selected.includes(id)} onChange={(e) => { setSelected((s) => e.target.checked ? [...s, id] : s.filter((v) => v !== id)); }} /></td><td>{textField(item, "name")}</td><td>{id}</td><td>{textField(item, "revoked_at") === "—" ? "활성" : "폐기"}</td></tr>; })}</tbody></table></> : null}{dialog ? <section className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="credential-dialog-title"><form className="dialog-card form-grid" onSubmit={(e) => { void submit(e); }}><h2 id="credential-dialog-title">접근 키 발급</h2><label htmlFor="operation-credential-name">접근 키 이름</label><input id="operation-credential-name" value={name} onChange={(e) => { setName(e.target.value); }} required /><fieldset><legend>권한</legend>{scopes.map((scope) => <label className="checkbox-row" key={scope.value}><input type="checkbox" checked={selectedScopes.includes(scope.value)} onChange={(e) => { toggleScope(scope.value, e.target.checked); }} /><span>{scope.label} ({scope.value})</span></label>)}</fieldset><div className="inline-actions"><button type="submit" disabled={!selectedScopes.length}>발급</button><button type="button" className="secondary-button" onClick={() => { setDialog(false); }}>취소</button></div></form></section> : null}{credential ? <SecretOnceDialog title="일회용 접근 키" values={[credential]} closeLabel="확인하고 닫기" onClose={() => { setCredential(null); void reload(); }} /> : null}</section>; }
