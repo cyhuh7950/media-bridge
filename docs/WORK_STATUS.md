@@ -71,3 +71,9 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - Web tests (9 targeted), lint, TypeScript check, and production build passed.
 - Deployed the updated Control image to ysna-server; Control container is healthy. A fresh login is required after the container recreation.
 - Data Plane remains waiting for the initial signed snapshot, as previously recorded.
+
+## 2026-09-19 — pre-snapshot console access fix
+
+- `37aad3d` allows the administrative console and setup navigation before the first signed snapshot; the snapshot remains required only for gateway traffic.
+- Targeted guard/API tests (10 passed), lint, TypeScript check, and production build passed.
+- Rebuilt and redeployed Control on ysna-server; container is healthy.
