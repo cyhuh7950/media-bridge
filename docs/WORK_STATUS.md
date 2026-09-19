@@ -171,3 +171,9 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - Control 및 PostgreSQL 컨테이너는 `healthy`이며 Control 로그에서 migration 완료와 Uvicorn 기동을 확인했다.
 - 서버 내부 공개 URL 확인: `/`, `/providers`, `/routing`, `/models` 모두 HTTP 200. Data Plane은 기존과 같이 서명된 초기 snapshot 부재로 재시작 중이다.
 - 로컬 Windows에는 Python 실행기가 없어 migration pytest를 실행하지 못했다. Web 30 tests, lint, TypeScript/build와 배포 전 compileall 결과는 앞선 커밋 검증을 유지한다.
+
+## 2026-09-19 — DB API 키 수정 팝업 자동값 검증 오류 수정
+
+- DB에 저장된 Provider를 수정할 때 자동 표시되는 `provider_api_key`를 환경변수 이름 정규식으로 검증하던 UI 오류를 수정했다.
+- DB 참조는 `Secret 저장 위치` 읽기 전용으로 표시하고, 환경변수 참조에만 대문자 환경변수 형식을 적용한다.
+- Web Operations 테스트 6개 통과, lint와 TypeScript/build 통과. ysna-server 재배포 후 수정 팝업에서 저장 smoke를 확인한다.
