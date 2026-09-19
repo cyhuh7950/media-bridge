@@ -119,6 +119,19 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
     <section aria-labelledby="test-lab-title">
       <h1 id="test-lab-title">테스트 랩</h1>
       <p>Preview는 provider를 호출하지 않습니다. 실제 downstream 시험은 매번 명시적으로 허용해야 합니다.</p>
+      <section aria-labelledby="deployment-endpoints-title" className="result-panel">
+        <h2 id="deployment-endpoints-title">배포형 Media Bridge API endpoint</h2>
+        <p>기본 주소: <code>https://media-bridge.sinsan.kr</code></p>
+        <ul>
+          <li>OpenAI Responses API: <code>https://media-bridge.sinsan.kr/v1/responses</code></li>
+          <li>OpenAI Chat Completions: <code>https://media-bridge.sinsan.kr/v1/chat/completions</code></li>
+          <li>모델 조회: <code>https://media-bridge.sinsan.kr/v1/models</code></li>
+          <li>MCP: <code>https://media-bridge.sinsan.kr/mcp</code></li>
+          <li>Asset 업로드: <code>https://media-bridge.sinsan.kr/assets</code></li>
+        </ul>
+        <p>Provider 등록용 기본 endpoint: <code>https://media-bridge.sinsan.kr/v1</code></p>
+        <p>연결 등록용 기본 주소: <code>https://media-bridge.sinsan.kr</code></p>
+      </section>
       {failed ? <p role="alert">Connection 목록을 불러올 수 없습니다.</p> : null}
       <form className="form-grid compact-form" onSubmit={(event) => { void submit(event, false); }}>
         <label htmlFor="test-lab-connection">Connection</label>

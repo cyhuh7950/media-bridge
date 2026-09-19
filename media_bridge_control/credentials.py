@@ -123,7 +123,7 @@ class CredentialService:
             )
             if stored is None:
                 raise CredentialError("credential_not_found")
-            stored.revoked_at = self._now()
+            session.delete(stored)
 
     def list(self) -> list[dict[str, Any]]:
         with self._database.session() as session:
