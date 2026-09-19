@@ -15,6 +15,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.add_column("providers", sa.Column("encrypted_api_key", sa.Text(), nullable=True))
+    op.drop_constraint("providers_secret_ref_kind_check", "providers", type_="check")
     op.create_check_constraint(
         "providers_secret_ref_kind_check",
         "providers",
