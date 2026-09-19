@@ -209,6 +209,7 @@ class TestLabService:
     async def run(self, request: TestLabRunRequest) -> dict[str, object]:
         if request.gateway_url is None or request.api_key is None:
             raise TestLabError("downstream_credentials_required")
+        target_model = self._run_target_model(request)
         data = self._decode(request.media_base64)
         asset_id: str | None = None
         primary_error: TestLabError | None = None
@@ -224,7 +225,7 @@ class TestLabService:
             result = await self._gateway.responses(
                 base_url=request.gateway_url,
                 credential=request.api_key,
-                payload=self._responses_payload(request, asset_id),
+                payload=self._responses_payload(request, asset_id, target_model),
             )
         except GatewayClientError as error:
             primary_error = TestLabError(error.code)
@@ -244,6 +245,21 @@ class TestLabService:
         if result is None:
             raise TestLabError("gateway_unavailable")
         return result
+
+    def _run_target_model(self, request: TestLabRunRequest) -> str:
+        """Resolve the selected route's downstream model for the external hop.
+
+        The UI deliberately sends ``auto`` so the OmniRoute test exercises the
+        same routing profile selected in the existing whole-pipeline test.
+        """
+        if request.target_model != "auto":
+            return request.target_model
+        if request.routing_profile_id is None:
+            raise TestLabError("routing_profile_required")
+        _, _, llm = self._providers(request.routing_profile_id)
+        if not llm.model_id:
+            raise TestLabError("routing_model_unavailable")
+        return llm.model_id
 
     @staticmethod
     def _decode(value: str) -> bytes:
@@ -282,6 +298,7 @@ class TestLabService:
     def _responses_payload(
         request: TestLabRunRequest,
         asset_id: str,
+        target_model: str,
     ) -> dict[str, Any]:
         media_part: dict[str, object]
         if request.media_type == "image":
@@ -293,7 +310,7 @@ class TestLabService:
                 "filename": request.filename,
             }
         return {
-            "model": request.target_model,
+            "model": target_model,
             "input": [
                 {
                     "role": "user",
