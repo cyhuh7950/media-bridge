@@ -138,14 +138,17 @@ class Connection(Base):
 class Provider(Base):
     __tablename__ = "providers"
     __table_args__ = (
-        CheckConstraint("kind IN ('ocr', 'vision', 'analysis')"),
+        CheckConstraint("kind IN ('ocr', 'vision', 'analysis', 'llm')"),
         CheckConstraint("secret_ref_kind IN ('env', 'docker_secret', 'external')"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(128), unique=True)
     kind: Mapped[str] = mapped_column(String(16))
+    catalog_id: Mapped[str | None] = mapped_column(String(128))
     endpoint: Mapped[str] = mapped_column(String(2048))
+    protocol: Mapped[str | None] = mapped_column(String(64))
+    capabilities: Mapped[list[str]] = mapped_column(JSONB, default=list)
     secret_ref_kind: Mapped[str] = mapped_column(String(32))
     secret_ref_identifier: Mapped[str] = mapped_column(String(255))
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)

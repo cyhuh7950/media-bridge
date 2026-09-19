@@ -114,8 +114,20 @@ class SecretReference(AdminStrictModel):
 
 class ProviderCreate(AdminStrictModel):
     name: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")]
-    kind: Literal["ocr", "vision", "analysis"]
+    kind: Literal["ocr", "vision", "analysis", "llm"]
+    catalog_id: Annotated[
+        str,
+        StringConstraints(pattern=r"^[a-z0-9][a-z0-9.-]{0,127}$"),
+    ] | None = None
     endpoint: Annotated[str, StringConstraints(max_length=2_048, pattern=r"^https://")]
+    protocol: Annotated[
+        str,
+        StringConstraints(pattern=r"^[a-z0-9][a-z0-9.-]{0,63}$"),
+    ] | None = None
+    capabilities: Annotated[
+        set[Literal["text", "image", "pdf", "ocr"]],
+        Field(max_length=4),
+    ] = Field(default_factory=set)
     secret_ref: SecretReference
     enabled: bool = True
 
@@ -125,10 +137,22 @@ class ProviderUpdate(NonEmptyUpdate):
         str,
         StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"),
     ] | None = None
-    kind: Literal["ocr", "vision", "analysis"] | None = None
+    kind: Literal["ocr", "vision", "analysis", "llm"] | None = None
+    catalog_id: Annotated[
+        str,
+        StringConstraints(pattern=r"^[a-z0-9][a-z0-9.-]{0,127}$"),
+    ] | None = None
     endpoint: Annotated[
         str,
         StringConstraints(max_length=2_048, pattern=r"^https://"),
+    ] | None = None
+    protocol: Annotated[
+        str,
+        StringConstraints(pattern=r"^[a-z0-9][a-z0-9.-]{0,63}$"),
+    ] | None = None
+    capabilities: Annotated[
+        set[Literal["text", "image", "pdf", "ocr"]],
+        Field(max_length=4),
     ] | None = None
     secret_ref: SecretReference | None = None
     enabled: bool | None = None

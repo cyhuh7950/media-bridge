@@ -9,7 +9,7 @@ def test_migration_dry_run_never_applies() -> None:
     applied: list[str] = []
     result = migrate.run_migration(
         current_revision="0001_control_plane",
-        target_revision="0003_deployment_auth",
+        target_revision="0004_managed_provider_catalog",
         apply=False,
         upgrade=lambda target: applied.append(target),
     )
@@ -21,19 +21,19 @@ def test_migration_apply_reaches_exact_head() -> None:
     applied: list[str] = []
     result = migrate.run_migration(
         current_revision="0001_control_plane",
-        target_revision="0003_deployment_auth",
+        target_revision="0004_managed_provider_catalog",
         apply=True,
         upgrade=lambda target: applied.append(target),
     )
     assert result == "migration_applied"
-    assert applied == ["0003_deployment_auth"]
+    assert applied == ["0004_managed_provider_catalog"]
 
 
 def test_unknown_or_newer_schema_fails_closed() -> None:
     with pytest.raises(migrate.MigrationError, match="schema_revision_unsupported"):
         migrate.run_migration(
             current_revision="unexpected",
-            target_revision="0003_deployment_auth",
+            target_revision="0004_managed_provider_catalog",
             apply=True,
             upgrade=lambda _target: None,
         )

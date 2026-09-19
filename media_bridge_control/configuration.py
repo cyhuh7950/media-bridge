@@ -19,6 +19,7 @@ from media_bridge_control.models import (
     Provider,
     User,
 )
+from media_bridge_control.provider_catalog import ProviderCatalogError, get_provider_catalog_entry
 from media_bridge_control.schemas import (
     ModelCapabilityCreate,
     ModelCapabilityUpdate,
@@ -54,14 +55,10 @@ class ConfigurationService:
 
     def create_provider(self, request: ProviderCreate) -> dict[str, Any]:
         try:
+            values = self._provider_values(request)
             with self._database.session() as session:
                 row = Provider(
-                    name=request.name,
-                    kind=request.kind,
-                    endpoint=request.endpoint,
-                    secret_ref_kind=request.secret_ref.kind,
-                    secret_ref_identifier=request.secret_ref.identifier,
-                    enabled=request.enabled,
+                    **values,
                 )
                 session.add(row)
                 session.flush()
@@ -84,7 +81,10 @@ class ConfigurationService:
                     {
                         "name": row.name,
                         "kind": row.kind,
+                        "catalog_id": row.catalog_id,
                         "endpoint": row.endpoint,
+                        "protocol": row.protocol,
+                        "capabilities": set(row.capabilities or []),
                         "secret_ref": {
                             "kind": row.secret_ref_kind,
                             "identifier": row.secret_ref_identifier,
@@ -93,18 +93,40 @@ class ConfigurationService:
                         **request.model_dump(exclude_unset=True),
                     }
                 )
-                row.name = candidate.name
-                row.kind = candidate.kind
-                row.endpoint = candidate.endpoint
-                row.secret_ref_kind = candidate.secret_ref.kind
-                row.secret_ref_identifier = candidate.secret_ref.identifier
-                row.enabled = candidate.enabled
+                for field, value in self._provider_values(candidate).items():
+                    setattr(row, field, value)
                 session.flush()
                 return self._provider(row)
         except IntegrityError as error:
             raise ConfigurationError("configuration_conflict") from error
         except ValidationError as error:
             raise ConfigurationError("invalid_configuration") from error
+
+    @staticmethod
+    def _provider_values(request: ProviderCreate) -> dict[str, Any]:
+        protocol = request.protocol
+        capabilities = request.capabilities
+        if request.catalog_id is not None:
+            try:
+                entry = get_provider_catalog_entry(request.catalog_id)
+            except ProviderCatalogError as error:
+                raise ConfigurationError("provider_catalog_entry_unknown") from error
+            expected_kind = "llm" if entry.kind == "llm" else "analysis"
+            if request.kind not in {expected_kind, entry.kind}:
+                raise ConfigurationError("provider_catalog_kind_mismatch")
+            protocol = protocol or entry.protocol
+            capabilities = capabilities or set(entry.capabilities)
+        return {
+            "name": request.name,
+            "kind": request.kind,
+            "catalog_id": request.catalog_id,
+            "endpoint": request.endpoint,
+            "protocol": protocol,
+            "capabilities": sorted(capabilities),
+            "secret_ref_kind": request.secret_ref.kind,
+            "secret_ref_identifier": request.secret_ref.identifier,
+            "enabled": request.enabled,
+        }
 
     def delete_provider(self, provider_id: UUID) -> None:
         with self._database.session() as session:
@@ -119,7 +141,10 @@ class ConfigurationService:
             "id": str(row.id),
             "name": row.name,
             "kind": row.kind,
+            "catalog_id": row.catalog_id,
             "endpoint": row.endpoint,
+            "protocol": row.protocol,
+            "capabilities": sorted(row.capabilities or []),
             "secret_ref": {
                 "kind": row.secret_ref_kind,
                 "identifier": row.secret_ref_identifier,

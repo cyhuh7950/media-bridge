@@ -39,10 +39,12 @@ def test_fresh_upgrade_creates_control_plane_schema(clean_postgres: str) -> None
 
     engine = create_engine(clean_postgres)
     assert set(inspect(engine).get_table_names()) >= EXPECTED_TABLES
+    provider_columns = {column["name"] for column in inspect(engine).get_columns("providers")}
     with engine.connect() as connection:
         revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
     engine.dispose()
-    assert revision == "0003_deployment_auth"
+    assert revision == "0004_managed_provider_catalog"
+    assert {"catalog_id", "protocol", "capabilities"} <= provider_columns
 
 
 def test_migration_round_trip_is_reversible(clean_postgres: str) -> None:
