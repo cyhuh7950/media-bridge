@@ -20,7 +20,7 @@ it("runs Preview with only Preview inputs and never sends downstream credentials
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="operator" csrfToken="csrf-value" />);
 
-  await user.type(screen.getByLabelText("Preview 테스트 대상 모델"), "text-model");
+  await user.type(screen.getByLabelText("Preview 라우팅 프로필"), "text-model");
   await user.type(screen.getByLabelText("Preview 사용자 요청"), "이 오류를 설명해줘");
   await user.upload(screen.getByLabelText("Preview 이미지 또는 PDF · 최대 2 MiB"), image());
   const previewForm = screen.getByRole("button", { name: "Preview 실행" }).closest("form");
@@ -40,9 +40,9 @@ it("runs downstream with its own endpoint, key, model, request, and file inputs"
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="admin" csrfToken="csrf-value" />);
 
-  await user.type(screen.getByLabelText("downstream API endpoint"), "https://gateway.example/v1");
-  await user.type(screen.getByLabelText("downstream API 키"), "test-key");
-  await user.type(screen.getByLabelText("downstream 대상 모델"), "text-model");
+  await user.type(screen.getByLabelText("OmniRoute downstream API endpoint"), "https://gateway.example/v1");
+  await user.type(screen.getByLabelText("OmniRoute downstream API 키"), "test-key");
+  await user.type(screen.getByLabelText("downstream 라우팅 프로필"), "text-model");
   await user.type(screen.getByLabelText("downstream 사용자 요청"), "run once");
   await user.upload(screen.getByLabelText("downstream 이미지 또는 PDF · 최대 2 MiB"), image());
   const downstreamForm = screen.getByRole("button", { name: "downstream 테스트 실행" }).closest("form");
@@ -60,7 +60,7 @@ it("removes the transient result after its TTL", async () => {
   const user = userEvent.setup();
   vi.stubGlobal("fetch", vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse({ sanitized_text: "TTL RESULT" }))));
   render(<TestLabPage role="operator" csrfToken="csrf-value" resultTtlMs={100} />);
-  await user.type(screen.getByLabelText("Preview 테스트 대상 모델"), "text-model");
+  await user.type(screen.getByLabelText("Preview 라우팅 프로필"), "text-model");
   await user.type(screen.getByLabelText("Preview 사용자 요청"), "expire me");
   await user.upload(screen.getByLabelText("Preview 이미지 또는 PDF · 최대 2 MiB"), image());
   const previewForm = screen.getByRole("button", { name: "Preview 실행" }).closest("form");
