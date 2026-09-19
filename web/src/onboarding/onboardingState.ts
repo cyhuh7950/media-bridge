@@ -16,7 +16,6 @@ export type OnboardingStep =
 
 export function deriveOnboardingStep(inventory: OnboardingInventory): OnboardingStep {
   if (inventory.providers.length === 0) return "provider";
-  if (inventory.models.length === 0) return "model";
   if (inventory.policies.length === 0) return "policy";
   if (inventory.credentials.length === 0) return "credential";
   if (inventory.snapshots.length === 0) return "publish";

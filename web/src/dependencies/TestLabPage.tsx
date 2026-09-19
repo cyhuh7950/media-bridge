@@ -2,8 +2,6 @@ import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 
 import { adminRequest } from "../api/client";
 import type { OperationsProps } from "../operations/operationTypes";
-import { textField } from "../operations/operationTypes";
-import { useAdminList } from "../operations/useAdminList";
 
 const RESULT_TTL_MS = 10 * 60 * 1000;
 const MAX_MEDIA_BYTES = 2 * 1024 * 1024;
@@ -36,10 +34,8 @@ interface TestLabPageProps extends OperationsProps {
 }
 
 export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: TestLabPageProps) {
-  const { items: connections, failed } = useAdminList(
-    role === "viewer" ? null : "/connections",
-  );
-  const [connectionId, setConnectionId] = useState("");
+  const [gatewayUrl, setGatewayUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [targetModel, setTargetModel] = useState("");
   const [profile, setProfile] = useState("generic");
   const [userRequest, setUserRequest] = useState("");
@@ -49,7 +45,6 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
   const [error, setError] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const writable = role !== "viewer" && csrfToken !== null;
-  const selectedConnection = (connections ?? []).find((item) => textField(item, "id") === connectionId);
 
   useEffect(() => {
     if (result === null) return;
@@ -73,7 +68,7 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
 
   async function submit(event: SyntheticEvent, run: boolean) {
     event.preventDefault();
-    if (!writable || media === null || (run && !executeDownstream)) return;
+    if (!writable || media === null || (run && (!executeDownstream || !gatewayUrl || !apiKey))) return;
     if (media.size < 1 || media.size > MAX_MEDIA_BYTES) {
       setError(true);
       clearTransient();
@@ -94,7 +89,7 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
         method: "POST",
         csrfToken,
         body: {
-          connection_id: connectionId,
+          ...(run ? { gateway_url: gatewayUrl, api_key: apiKey } : {}),
           target_model: targetModel,
           conversion_profile: profile,
           user_request: currentRequest,
@@ -130,16 +125,13 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
           <li>Asset 업로드: <code>https://media-bridge.sinsan.kr/assets</code></li>
         </ul>
         <p>Provider 등록용 기본 endpoint: <code>https://media-bridge.sinsan.kr/v1</code></p>
-        <p>연결 등록용 기본 주소: <code>https://media-bridge.sinsan.kr</code></p>
+        <p>실제 downstream 시험은 아래에 endpoint와 API 키를 직접 입력합니다.</p>
       </section>
-      {failed ? <p role="alert">Connection 목록을 불러올 수 없습니다.</p> : null}
       <form className="form-grid compact-form" onSubmit={(event) => { void submit(event, false); }}>
-        <label htmlFor="test-lab-connection">Connection</label>
-        <select id="test-lab-connection" value={connectionId} onChange={(event) => { setConnectionId(event.target.value); }} required>
-          <option value="">선택</option>
-          {(connections ?? []).filter((item) => textField(item, "status") !== "revoked").map((item) => <option key={textField(item, "id")} value={textField(item, "id")}>{textField(item, "name")} — {textField(item, "gateway_url")}</option>)}
-        </select>
-        {selectedConnection ? <p role="status">API endpoint: {textField(selectedConnection, "gateway_url")}</p> : null}
+        <label htmlFor="test-lab-endpoint">downstream API endpoint (실제 시험 시)</label>
+        <input id="test-lab-endpoint" type="url" value={gatewayUrl} onChange={(event) => { setGatewayUrl(event.target.value); }} placeholder="https://gateway.example/v1" pattern="https://.*" />
+        <label htmlFor="test-lab-api-key">downstream API 키 (실제 시험 시)</label>
+        <input id="test-lab-api-key" type="password" value={apiKey} onChange={(event) => { setApiKey(event.target.value); }} autoComplete="off" />
         <label htmlFor="test-lab-model">대상 모델</label>
         <input id="test-lab-model" value={targetModel} onChange={(event) => { setTargetModel(event.target.value); }} pattern="[a-z0-9][a-z0-9./:_-]*" required />
         <label htmlFor="test-lab-profile">변환 profile</label>

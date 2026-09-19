@@ -8,14 +8,9 @@ import threading
 import time
 from collections import deque
 from typing import Any
-from uuid import UUID
 
-import anyio
-
-from media_bridge_control.connections import ConnectionService, ConnectionServiceError
 from media_bridge_control.gateway_client import GatewayClient, GatewayClientError
 from media_bridge_control.schemas import TestLabPreviewRequest, TestLabRunRequest
-from media_bridge_control.secrets import GatewaySecretResolver, SecretResolutionError
 
 
 class TestLabError(RuntimeError):
@@ -61,70 +56,37 @@ class TestLabService:
     def __init__(
         self,
         *,
-        connections: ConnectionService,
         gateway_client: GatewayClient,
-        secret_resolver: GatewaySecretResolver,
     ) -> None:
-        self._connections = connections
         self._gateway = gateway_client
-        self._secrets = secret_resolver
 
     async def preview(self, request: TestLabPreviewRequest) -> dict[str, object]:
-        connection, credential = await self._connection(request.connection_id)
         data = self._decode(request.media_base64)
-        asset_id: str | None = None
-        primary_error: TestLabError | None = None
-        result: dict[str, object] | None = None
-        try:
-            asset_id = await self._gateway.upload(
-                base_url=connection.gateway_url,
-                credential=credential,
-                data=data,
-                filename=request.filename,
-                declared_mime=request.declared_mime,
-            )
-            result = await self._gateway.prepare(
-                base_url=connection.gateway_url,
-                credential=credential,
-                payload=self._prepare_payload(request, asset_id),
-            )
-        except GatewayClientError as error:
-            primary_error = TestLabError(error.code)
-        finally:
-            if asset_id is not None:
-                try:
-                    await self._gateway.delete(
-                        base_url=connection.gateway_url,
-                        credential=credential,
-                        asset_id=asset_id,
-                    )
-                except GatewayClientError as error:
-                    if primary_error is None:
-                        primary_error = TestLabError(error.code)
-            credential = ""
-        if primary_error is not None:
-            raise primary_error
-        if result is None:
-            raise TestLabError("gateway_unavailable")
-        return result
+        return {
+            "action": "preview",
+            "status": "validated",
+            "bytes": len(data),
+            "payload": self._prepare_payload(request, "preview-asset"),
+        }
 
     async def run(self, request: TestLabRunRequest) -> dict[str, object]:
-        connection, credential = await self._connection(request.connection_id)
+        if request.gateway_url is None or request.api_key is None:
+            raise TestLabError("downstream_credentials_required")
         data = self._decode(request.media_base64)
         asset_id: str | None = None
         primary_error: TestLabError | None = None
         result: dict[str, object] | None = None
         try:
             asset_id = await self._gateway.upload(
-                base_url=connection.gateway_url,
-                credential=credential,
+                base_url=request.gateway_url,
+                credential=request.api_key,
                 data=data,
                 filename=request.filename,
                 declared_mime=request.declared_mime,
             )
             result = await self._gateway.responses(
-                base_url=connection.gateway_url,
-                credential=credential,
+                base_url=request.gateway_url,
+                credential=request.api_key,
                 payload=self._responses_payload(request, asset_id),
             )
         except GatewayClientError as error:
@@ -133,37 +95,18 @@ class TestLabService:
             if asset_id is not None:
                 try:
                     await self._gateway.delete(
-                        base_url=connection.gateway_url,
-                        credential=credential,
+                        base_url=request.gateway_url,
+                        credential=request.api_key,
                         asset_id=asset_id,
                     )
                 except GatewayClientError as error:
                     if primary_error is None:
                         primary_error = TestLabError(error.code)
-            credential = ""
         if primary_error is not None:
             raise primary_error
         if result is None:
             raise TestLabError("gateway_unavailable")
         return result
-
-    async def _connection(self, connection_id: UUID) -> tuple[Any, str]:
-        try:
-            connection = await anyio.to_thread.run_sync(
-                self._connections.runtime,
-                str(connection_id),
-            )
-        except ConnectionServiceError as error:
-            raise TestLabError(error.code) from error
-        if not connection.enabled or connection.revoked:
-            raise TestLabError("connection_unavailable")
-        try:
-            credential = self._secrets.resolve(
-                self._connections.secret_reference(connection)
-            )
-        except SecretResolutionError as error:
-            raise TestLabError(error.code) from error
-        return connection, credential
 
     @staticmethod
     def _decode(value: str) -> bytes:

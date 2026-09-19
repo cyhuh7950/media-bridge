@@ -114,7 +114,7 @@ class CredentialService:
                 scopes=frozenset(stored.scopes),
             )
 
-    def revoke(self, selector: str) -> None:
+    def delete(self, selector: str) -> None:
         with self._database.session() as session:
             stored = session.scalar(
                 select(ClientCredential)

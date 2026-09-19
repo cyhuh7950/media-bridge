@@ -20,9 +20,6 @@ it("previews through same-origin Admin API and keeps downstream off by default",
   const fetchMock = vi.fn<typeof fetch>((input) => {
     const url = requestUrl(input);
     expect(url.startsWith("/admin/v1/")).toBe(true);
-    if (url === "/admin/v1/connections") {
-      return Promise.resolve(jsonResponse([{ id: "connection-1", name: "primary", status: "ready" }]));
-    }
     if (url === "/admin/v1/test-lab/preview") {
       return Promise.resolve(jsonResponse({
         action: "converted",
@@ -35,7 +32,6 @@ it("previews through same-origin Admin API and keeps downstream off by default",
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="operator" csrfToken="csrf-value" />);
 
-  await user.selectOptions(await screen.findByLabelText("Connection"), "connection-1");
   await user.type(screen.getByLabelText("대상 모델"), "text-model");
   await user.type(screen.getByLabelText("사용자 요청"), "이 오류를 설명해줘");
   await user.upload(
@@ -50,7 +46,11 @@ it("previews through same-origin Admin API and keeps downstream off by default",
   fireEvent.submit(form);
 
   expect(await screen.findByText(/OCR SAFE RESULT/)).toBeInTheDocument();
-  expect(fetchMock.mock.calls.some(([input]) => requestUrl(input) === "/admin/v1/test-lab/preview")).toBe(true);
+  const previewCall = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/preview");
+  expect(previewCall).toBeDefined();
+  const previewBody = JSON.parse(String((previewCall?.[1] as RequestInit).body));
+  expect(previewBody).not.toHaveProperty("connection_id");
+  expect(previewBody).not.toHaveProperty("gateway_url");
   expect(fetchMock.mock.calls.some(([input]) => requestUrl(input) === "/admin/v1/test-lab/run")).toBe(false);
   expect(screen.getByLabelText(/이미지 또는 PDF/)).toHaveValue("");
   expect(screen.getByLabelText("사용자 요청")).toHaveValue("");
@@ -63,15 +63,13 @@ it("previews through same-origin Admin API and keeps downstream off by default",
 it("requires a fresh explicit opt-in for each downstream run", async () => {
   const user = userEvent.setup();
   const fetchMock = vi.fn<typeof fetch>((input) => {
-    if (requestUrl(input) === "/admin/v1/connections") {
-      return Promise.resolve(jsonResponse([{ id: "connection-1", name: "primary", status: "ready" }]));
-    }
     return Promise.resolve(jsonResponse({ id: "resp_test", output: [] }));
   });
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="admin" csrfToken="csrf-value" />);
 
-  await user.selectOptions(await screen.findByLabelText("Connection"), "connection-1");
+  await user.type(screen.getByLabelText("downstream API endpoint (실제 시험 시)"), "https://gateway.example/v1");
+  await user.type(screen.getByLabelText("downstream API 키 (실제 시험 시)"), "test-key");
   await user.type(screen.getByLabelText("대상 모델"), "text-model");
   await user.type(screen.getByLabelText("사용자 요청"), "run once");
   await user.upload(
@@ -86,6 +84,10 @@ it("requires a fresh explicit opt-in for each downstream run", async () => {
   await waitFor(() => {
     expect(fetchMock.mock.calls.some(([input]) => requestUrl(input) === "/admin/v1/test-lab/run")).toBe(true);
   });
+  const runCall = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/run");
+  const runBody = JSON.parse(String((runCall?.[1] as RequestInit).body));
+  expect(runBody.gateway_url).toBe("https://gateway.example/v1");
+  expect(runBody.api_key).toBe("test-key");
   expect(screen.getByLabelText(/실제 downstream Provider 호출/)).not.toBeChecked();
   expect(screen.getByRole("button", { name: "실제 downstream 시험" })).toBeDisabled();
 });
@@ -94,15 +96,11 @@ it("requires a fresh explicit opt-in for each downstream run", async () => {
 it("removes the transient result and request state when its TTL expires", async () => {
   const user = userEvent.setup();
   const fetchMock = vi.fn<typeof fetch>((input) => {
-    if (requestUrl(input) === "/admin/v1/connections") {
-      return Promise.resolve(jsonResponse([{ id: "connection-1", name: "primary", status: "ready" }]));
-    }
     return Promise.resolve(jsonResponse({ sanitized_text: "TTL SAFE RESULT" }));
   });
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="operator" csrfToken="csrf-value" resultTtlMs={100} />);
 
-  await user.selectOptions(await screen.findByLabelText("Connection"), "connection-1");
   await user.type(screen.getByLabelText("대상 모델"), "text-model");
   await user.type(screen.getByLabelText("사용자 요청"), "expire me");
   await user.upload(

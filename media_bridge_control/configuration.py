@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -431,6 +432,17 @@ class ConfigurationService:
                 select(ModelCapability).order_by(ModelCapability.model_id)
             )
         ]
+        if not models:
+            models = [
+                {
+                    "model_id": item["model_id"],
+                    "input_modalities": ["text"] if item["kind"] == "llm" else ["image", "pdf"],
+                    "expires_at": datetime.max.replace(tzinfo=UTC).isoformat(),
+                    "pdf_passthrough_verified": False,
+                }
+                for item in providers
+                if item["model_id"] is not None
+            ]
         policies = [
             self._policy(row)
             for row in session.scalars(select(Policy).order_by(Policy.name))

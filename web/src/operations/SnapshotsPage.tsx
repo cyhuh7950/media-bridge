@@ -10,7 +10,7 @@ interface DraftResponse {
 
 function publishErrorMessage(code: string): string {
   if (code === "csrf_rejected") return "로그인 보안 토큰이 만료되었거나 일치하지 않습니다. 로그아웃 후 다시 로그인하세요.";
-  if (code === "configuration_incomplete") return "Provider 기준 모델, 정책 등 필수 설정이 완성되지 않았습니다.";
+  if (code === "configuration_incomplete") return "Provider와 정책을 확인하세요. Provider 기준 모델이나 catalog 기본 모델이 필요하고 정책은 정확히 1개여야 합니다. 모델 별도 등록은 선택 사항입니다.";
   return `발행할 수 없습니다. (${code})`;
 }
 

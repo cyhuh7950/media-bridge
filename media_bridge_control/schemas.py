@@ -249,7 +249,8 @@ class ConnectionUpdate(NonEmptyUpdate):
 
 
 class TestLabPreviewRequest(AdminStrictModel):
-    connection_id: UUID
+    gateway_url: Annotated[str, StringConstraints(max_length=2_048)] | None = None
+    api_key: Annotated[str, StringConstraints(min_length=1, max_length=4_096)] | None = None
     target_model: Annotated[
         str,
         StringConstraints(pattern=r"^[a-z0-9][a-z0-9./:_-]{0,127}$"),
@@ -263,6 +264,19 @@ class TestLabPreviewRequest(AdminStrictModel):
         str,
         StringConstraints(min_length=1, max_length=2_796_204),
     ]
+
+    @field_validator("gateway_url")
+    @classmethod
+    def validate_test_gateway_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return ConnectionCreate.validate_gateway_url(value)
+
+    @model_validator(mode="after")
+    def require_downstream_credentials(self) -> "TestLabPreviewRequest":
+        if (self.gateway_url is None) != (self.api_key is None):
+            raise ValueError("gateway_url and api_key must be provided together")
+        return self
 
     @field_validator("filename")
     @classmethod
@@ -282,6 +296,12 @@ class TestLabPreviewRequest(AdminStrictModel):
 
 class TestLabRunRequest(TestLabPreviewRequest):
     execute_downstream: Literal[True]
+
+    @model_validator(mode="after")
+    def require_gateway_credentials(self) -> "TestLabRunRequest":
+        if self.gateway_url is None or self.api_key is None:
+            raise ValueError("downstream test requires gateway_url and api_key")
+        return self
 
 
 class ModelCapabilityCreate(AdminStrictModel):

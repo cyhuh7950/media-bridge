@@ -9,7 +9,6 @@ import {
 } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
-import { ConnectionsPage } from "../dependencies/ConnectionsPage";
 import { TestLabPage } from "../dependencies/TestLabPage";
 import { OnboardingShell } from "../onboarding/OnboardingShell";
 import { PublishedSnapshotGuard } from "../onboarding/PublishedSnapshotGuard";
@@ -113,7 +112,6 @@ function ConsoleLayout() {
         {auth.principal.role === "admin" ? <NavLink to="/snapshots">스냅샷</NavLink> : null}
         <NavLink to="/audit">감사 및 이벤트</NavLink>
         <NavLink to="/system">시스템</NavLink>
-        <NavLink to="/connections">연결</NavLink>
         <NavLink to="/test-lab">테스트 랩</NavLink>
       </nav>
       <main>
@@ -129,7 +127,6 @@ function ConsoleLayout() {
             <Route path="/snapshots" element={<SnapshotsPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
             <Route path="/audit" element={<AuditEventsPage />} />
             <Route path="/system" element={<SystemPage />} />
-            <Route path="/connections" element={<ConnectionsPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
             <Route path="/test-lab" element={<TestLabPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

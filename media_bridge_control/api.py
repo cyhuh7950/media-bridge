@@ -107,9 +107,7 @@ def build_control_app(
     gateway = gateway_client or HttpGatewayClient()
     resolver = secret_resolver or GatewaySecretResolver()
     test_lab = TestLabService(
-        connections=connections,
         gateway_client=gateway,
-        secret_resolver=resolver,
     )
     action_limiter = action_rate_limiter or AdminActionRateLimiter()
 
@@ -697,14 +695,14 @@ def build_control_app(
             return _error("unauthorized", 401)
         selector = request.path_params["selector"]
         try:
-            await run_in_threadpool(credentials.revoke, selector)
+            await run_in_threadpool(credentials.delete, selector)
             await run_in_threadpool(
                 audit.write,
                 actor_id=principal.user_id,
-                action="credential.revoked",
+                action="credential.deleted",
                 target_type="credential",
                 target_id=selector,
-                details={"status": "revoked"},
+                details={"status": "deleted"},
             )
         except CredentialError as error:
             status = 404 if error.code == "credential_not_found" else 400
@@ -787,9 +785,9 @@ def build_control_app(
                 audit.write,
                 actor_id=principal.user_id,
                 action="connection.revoked",
-                target_type="connection",
-                target_id=connection_id,
-                details={"status": "revoked"},
+                    target_type="connection",
+                    target_id=connection_id,
+                    details={"status": "revoked"},
             )
         except ControlPlaneError as error:
             return _error(error.code, 400)
@@ -882,14 +880,14 @@ def build_control_app(
         target_id: str | None = None
         try:
             body = await _json(request, TestLabPreviewRequest, max_bytes=3 * 1024 * 1024)
-            target_id = str(body.connection_id)
+            target_id = body.gateway_url
             result = await test_lab.preview(body)
             await run_in_threadpool(
                 audit.write,
                 actor_id=principal.user_id,
                 action="test_lab.previewed",
-                target_type="connection",
-                target_id=str(body.connection_id),
+                target_type="test_lab",
+                target_id=body.gateway_url,
                 details={"status": str(result.get("action", "completed"))},
             )
         except ControlPlaneError as error:
@@ -899,7 +897,7 @@ def build_control_app(
                 audit.write,
                 actor_id=principal.user_id,
                 action="test_lab.preview_failed",
-                target_type="connection",
+                target_type="test_lab",
                 target_id=target_id,
                 details={"reason_code": error.code, "status": "failed"},
             )
@@ -924,14 +922,14 @@ def build_control_app(
         target_id: str | None = None
         try:
             body = await _json(request, TestLabRunRequest, max_bytes=3 * 1024 * 1024)
-            target_id = str(body.connection_id)
+            target_id = body.gateway_url
             result = await test_lab.run(body)
             await run_in_threadpool(
                 audit.write,
                 actor_id=principal.user_id,
                 action="test_lab.executed",
-                target_type="connection",
-                target_id=str(body.connection_id),
+                target_type="test_lab",
+                target_id=body.gateway_url,
                 details={"status": "completed"},
             )
         except ControlPlaneError as error:
@@ -941,7 +939,7 @@ def build_control_app(
                 audit.write,
                 actor_id=principal.user_id,
                 action="test_lab.execute_failed",
-                target_type="connection",
+                target_type="test_lab",
                 target_id=target_id,
                 details={"reason_code": error.code, "status": "failed"},
             )

@@ -17,9 +17,7 @@ def test_test_lab_bodies_do_not_persist_to_database_audit_or_logs(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    credential_marker = "mbc_gateway.credential-retention-marker"
     media_marker = b"media-body-retention-marker"
-    monkeypatch.setenv("MEDIA_BRIDGE_GATEWAY_CREDENTIAL", credential_marker)
     caplog.set_level(logging.DEBUG)
     database, service = configured_control(migrated_postgres)
     app = build_control_app(
@@ -39,23 +37,10 @@ def test_test_lab_bodies_do_not_persist_to_database_audit_or_logs(
         "origin": "https://control.test",
         "x-csrf-token": login.json()["csrf_token"],
     }
-    created = client.post(
-        "/admin/v1/connections",
-        headers=headers,
-        json={
-            "name": "primary-gateway",
-            "gateway_url": "https://gateway.example.test",
-            "credential_secret_ref": {
-                "kind": "env",
-                "identifier": "MEDIA_BRIDGE_GATEWAY_CREDENTIAL",
-            },
-        },
-    )
     response = client.post(
         "/admin/v1/test-lab/preview",
         headers=headers,
         json={
-            "connection_id": created.json()["id"],
             "target_model": "text-model",
             "conversion_profile": "error_screenshot",
             "user_request": "private-user-request-marker",
@@ -79,7 +64,6 @@ def test_test_lab_bodies_do_not_persist_to_database_audit_or_logs(
             for value in session.scalars(query)
         )
     for marker in (
-        credential_marker,
         media_marker.decode(),
         base64.b64encode(media_marker).decode(),
         "private-user-request-marker",

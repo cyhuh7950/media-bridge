@@ -29,7 +29,7 @@ const completeInventory: OnboardingInventory = {
 
 it("derives resumable progress only from persisted P1 API resources", () => {
   expect(deriveOnboardingStep({ ...completeInventory, providers: [] })).toBe("provider");
-  expect(deriveOnboardingStep({ ...completeInventory, models: [] })).toBe("model");
+  expect(deriveOnboardingStep({ ...completeInventory, models: [] })).toBe("publish");
   expect(deriveOnboardingStep({ ...completeInventory, policies: [] })).toBe("policy");
   expect(deriveOnboardingStep({ ...completeInventory, credentials: [] })).toBe("credential");
   expect(deriveOnboardingStep(completeInventory)).toBe("publish");
