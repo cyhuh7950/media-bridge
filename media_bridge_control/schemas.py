@@ -351,7 +351,7 @@ class PolicyCreate(AdminStrictModel):
     allow_base64: bool
     allow_asset: bool
     allow_local_path: bool
-    fail_closed: Literal[True]
+    fail_closed: bool
 
 
 class PolicyUpdate(NonEmptyUpdate):
@@ -366,7 +366,7 @@ class PolicyUpdate(NonEmptyUpdate):
     allow_base64: bool | None = None
     allow_asset: bool | None = None
     allow_local_path: bool | None = None
-    fail_closed: Literal[True] | None = None
+    fail_closed: bool | None = None
 
 
 class CredentialCreate(AdminStrictModel):

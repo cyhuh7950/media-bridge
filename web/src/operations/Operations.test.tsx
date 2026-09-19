@@ -5,6 +5,7 @@ import { AuditEventsPage } from "./AuditEventsPage";
 import { CredentialsPage } from "./CredentialsPage";
 import { DashboardPage } from "./DashboardPage";
 import { ProvidersPage } from "./ProvidersPage";
+import { PoliciesPage } from "./PoliciesPage";
 import { SnapshotsPage } from "./SnapshotsPage";
 import { SystemPage } from "./SystemPage";
 
@@ -224,6 +225,29 @@ it("publishes the validated draft and reports a publish error", async () => {
   expect(calls).toContain("POST /admin/v1/drafts/validate");
   expect(calls).toContain("POST /admin/v1/snapshots");
   expect(await screen.findByRole("alert")).toHaveTextContent("configuration_invalid");
+});
+
+it("edits all eight policy controls from the standard dialog", async () => {
+  const fetchMock = vi.fn<typeof fetch>((input, init) => {
+    const path = requestPath(input);
+    if ((init?.method ?? "GET") === "GET") {
+      return Promise.resolve(jsonResponse([{ id: "policy-1", name: "기본 미디어 보안 정책", max_files: 4, max_media_bytes: 2097152, max_pdf_pages: 20, allow_url: false, allow_base64: true, allow_asset: true, allow_local_path: false, fail_closed: true }]));
+    }
+    if (path === "/admin/v1/policies/policy-1") return Promise.resolve(jsonResponse({ id: "policy-1" }));
+    return Promise.reject(new Error("unexpected"));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const user = userEvent.setup();
+  render(<PoliciesPage role="admin" csrfToken="csrf-memory-only" />);
+  await user.click(await screen.findByRole("button", { name: "수정" }));
+  expect(screen.getByLabelText("최대 파일 수")).toHaveValue(4);
+  expect(screen.getByLabelText("최대 미디어 크기 (바이트)")).toHaveValue(2097152);
+  expect(screen.getByLabelText("최대 PDF 페이지")).toHaveValue(20);
+  expect(screen.getByLabelText("URL 입력")).not.toBeChecked();
+  expect(screen.getByLabelText("Base64 입력")).toBeChecked();
+  expect(screen.getByLabelText("Asset 입력")).toBeChecked();
+  expect(screen.getByLabelText("로컬 경로")).not.toBeChecked();
+  expect(screen.getByLabelText("Fail-closed")).toBeChecked();
 });
 
 it("shows audit, operational event, health, and principal from their real endpoints", async () => {
