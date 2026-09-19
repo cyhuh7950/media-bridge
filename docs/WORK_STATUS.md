@@ -180,3 +180,10 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 
 - 배포 완료: `abeab1f` 기준 Control 이미지를 ysna-server에서 재빌드·재기동했고 Control과 PostgreSQL이 `healthy`이다.
 - 공개 `/` 및 `/providers`는 서버 내부 확인 기준 HTTP 200을 반환한다. DB Provider 수정 팝업의 저장 smoke는 신산님이 브라우저에서 확인한다.
+
+## 2026-09-19 — DB API 키 표시 문구 개선 재배포 확인
+
+- `d9ecc9f`에서 DB 내부 식별자 `provider_api_key`를 수정 팝업에 노출하지 않고 `DB에 저장된 API 키 사용 중`으로 표시하도록 변경했다.
+- Operations 테스트 6개, lint, TypeScript 검사, production build 통과 후 ysna-server에 재배포했다.
+- Control 컨테이너는 `healthy`, 공개 `/`와 `/providers`는 HTTP 200이다.
+- Chrome Provider 수정 팝업을 강제 새로고침 후 실제 확인해 최신 표시 문구가 노출되는 것을 확인했다.
