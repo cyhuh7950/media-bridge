@@ -10,7 +10,7 @@ function jsonResponse(body: object): Response {
   });
 }
 
-it("blocks the dashboard until a real snapshot exists", async () => {
+it("allows the dashboard before the first snapshot is published", async () => {
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(jsonResponse([])));
 
   render(
@@ -24,6 +24,6 @@ it("blocks the dashboard until a real snapshot exists", async () => {
     </MemoryRouter>,
   );
 
-  expect(await screen.findByRole("heading", { name: "온보딩" })).toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "온보딩" })).not.toBeInTheDocument();
 });
