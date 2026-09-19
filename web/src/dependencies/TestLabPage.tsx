@@ -64,10 +64,17 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
 
   async function submitOmniRoute(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!writable || !routingProfileId || media === null || !omniRouteEndpoint || !omniRouteApiKey || media.size < 1 || media.size > MAX_MEDIA_BYTES) {
-      setError("라우팅, 파일, Media Bridge endpoint와 접근 키 원문을 확인하세요.");
+    const missing: string[] = [];
+    if (!writable || !routingProfileId) missing.push("라우팅 프로필");
+    if (media === null) missing.push("파일");
+    if (!omniRouteEndpoint) missing.push("Media Bridge endpoint");
+    if (!omniRouteApiKey) missing.push("접근 키 원문");
+    if (media !== null && (media.size < 1 || media.size > MAX_MEDIA_BYTES)) missing.push("파일 크기");
+    if (missing.length > 0) {
+      setError(`입력값을 확인하세요: ${missing.join(", ")}`);
       return;
     }
+    if (!writable || csrfToken === null || media === null) return;
     setError(null); setResult(null);
     try {
       const response = await adminRequest<unknown>("/test-lab/run", { method: "POST", csrfToken, body: {
