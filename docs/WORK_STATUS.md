@@ -122,3 +122,7 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - 헤더에 인증된 사용자용 `로그아웃` 버튼을 추가해 CSRF 보호 `/admin/v1/auth/logout` 호출 후 로그인 화면으로 돌아가도록 했다.
 - 회귀 테스트를 추가했고 Web 테스트 `30 passed`, lint, TypeScript 검사와 production build가 통과했다.
 - 다음 조치: 이 커밋을 ysna-server Control 이미지로 재배포하고 공개 URL의 헤더 로그아웃 버튼 노출을 확인한다.
+
+- 배포 완료: `4ca6def`에서 Control 이미지를 재빌드·재기동했고 올바른 Ed25519 Secret 매핑 후 health가 `healthy`가 되었다. 공개 `/`와 `/providers`는 HTTP 200을 반환한다.
+- 배포 중 원격 전용 Compose 파일을 보존하지 않은 rsync 옵션으로 삭제하는 오류가 1회 발생했다. Secret 값과 DB/볼륨 데이터는 변경되지 않았고, 기존 컨테이너 설정을 확인해 `compose.ysna.yaml`을 Secret 원문 없이 복원·구문 검증했다.
+- Data Plane은 기존과 같이 서명된 초기 snapshot 부재로 재시작 중이다. 실제 로그아웃 클릭 smoke는 신산님이 공개 URL에서 확인하면 된다.
