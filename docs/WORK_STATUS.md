@@ -187,3 +187,11 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - Operations 테스트 6개, lint, TypeScript 검사, production build 통과 후 ysna-server에 재배포했다.
 - Control 컨테이너는 `healthy`, 공개 `/`와 `/providers`는 HTTP 200이다.
 - Chrome Provider 수정 팝업을 강제 새로고침 후 실제 확인해 최신 표시 문구가 노출되는 것을 확인했다.
+
+## 2026-09-19 — Provider Secret 내부 정보 완전 비표시
+
+- 신산님 결정에 따라 `provider_api_key`와 Secret 저장 위치를 Provider 목록·수정 팝업에서 모두 제거했다.
+- 목록은 키 원문이나 내부 식별자 대신 `등록됨` 상태만 표시하고, 수정 팝업은 API 키 변경 입력만 제공한다.
+- Operations 테스트 7개, lint, TypeScript 검사, production build 통과.
+- `04e1987` 기준 ysna-server 재배포 완료. Control `healthy`, 공개 `/`·`/providers` HTTP 200.
+- Chrome에서 강제 새로고침 후 목록의 `등록됨`과 수정 팝업의 Secret 필드 비표시를 실제 확인했다.
