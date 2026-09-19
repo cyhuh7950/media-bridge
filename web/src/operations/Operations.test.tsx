@@ -81,7 +81,7 @@ it("does not expose the internal DB provider secret identifier", async () => {
 
   render(<ProvidersPage role="viewer" csrfToken={null} />);
 
-  expect(await screen.findByText("DB에 저장된 API 키")).toBeInTheDocument();
+  expect(await screen.findByText("등록됨")).toBeInTheDocument();
   expect(screen.queryByText("DB: provider_api_key")).not.toBeInTheDocument();
 });
 
@@ -130,8 +130,8 @@ it("uses the standard provider list actions with register/edit dialog and bulk d
   await user.click(within(firstRow).getByRole("button", { name: "수정" }));
   expect(screen.getByRole("dialog", { name: "Provider 수정" })).toBeInTheDocument();
   expect(screen.getByLabelText("Provider 이름")).toHaveValue("vision-primary");
-  expect(screen.getByLabelText("Secret 저장 위치")).toHaveValue("DB에 저장된 API 키 사용 중");
-  expect(screen.getByLabelText("Secret 저장 위치")).toHaveAttribute("readonly");
+  expect(screen.queryByLabelText("Secret 저장 위치")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Secret 환경변수 이름")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "취소" }));
 
   await user.click(screen.getByLabelText("vision-primary 선택"));
