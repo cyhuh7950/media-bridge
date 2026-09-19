@@ -69,7 +69,7 @@ function LoginPage() {
             onChange={(event) => { setPassword(event.target.value); }}
             required
           />
-          {auth.status === "anonymous" && auth.errorCode !== "unauthorized" ? (
+          {auth.status === "anonymous" && auth.errorCode !== undefined && auth.errorCode !== "unauthorized" ? (
             <p role="alert">로그인 요청을 완료하지 못했습니다.</p>
           ) : null}
           <button type="submit">로그인</button>

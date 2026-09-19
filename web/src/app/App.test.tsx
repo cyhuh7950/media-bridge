@@ -85,6 +85,7 @@ it("logs out from the console header and returns to login", async () => {
   await user.click(screen.getByRole("button", { name: "로그아웃" }));
 
   expect(await screen.findByRole("heading", { name: "Media Bridge 로그인" })).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   const logoutCall = fetchMock.mock.calls.find(([input, init]) => requestPath(input) === "/admin/v1/auth/logout" && init?.method === "POST");
   expect(logoutCall).toBeDefined();
   expect(new Headers(logoutCall?.[1]?.headers).get("x-csrf-token")).toBe("csrf-session");
