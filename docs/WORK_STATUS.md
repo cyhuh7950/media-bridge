@@ -211,3 +211,9 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - 정책 등록 기본 이름을 `기본 미디어 보안 정책`으로 변경하고 한국어 정책 이름을 허용했다.
 - 접근 키 목록에서 selector 일부가 상태 열에 노출되던 렌더링 오류를 제거하고, API의 `revoked` 값으로 `활성`·`폐기`를 표시하도록 수정했다.
 - 웹 테스트 7개, lint, TypeScript/build, Python compileall 통과. ysna-server 재배포 후 접근 키 폐기와 모델·정책 등록 smoke를 확인한다.
+
+## 2026-09-19 — 0008 마이그레이션 적용 경계 수정
+
+- Control 시작 마이그레이션 스크립트의 지원 목록과 단계 검증에 `0008_model_provider`를 추가했다.
+- 초기 재배포에서 0007에 머물러 502가 발생했으나, 수정 후 DB head가 `0008_model_provider`로 적용되고 Control이 `healthy`가 됐다.
+- 공개 `/`, `/models`, `/credentials`, `/policies`는 HTTP 200을 확인했다.
