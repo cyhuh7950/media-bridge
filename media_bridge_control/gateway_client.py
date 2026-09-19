@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Protocol, cast
+from urllib.parse import quote
 
 import httpx
 from pydantic import ValidationError
@@ -96,7 +97,7 @@ class HttpGatewayClient:
     ) -> str:
         headers = {"content-type": declared_mime}
         if filename is not None:
-            headers["x-filename"] = filename
+            headers["x-filename"] = quote(filename, safe="")
         payload = await self._request(
             "POST",
             f"{base_url}/assets",
