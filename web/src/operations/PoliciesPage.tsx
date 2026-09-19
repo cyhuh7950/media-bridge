@@ -29,7 +29,7 @@ export function PoliciesPage({ role, csrfToken }: OperationsProps) {
 
   return (
     <section aria-labelledby="policies-title">
-      <h1 id="policies-title">Policies</h1>
+      <h1 id="policies-title">정책</h1>
       <p>Fail-closed와 미디어 입력 경계를 확인합니다.</p>
       {failed ? <p role="alert">Policy 목록을 불러올 수 없습니다.</p> : null}
       {items ? <table><thead><tr><th>이름</th><th>최대 파일</th><th>PDF 페이지</th><th>Fail closed</th></tr></thead><tbody>{items.map((item) => <tr key={textField(item, "id")}><td>{textField(item, "name")}</td><td>{numberField(item, "max_files") ?? "—"}</td><td>{numberField(item, "max_pdf_pages") ?? "—"}</td><td>{booleanField(item, "fail_closed") === true ? "true" : "invalid"}</td></tr>)}</tbody></table> : null}

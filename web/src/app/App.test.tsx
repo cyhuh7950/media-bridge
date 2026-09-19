@@ -51,7 +51,7 @@ it("redirects an anonymous user to login and clears the password after authentic
   await waitFor(() => {
     expect(screen.getByRole("navigation")).toBeInTheDocument();
   });
-  expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "대시보드" })).toBeInTheDocument();
   expect(document.documentElement.outerHTML).not.toContain(passwordMarker);
   expect(document.documentElement.outerHTML).not.toContain("csrf-memory-only");
   expect(window.localStorage).toHaveLength(0);
@@ -81,7 +81,7 @@ it("logs out from the console header and returns to login", async () => {
 
   render(<App />);
 
-  expect(await screen.findByRole("heading", { name: "Providers" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Provider 관리" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "로그아웃" }));
 
   expect(await screen.findByRole("heading", { name: "Media Bridge 로그인" })).toBeInTheDocument();

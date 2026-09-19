@@ -88,7 +88,7 @@ export function ConnectionsPage({ role, csrfToken }: OperationsProps) {
 
   return (
     <section aria-labelledby="connections-title">
-      <h1 id="connections-title">Connections</h1>
+      <h1 id="connections-title">연결</h1>
       <p>Gateway credential 원문이 아니라 외부 Secret 참조와 검증 상태만 관리합니다.</p>
       {failed ? <p role="alert">Connection 목록을 불러올 수 없습니다.</p> : null}
       {actionError ? <p role="alert">Connection 작업을 안전하게 완료하지 못했습니다.</p> : null}

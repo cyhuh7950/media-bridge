@@ -111,12 +111,12 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
   }
 
   if (!writable) {
-    return <section aria-labelledby="test-lab-title"><h1 id="test-lab-title">Test Lab</h1><p>viewer는 시험 본문을 만들거나 downstream을 호출할 수 없습니다.</p></section>;
+    return <section aria-labelledby="test-lab-title"><h1 id="test-lab-title">테스트 랩</h1><p>viewer는 시험 본문을 만들거나 downstream을 호출할 수 없습니다.</p></section>;
   }
 
   return (
     <section aria-labelledby="test-lab-title">
-      <h1 id="test-lab-title">Test Lab</h1>
+      <h1 id="test-lab-title">테스트 랩</h1>
       <p>Preview는 provider를 호출하지 않습니다. 실제 downstream 시험은 매번 명시적으로 허용해야 합니다.</p>
       {failed ? <p role="alert">Connection 목록을 불러올 수 없습니다.</p> : null}
       <form className="form-grid compact-form" onSubmit={(event) => { void submit(event, false); }}>

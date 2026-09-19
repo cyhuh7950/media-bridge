@@ -134,3 +134,9 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - Web 테스트 `30 passed`, lint, TypeScript 검사와 production build 통과.
 - ysna-server 배포 설정에 프록시 `FORWARDED_ALLOW_IPS=172.26.0.3`을 복구해 공개 로그인 요청이 `https_required`로 거부되지 않도록 했다. `admin/admin` API 응답은 이제 예상된 `totp_required`다.
 - 배포 완료: `1cd737c` 기준 Control 이미지를 재빌드·재기동했고 health가 `healthy`; 공개 `/`와 `/providers`는 HTTP 200이다. 브라우저에서 로그아웃 후 로그인 화면에 오류 경고가 남지 않는 것을 확인했다.
+
+## 2026-09-19 — 콘솔 기본 언어 한국어 통일
+
+- 좌측 메뉴, 대시보드·Provider·라우팅·모델·정책·스냅샷·감사·시스템·연결·테스트 랩 화면의 사용자 노출 문구를 한국어로 통일한다.
+- `upstage-document-parse`, `upstage-solar`, Endpoint URL과 같은 Provider 식별자·고유명사·기술 값은 원문을 유지한다.
+- Web 테스트 `30 passed`, lint, TypeScript 검사와 production build 통과 후 ysna-server에 재배포한다.

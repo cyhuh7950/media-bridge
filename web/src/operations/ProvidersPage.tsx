@@ -9,7 +9,12 @@ function providerReference(provider: Record<string, unknown>): string {
   const reference = provider.secret_ref;
   if (typeof reference !== "object" || reference === null) return "—";
   const fields = reference as Record<string, unknown>;
-  return `${textField(fields, "kind")}: ${textField(fields, "identifier")}`;
+  const kind = textField(fields, "kind") === "db" ? "DB" : "환경변수";
+  return `${kind}: ${textField(fields, "identifier")}`;
+}
+
+function providerKindLabel(value: string): string {
+  return value === "analysis" ? "분석" : value === "llm" ? "Non‑Vision LLM" : value;
 }
 
 type DialogMode = "create" | "edit";
@@ -72,15 +77,15 @@ export function ProvidersPage({ role, csrfToken }: OperationsProps) {
 
   return (
     <section aria-labelledby="providers-title">
-      <div className="page-heading"><div><h1 id="providers-title">Providers</h1><p>분석 Provider와 Non-Vision LLM Provider를 관리합니다.</p></div>{writable ? <button type="button" onClick={openCreate}>Provider 등록</button> : null}</div>
+      <div className="page-heading"><div><h1 id="providers-title">Provider 관리</h1><p>분석 Provider와 Non‑Vision LLM Provider를 관리합니다.</p></div>{writable ? <button type="button" onClick={openCreate}>Provider 등록</button> : null}</div>
       {failed ? <p role="alert">Provider 목록을 불러올 수 없습니다.</p> : null}
       {deleteFailed ? <p role="alert">선택한 Provider를 모두 삭제하지 못했습니다.</p> : null}
       {!writable ? <p>viewer는 Provider 설정을 읽기만 할 수 있습니다.</p> : null}
       {items === null && !failed ? <p role="status">Provider 목록을 불러오고 있습니다.</p> : null}
       {items ? <>
         {writable && selectedIds.length > 0 ? <div className="inline-actions"><button type="button" className="danger-button" onClick={() => { void deleteSelected(); }}>선택 삭제 ({selectedIds.length})</button></div> : null}
-        <table><thead><tr>{writable ? <th><input aria-label="전체 Provider 선택" type="checkbox" checked={allSelected} onChange={(event) => { setSelectedIds(event.target.checked ? items.map((item) => textField(item, "id")) : []); }} /></th> : null}<th>이름</th><th>종류</th><th>Endpoint</th><th>Secret 참조</th><th>상태</th>{writable ? <th>작업</th> : null}</tr></thead>
-          <tbody>{items.map((item) => { const id = textField(item, "id"); return <tr key={id}>{writable ? <td><input aria-label={`${textField(item, "name")} 선택`} type="checkbox" checked={selectedIds.includes(id)} onChange={(event) => { toggleSelected(id, event.target.checked); }} /></td> : null}<td>{textField(item, "name")}</td><td>{textField(item, "kind")}</td><td>{textField(item, "endpoint")}</td><td>{providerReference(item)}</td><td>{booleanField(item, "enabled") === true ? "enabled" : "disabled"}</td>{writable ? <td><button type="button" className="secondary-button" onClick={() => { openEdit(item); }}>수정</button></td> : null}</tr>; })}</tbody>
+        <table><thead><tr>{writable ? <th><input aria-label="전체 Provider 선택" type="checkbox" checked={allSelected} onChange={(event) => { setSelectedIds(event.target.checked ? items.map((item) => textField(item, "id")) : []); }} /></th> : null}<th>이름</th><th>종류</th><th>엔드포인트</th><th>Secret 참조</th><th>상태</th>{writable ? <th>작업</th> : null}</tr></thead>
+          <tbody>{items.map((item) => { const id = textField(item, "id"); return <tr key={id}>{writable ? <td><input aria-label={`${textField(item, "name")} 선택`} type="checkbox" checked={selectedIds.includes(id)} onChange={(event) => { toggleSelected(id, event.target.checked); }} /></td> : null}<td>{textField(item, "name")}</td><td>{providerKindLabel(textField(item, "kind"))}</td><td>{textField(item, "endpoint")}</td><td>{providerReference(item)}</td><td>{booleanField(item, "enabled") === true ? "활성" : "비활성"}</td>{writable ? <td><button type="button" className="secondary-button" onClick={() => { openEdit(item); }}>수정</button></td> : null}</tr>; })}</tbody>
         </table>
       </> : null}
       {dialogMode ? <section className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="provider-dialog-title"><form className="dialog-card form-grid" onSubmit={(event) => { void submit(event); }}><h2 id="provider-dialog-title">{dialogMode === "create" ? "Provider 등록" : "Provider 수정"}</h2>

@@ -64,7 +64,7 @@ export function CredentialsPage({ role, csrfToken }: OperationsProps) {
 
   return (
     <section aria-labelledby="credentials-title">
-      <h1 id="credentials-title">Client credentials</h1>
+      <h1 id="credentials-title">접근 키</h1>
       <p>발급된 원문은 한 번만 표시되며, 이 화면은 연결 성공을 의미하지 않습니다.</p>
       {failed ? <p role="alert">Credential 목록을 불러올 수 없습니다.</p> : null}
       {items ? <table><thead><tr><th>이름</th><th>Selector</th><th>상태</th><th>작업</th></tr></thead><tbody>{items.map((item) => { const selector = textField(item, "selector"); return <tr key={selector}><td>{textField(item, "name")}</td><td>{selector}</td><td>{textField(item, "revoked_at") === "—" ? "active" : "revoked"}</td><td><button type="button" onClick={() => { void revoke(selector); }}>폐기</button></td></tr>; })}</tbody></table> : null}

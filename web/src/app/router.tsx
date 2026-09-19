@@ -104,17 +104,17 @@ function ConsoleLayout() {
         </div>
       </header>
       <nav aria-label="주요 메뉴">
-        <NavLink to="/">Dashboard</NavLink>
-        <NavLink to="/providers">Providers</NavLink>
-        <NavLink to="/routing-profiles">Routing</NavLink>
-        <NavLink to="/models">Models</NavLink>
-        <NavLink to="/policies">Policies</NavLink>
-        {auth.principal.role === "admin" ? <NavLink to="/credentials">Credentials</NavLink> : null}
-        {auth.principal.role === "admin" ? <NavLink to="/snapshots">Snapshots</NavLink> : null}
-        <NavLink to="/audit">Audit &amp; Events</NavLink>
-        <NavLink to="/system">System</NavLink>
-        <NavLink to="/connections">Connections</NavLink>
-        <NavLink to="/test-lab">Test Lab</NavLink>
+        <NavLink to="/">대시보드</NavLink>
+        <NavLink to="/providers">Provider</NavLink>
+        <NavLink to="/routing-profiles">라우팅</NavLink>
+        <NavLink to="/models">모델</NavLink>
+        <NavLink to="/policies">정책</NavLink>
+        {auth.principal.role === "admin" ? <NavLink to="/credentials">접근 키</NavLink> : null}
+        {auth.principal.role === "admin" ? <NavLink to="/snapshots">스냅샷</NavLink> : null}
+        <NavLink to="/audit">감사 및 이벤트</NavLink>
+        <NavLink to="/system">시스템</NavLink>
+        <NavLink to="/connections">연결</NavLink>
+        <NavLink to="/test-lab">테스트 랩</NavLink>
       </nav>
       <main>
         <Routes>

@@ -26,7 +26,7 @@ export function SnapshotsPage({ role, csrfToken }: OperationsProps) {
 
   return (
     <section aria-labelledby="snapshots-title">
-      <h1 id="snapshots-title">Snapshots</h1>
+      <h1 id="snapshots-title">스냅샷</h1>
       <p>검증된 draft만 서명 snapshot으로 발행할 수 있습니다.</p>
       {failed ? <p role="alert">Snapshot 목록을 불러올 수 없습니다.</p> : null}
       {items ? <table><thead><tr><th>Version</th><th>생성 시각</th><th>작업</th></tr></thead><tbody>{items.map((item) => { const version = numberField(item, "version"); return <tr key={version ?? textField(item, "snapshot_id")} aria-label={`version ${version === null ? "unknown" : String(version)}`}><td>{version ?? "—"}</td><td>{textField(item, "created_at")}</td><td>{version === null ? null : <button type="button" onClick={() => { void rollback(version); }}>이 버전으로 rollback</button>}</td></tr>; })}</tbody></table> : null}

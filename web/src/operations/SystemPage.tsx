@@ -22,7 +22,7 @@ export function SystemPage() {
     );
     return () => { active = false; };
   }, []);
-  if (failed) return <p role="alert">System 상태를 불러올 수 없습니다.</p>;
+  if (failed) return <p role="alert">시스템 상태를 불러올 수 없습니다.</p>;
   if (health === null || principal === null) return <p role="status">System 상태를 불러오고 있습니다.</p>;
-  return <section aria-labelledby="system-title"><h1 id="system-title">System</h1><dl className="summary-list"><div><dt>Control Plane</dt><dd>{textField(health, "status")}</dd></div><div><dt>사용자</dt><dd>{textField(principal, "username")}</dd></div><div><dt>역할</dt><dd>{textField(principal, "role")}</dd></div></dl></section>;
+  return <section aria-labelledby="system-title"><h1 id="system-title">시스템</h1><dl className="summary-list"><div><dt>Control Plane</dt><dd>{textField(health, "status")}</dd></div><div><dt>사용자</dt><dd>{textField(principal, "username")}</dd></div><div><dt>역할</dt><dd>{textField(principal, "role")}</dd></div></dl></section>;
 }

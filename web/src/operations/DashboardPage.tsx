@@ -54,19 +54,19 @@ export function DashboardPage({ role }: { role: Role }) {
     };
   }, [role]);
 
-  if (failed) return <p role="alert">Dashboard 상태를 불러올 수 없습니다.</p>;
-  if (state === null) return <p role="status">Dashboard 상태를 불러오고 있습니다.</p>;
+  if (failed) return <p role="alert">대시보드 상태를 불러올 수 없습니다.</p>;
+  if (state === null) return <p role="status">대시보드 상태를 불러오고 있습니다.</p>;
   return (
     <section aria-labelledby="dashboard-title">
       <p className="eyebrow">Control Plane</p>
-      <h1 id="dashboard-title">Dashboard</h1>
+      <h1 id="dashboard-title">대시보드</h1>
       <dl className="metric-grid">
         <div><dt>Control Plane</dt><dd>{state.health}</dd></div>
-        <div><dt>Providers</dt><dd>{state.providers}</dd></div>
-        <div><dt>Models</dt><dd>{state.models}</dd></div>
-        <div><dt>Policies</dt><dd>{state.policies}</dd></div>
-        <div><dt>활성 snapshot</dt><dd>{role === "admin" ? (state.snapshotVersion ?? "없음") : "admin 전용"}</dd></div>
-        <div><dt>최근 event</dt><dd>{state.latestEvent}</dd></div>
+        <div><dt>Provider</dt><dd>{state.providers}</dd></div>
+        <div><dt>모델</dt><dd>{state.models}</dd></div>
+        <div><dt>정책</dt><dd>{state.policies}</dd></div>
+        <div><dt>활성 스냅샷</dt><dd>{role === "admin" ? (state.snapshotVersion ?? "없음") : "관리자 전용"}</dd></div>
+        <div><dt>최근 이벤트</dt><dd>{state.latestEvent}</dd></div>
       </dl>
     </section>
   );

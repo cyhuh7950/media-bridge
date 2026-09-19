@@ -81,7 +81,7 @@ export function RoutingProfilesPage({ role, csrfToken }: OperationsProps) {
   const llm = providers.filter((provider) => provider.kind === "llm");
   return (
     <section aria-labelledby="routing-profiles-title">
-      <h1 id="routing-profiles-title">Routing profiles</h1>
+      <h1 id="routing-profiles-title">라우팅 프로필</h1>
       <p>분석 Provider와 Non‑Vision LLM Provider를 N:N으로 연결하고 선택 정책을 관리합니다.</p>
       {failed ? <p role="alert">Routing profile을 불러오거나 저장할 수 없습니다.</p> : null}
       <table><thead><tr><th>이름</th><th>분석 Provider</th><th>LLM Provider</th><th>전략</th></tr></thead>

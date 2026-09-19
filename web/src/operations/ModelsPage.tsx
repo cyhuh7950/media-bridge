@@ -40,7 +40,7 @@ export function ModelsPage({ role, csrfToken }: OperationsProps) {
 
   return (
     <section aria-labelledby="models-title">
-      <h1 id="models-title">Models</h1>
+      <h1 id="models-title">모델</h1>
       <p>Capability가 확인되지 않거나 만료되면 fail-closed로 처리됩니다.</p>
       {failed ? <p role="alert">Model 목록을 불러올 수 없습니다.</p> : null}
       {items ? <table><thead><tr><th>Model ID</th><th>근거</th><th>만료</th></tr></thead><tbody>{items.map((item) => <tr key={textField(item, "id")}><td>{textField(item, "model_id")}</td><td>{textField(item, "evidence")}</td><td>{textField(item, "expires_at")}</td></tr>)}</tbody></table> : null}

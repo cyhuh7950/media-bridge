@@ -66,7 +66,7 @@ it("renders persisted provider references but no write controls for a viewer", a
   render(<ProvidersPage role="viewer" csrfToken={null} />);
 
   expect(await screen.findByText("vision-primary")).toBeInTheDocument();
-  expect(screen.getByText("env: VISION_API_KEY")).toBeInTheDocument();
+  expect(screen.getByText("환경변수: VISION_API_KEY")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Provider 추가" })).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Provider Secret 원문")).not.toBeInTheDocument();
 });
