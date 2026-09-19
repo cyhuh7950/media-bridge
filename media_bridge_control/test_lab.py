@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import logging
 import threading
 import time
 from collections import deque
@@ -18,6 +19,8 @@ from media_bridge_control.models import Provider, RoutingProfile
 from media_bridge_control.schemas import SecretReference, TestLabPreviewRequest, TestLabRunRequest
 from media_bridge_control.secrets import GatewaySecretResolver, SecretResolutionError
 from media_bridge_control.security import SecurityContext
+
+logger = logging.getLogger(__name__)
 
 
 class TestLabError(RuntimeError):
@@ -91,6 +94,10 @@ class TestLabService:
                 ).strip()
                 answer = await self._answer(client, llm, llm_key, forwarded)
         except (httpx.HTTPError, ValueError, KeyError, SecretResolutionError) as error:
+            logger.exception(
+                "test lab routed provider call failed",
+                extra={"routing_profile_id": str(request.routing_profile_id)},
+            )
             raise TestLabError("upstream_or_downstream_failed") from error
         return {
             "ok": True,
