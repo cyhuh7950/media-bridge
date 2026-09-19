@@ -111,11 +111,11 @@ def apply_database_migration(*, database_url: str, alembic_ini: Path, apply: boo
 
     result = run_migration(
         current_revision=current,
-        target_revision="0007_provider_models",
+        target_revision="0008_model_provider",
         apply=apply,
         upgrade=upgrade,
     )
-    if apply and current_revision(database_url) != "0007_provider_models":
+    if apply and current_revision(database_url) != "0008_model_provider":
         raise MigrationError("migration_verification_failed")
     return result
 
