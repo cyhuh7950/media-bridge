@@ -8,6 +8,7 @@ import threading
 import time
 from collections import deque
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -134,6 +135,7 @@ class TestLabService:
             provider.endpoint,
             headers={"Authorization": f"Bearer {key}"},
             files={"document": (request.filename or "media", data, request.declared_mime)},
+            data={"ocr": "force", "model": provider.model_id or "document-parse"},
         )
         response.raise_for_status()
         body = response.json()
@@ -165,7 +167,9 @@ class TestLabService:
                 "stream": False,
             }
         response = await client.post(
-            provider.endpoint, headers={"Authorization": f"Bearer {key}"}, json=payload
+            self._llm_endpoint(provider.endpoint, protocol),
+            headers={"Authorization": f"Bearer {key}"},
+            json=payload,
         )
         response.raise_for_status()
         body = response.json()
@@ -182,6 +186,15 @@ class TestLabService:
         if not answer:
             raise ValueError("downstream_empty_response")
         return answer
+
+    @staticmethod
+    def _llm_endpoint(endpoint: str, protocol: str) -> str:
+        """Accept catalog base URLs as well as fully-qualified API endpoints."""
+        suffix = "/responses" if protocol == "openai-responses" else "/chat/completions"
+        parsed = urlsplit(endpoint.rstrip("/"))
+        if parsed.path.endswith(suffix):
+            return endpoint
+        return urlunsplit(parsed._replace(path=f"{parsed.path}{suffix}"))
 
     async def run(self, request: TestLabRunRequest) -> dict[str, object]:
         if request.gateway_url is None or request.api_key is None:
