@@ -57,7 +57,7 @@ services:
       - --apply
       - --start-control
     secrets: [control_database_url, control_security_pepper, snapshot_private_key]
-    networks: [database, product]
+    networks: [database, product, egress]
     volumes: [snapshots:/var/lib/media-bridge/snapshots]
     tmpfs: ["/tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001"]
     depends_on:
