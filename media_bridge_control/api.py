@@ -919,7 +919,7 @@ def build_control_app(
                 action="test_lab.executed",
                 target_type="test_lab",
                 target_id=target_id,
-                details={"status": "completed", "ok": bool(result.get("ok"))},
+                details={"status": "completed"},
             )
         except ControlPlaneError as error:
             return _error(error.code, 400)
