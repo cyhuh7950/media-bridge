@@ -142,7 +142,11 @@ class TestLabService:
             provider.endpoint,
             headers={"Authorization": f"Bearer {key}"},
             files={"document": (request.filename or "media", data, request.declared_mime)},
-            data={"ocr": "force", "model": provider.model_id or "document-parse"},
+            data={
+                "ocr": "force",
+                "model": provider.model_id or "document-parse",
+                "output_formats": '["markdown"]',
+            },
         )
         response.raise_for_status()
         body = response.json()
