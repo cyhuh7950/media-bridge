@@ -197,7 +197,7 @@ it("shows audit, operational event, health, and principal from their real endpoi
       if (path.endsWith("/audit")) return Promise.resolve(jsonResponse([{ action: "snapshot.published", target_type: "snapshot" }]));
       if (path.endsWith("/events")) return Promise.resolve(jsonResponse([{ event_type: "snapshot_applied", severity: "info" }]));
       if (path.endsWith("/health")) return Promise.resolve(jsonResponse({ status: "ok" }));
-      if (path.endsWith("/me")) return Promise.resolve(jsonResponse({ username: "viewer", role: "viewer" }));
+      if (path.endsWith("/me")) return Promise.resolve(jsonResponse({ username: "viewer", role: "viewer", csrf_token: "csrf-viewer" }));
       return Promise.reject(new Error("unexpected"));
     }),
   );

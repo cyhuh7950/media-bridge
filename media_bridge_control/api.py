@@ -236,10 +236,16 @@ def build_control_app(
     async def me(request: Request) -> Response:
         raw = request.cookies.get("mb_admin_session", "")
         try:
-            principal = await run_in_threadpool(service.authenticate, raw)
+            result = await run_in_threadpool(service.refresh_csrf, raw)
         except AuthenticationError:
             return _error("unauthorized", 401)
-        return JSONResponse({"username": principal.username, "role": principal.role})
+        return JSONResponse(
+            {
+                "username": result.principal.username,
+                "role": result.principal.role,
+                "csrf_token": result.csrf_token,
+            }
+        )
 
     async def recover(request: Request) -> Response:
         if rejected := secure_request(request):

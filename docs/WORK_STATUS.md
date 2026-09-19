@@ -100,3 +100,10 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - Control and PostgreSQL were healthy; Data Plane remained snapshot-dependent and was unrelated to the Control console 502.
 - Connected the existing `nginx-proxy-manager` container to Docker network `media-bridge_product` without changing source, secrets, or database data.
 - Verification: NPM resolved `media-bridge-control` at `172.26.0.2`, upstream health returned HTTP 200, and the public URL returned HTTP 200.
+
+## 2026-09-19 — 세션 복구 후 Provider 쓰기 권한 수정
+
+- 원인: `/admin/v1/me`가 `username`과 `role`만 반환해 새로고침 후 프런트 CSRF 상태가 `null`이 되었고, 관리자도 Provider 쓰기 UI가 숨겨졌다.
+- 수정: 세션 복구 시 백엔드가 새 CSRF 토큰을 발급하고, 프런트가 이를 메모리 상태에 반영하도록 했다. 기존 CSRF 검증은 유지한다.
+- 검증: Web 테스트 `29 passed`, lint, TypeScript 검사, production build, Python `compileall` 통과. PostgreSQL 통합 테스트는 Windows 로컬 fixture 기동이 멈춰 미검증이며 통과로 표시하지 않았다.
+- 다음 조치: 이 커밋을 ysna-server Control 이미지로 배포하고 공개 `/providers`에서 새로고침 후 관리자 등록 버튼과 실제 등록/수정/삭제를 확인한다.

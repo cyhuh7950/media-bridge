@@ -9,6 +9,10 @@ export interface LoginResponse extends Principal {
   csrf_token: string;
 }
 
+export interface MeResponse extends Principal {
+  csrf_token: string;
+}
+
 export interface TotpEnrollmentResponse {
   user_id: string;
   secret: string;
@@ -37,4 +41,8 @@ export function isLoginResponse(value: unknown): value is LoginResponse {
     "csrf_token" in value &&
     typeof (value as Record<string, unknown>).csrf_token === "string"
   );
+}
+
+export function isMeResponse(value: unknown): value is MeResponse {
+  return isLoginResponse(value);
 }

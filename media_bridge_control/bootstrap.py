@@ -51,6 +51,12 @@ class LoginResult:
 
 
 @dataclass(frozen=True, slots=True)
+class SessionResult:
+    principal: "Principal"
+    csrf_token: str
+
+
+@dataclass(frozen=True, slots=True)
 class DefaultAdminResult:
     user_id: str
     username: str
@@ -594,6 +600,21 @@ class ControlPlaneService:
             ):
                 raise AuthenticationError("csrf_rejected")
         return principal
+
+    def refresh_csrf(self, session_token: str) -> SessionResult:
+        """Issue a fresh in-memory CSRF token for an existing session."""
+        principal = self.authenticate(session_token)
+        csrf_token = secrets.token_urlsafe(32)
+        with self.database.session() as session:
+            stored = session.scalar(
+                select(AdminSession)
+                .where(AdminSession.selector == principal.session_selector)
+                .with_for_update()
+            )
+            if stored is None:
+                raise AuthenticationError("unauthorized")
+            stored.csrf_digest = self.security.digest(csrf_token, purpose="csrf")
+        return SessionResult(principal=principal, csrf_token=csrf_token)
 
     def logout(self, *, session_token: str, csrf_token: str) -> None:
         principal = self.authenticate_with_csrf(

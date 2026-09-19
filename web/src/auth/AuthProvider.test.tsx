@@ -34,7 +34,9 @@ describe("AuthProvider", () => {
   it("loads the current P1 session and enforces the route role in the UI", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(jsonResponse({ username: "viewer", role: "viewer" })),
+      vi.fn().mockResolvedValue(
+        jsonResponse({ username: "viewer", role: "viewer", csrf_token: "csrf-viewer" }),
+      ),
     );
 
     render(<AuthProvider><AuthProbe /></AuthProvider>);

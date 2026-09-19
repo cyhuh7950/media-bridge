@@ -66,11 +66,15 @@ def test_login_requires_totp_then_session_cookie_csrf_and_logout(migrated_postgr
     assert response.json()["role"] == "admin"
     csrf_token = response.json()["csrf_token"]
     assert "mb_admin_session=" in response.headers["set-cookie"]
-    assert client.get("/admin/v1/me").json() == {"username": "admin", "role": "admin"}
+    me = client.get("/admin/v1/me").json()
+    assert me["username"] == "admin"
+    assert me["role"] == "admin"
+    refreshed_csrf_token = me["csrf_token"]
+    assert refreshed_csrf_token != csrf_token
     assert client.post("/admin/v1/auth/logout", headers=origin).status_code == 403
     assert (
         client.post(
-            "/admin/v1/auth/logout", headers={**origin, "x-csrf-token": csrf_token}
+            "/admin/v1/auth/logout", headers={**origin, "x-csrf-token": refreshed_csrf_token}
         ).status_code
         == 204
     )

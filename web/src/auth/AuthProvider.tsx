@@ -11,8 +11,9 @@ import {
 import { adminRequest, SafeApiError } from "../api/client";
 import {
   isLoginResponse,
-  isPrincipal,
+  isMeResponse,
   type LoginResponse,
+  type MeResponse,
   type Principal,
 } from "../api/contracts";
 
@@ -41,10 +42,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    void adminRequest<Principal>("/me", { signal: controller.signal })
+    void adminRequest<MeResponse>("/me", { signal: controller.signal })
       .then((principal) => {
-        if (!isPrincipal(principal)) throw new SafeApiError(502, "invalid_response");
-        setState({ status: "authenticated", principal, csrfToken: null });
+        if (!isMeResponse(principal)) throw new SafeApiError(502, "invalid_response");
+        setState({
+          status: "authenticated",
+          principal: { username: principal.username, role: principal.role },
+          csrfToken: principal.csrf_token,
+        });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
