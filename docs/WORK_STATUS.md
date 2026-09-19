@@ -149,3 +149,9 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - 라우팅 프로필 DELETE API를 추가했다.
 - Web 테스트 30 passed, lint와 TypeScript/build 통과. Python compileall·git diff --check 통과.
 - ysna-server 재배포와 실제 브라우저 smoke는 다음 단계다.
+
+## 2026-09-19 — 관리 화면 표준화 배포
+
+- `0aae60f`를 ysna-server Control 이미지로 재빌드·재기동했다.
+- Control 컨테이너 상태 `healthy`, 공개 `https://media-bridge.sinsan.kr/` 및 정적 번들 응답 HTTP 200을 확인했다. 공개 URL의 로컬 인증서 주체 불일치로 Windows curl은 `-k` 검증을 사용했다.
+- Data Plane의 서명 snapshot 의존 상태는 기존과 동일하며 이번 Control 화면 변경 범위가 아니다.
