@@ -232,3 +232,9 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - 접근 키 관리 목록에서 `responses:invoke` 권한이 있고 폐기되지 않은 키를 선택할 수 있게 했다. 원문 키는 일회성 발급 정책상 서버에서 복구하지 않고, 사용자가 보관한 `mbc_...` 원문을 별도 입력한다.
 - TestLabPage 웹 테스트 4개와 TypeScript/build 통과.
 - `033295c`를 ysna-server `/home/ubuntu/deploy/media-bridge-033295c`에 배포했고 Control 컨테이너 `healthy`를 확인했다. 기존 `tests/control/integration/test_configuration_api.py`와 `.pr-body.md`는 미관련 dirty 상태로 보존했다.
+
+## 2026-09-20 — Test Lab redundant selector and error wording cleanup
+
+- Media Bridge 접근 키 관리 목록 선택 상자는 호출에 사용되지 않는 식별자 표시였으므로 제거했다.
+- 오류 문구의 `OmniRoute endpoint/API key` 표현을 `Media Bridge endpoint/접근 키 원문`으로 수정했다.
+- TestLabPage 웹 테스트 4개와 TypeScript/build 통과. `36f96fa`를 ysna-server에 배포했고 `/test-lab` HTTP 200 및 Control `healthy`를 확인했다.
