@@ -55,3 +55,11 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - 결정된 기본 연결: 분석 Provider와 Non-Vision LLM Provider는 라우팅 프로필을 통한 N:N 연결이며 priority/fallback/health/cost 정책으로 자동 선택한다.
 - 결정된 외부 연동: OmniRoute에는 설치형 localhost가 아니라 배포형 HTTPS Media Bridge Endpoint를 OpenAI 호환 Provider로 등록한다.
 - 미결정: Anthropic 호환 세부 계약, OmniRoute의 tenant 헤더 전달 방식, 1차 Provider catalog의 최종 승인과 가격표 정책.
+
+## 2026-09-19 — ysna-server deployment checkpoint
+
+- Deployed branch commit `93a8312` to `/home/ubuntu/deploy/media-bridge` and rebuilt `media-bridge-control:0.1.0-deploy`.
+- Applied approved Alembic migration `0004_managed_provider_catalog -> 0005_routing_profiles`; database reports `0005_routing_profiles`.
+- Control Plane container is healthy and serving on its configured HTTPS proxy path.
+- Data Plane container is not healthy because the snapshots volume has no signed `active.json` yet; initial setup/publish is required before gateway traffic can run.
+- User smoke test remains pending by request. No user credentials or secret values were printed.
