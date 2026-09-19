@@ -63,3 +63,11 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - Control Plane container is healthy and serving on its configured HTTPS proxy path.
 - Data Plane container is not healthy because the snapshots volume has no signed `active.json` yet; initial setup/publish is required before gateway traffic can run.
 - User smoke test remains pending by request. No user credentials or secret values were printed.
+
+## 2026-09-19 — Provider setup optionality and catalog query fix
+
+- `3f395ab` fixes the admin API path validator to preserve approved query parameters, so `/provider-catalog?kind=analysis|llm` can load.
+- Provider onboarding now states the connection is optional and exposes an explicit skip-to-console action.
+- Web tests (9 targeted), lint, TypeScript check, and production build passed.
+- Deployed the updated Control image to ysna-server; Control container is healthy. A fresh login is required after the container recreation.
+- Data Plane remains waiting for the initial signed snapshot, as previously recorded.
