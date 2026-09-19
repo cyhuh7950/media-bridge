@@ -13,7 +13,7 @@ from media_bridge_control.db import Database
 from media_bridge_control.runtime import build_control_runtime
 from media_bridge_control.settings import ControlSettings
 
-EXPECTED_MIGRATION_HEAD = "0003_deployment_auth"
+EXPECTED_MIGRATION_HEAD = "0005_routing_profiles"
 
 
 class MigrationStateError(RuntimeError):
