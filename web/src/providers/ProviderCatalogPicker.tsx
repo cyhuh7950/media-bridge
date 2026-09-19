@@ -12,6 +12,7 @@ export interface ProviderCatalogEntry {
   capabilities: string[];
   default_endpoint: string | null;
   secret_env: string | null;
+  default_model_id: string;
 }
 
 export function ProviderCatalogPicker({

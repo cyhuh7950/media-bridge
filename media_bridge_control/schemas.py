@@ -121,6 +121,10 @@ class ProviderCreate(AdminStrictModel):
         str,
         StringConstraints(pattern=r"^[a-z0-9][a-z0-9.-]{0,127}$"),
     ] | None = None
+    model_id: Annotated[
+        str,
+        StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"),
+    ] | None = None
     endpoint: Annotated[str, StringConstraints(max_length=2_048, pattern=r"^https://")]
     protocol: Annotated[
         str,
@@ -144,6 +148,10 @@ class ProviderUpdate(NonEmptyUpdate):
     catalog_id: Annotated[
         str,
         StringConstraints(pattern=r"^[a-z0-9][a-z0-9.-]{0,127}$"),
+    ] | None = None
+    model_id: Annotated[
+        str,
+        StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"),
     ] | None = None
     endpoint: Annotated[
         str,

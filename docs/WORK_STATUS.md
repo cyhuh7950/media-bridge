@@ -155,3 +155,11 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - `0aae60f`를 ysna-server Control 이미지로 재빌드·재기동했다.
 - Control 컨테이너 상태 `healthy`, 공개 `https://media-bridge.sinsan.kr/` 및 정적 번들 응답 HTTP 200을 확인했다. 공개 URL의 로컬 인증서 주체 불일치로 Windows curl은 `-k` 검증을 사용했다.
 - Data Plane의 서명 snapshot 의존 상태는 기존과 동일하며 이번 Control 화면 변경 범위가 아니다.
+
+## 2026-09-19 — Provider 선택 모델과 기준 모델
+
+- Provider 카탈로그에 기준 모델을 추가했다.
+- Provider 등록·수정 팝업에서 `기준 모델 (선택)`을 지정할 수 있으며, 비워두면 카탈로그 기준 모델을 자동 사용한다.
+- Provider 응답에 적용 모델을 표시하고 `0007_provider_models` migration으로 사용자 지정 모델을 저장한다.
+- Web 테스트 30 passed, lint·TypeScript·build·ruff·compileall 통과. 기존 PostgreSQL 통합 테스트는 로컬 fixture 기동 지연으로 미검증이다.
+- 다음 단계: 커밋 후 ysna-server에 migration 적용과 Control 재배포, 공개 URL 확인.

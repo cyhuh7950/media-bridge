@@ -89,6 +89,7 @@ class ConfigurationService:
                         "name": row.name,
                         "kind": row.kind,
                         "catalog_id": row.catalog_id,
+                        "model_id": row.model_id,
                         "endpoint": row.endpoint,
                         "protocol": row.protocol,
                         "capabilities": set(row.capabilities or []),
@@ -130,6 +131,7 @@ class ConfigurationService:
             "name": request.name,
             "kind": request.kind,
             "catalog_id": request.catalog_id,
+            "model_id": request.model_id,
             "endpoint": request.endpoint,
             "protocol": protocol,
             "capabilities": sorted(capabilities),
@@ -151,11 +153,18 @@ class ConfigurationService:
 
     @staticmethod
     def _provider(row: Provider) -> dict[str, Any]:
+        model_id = row.model_id
+        if model_id is None and row.catalog_id is not None:
+            try:
+                model_id = get_provider_catalog_entry(row.catalog_id).default_model_id
+            except ProviderCatalogError:
+                model_id = None
         return {
             "id": str(row.id),
             "name": row.name,
             "kind": row.kind,
             "catalog_id": row.catalog_id,
+            "model_id": model_id,
             "endpoint": row.endpoint,
             "protocol": row.protocol,
             "capabilities": sorted(row.capabilities or []),

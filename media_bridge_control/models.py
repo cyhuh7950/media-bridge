@@ -146,6 +146,7 @@ class Provider(Base):
     name: Mapped[str] = mapped_column(String(128), unique=True)
     kind: Mapped[str] = mapped_column(String(16))
     catalog_id: Mapped[str | None] = mapped_column(String(128))
+    model_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     endpoint: Mapped[str] = mapped_column(String(2048))
     protocol: Mapped[str | None] = mapped_column(String(64))
     capabilities: Mapped[list[str]] = mapped_column(JSONB, default=list)

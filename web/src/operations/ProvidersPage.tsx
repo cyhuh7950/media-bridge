@@ -27,6 +27,7 @@ export function ProvidersPage({ role, csrfToken }: OperationsProps) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<ManagedProviderKind>("analysis");
   const [catalogId, setCatalogId] = useState("");
+  const [modelId, setModelId] = useState("");
   const [protocol, setProtocol] = useState("");
   const [capabilities, setCapabilities] = useState<string[]>([]);
   const [endpoint, setEndpoint] = useState("");
@@ -46,11 +47,12 @@ export function ProvidersPage({ role, csrfToken }: OperationsProps) {
   }
 
   function openCreate() {
-    setEditingId(null); setDialogMode("create"); setName(""); setKind("analysis"); setCatalogId(""); setProtocol(""); setCapabilities([]); setEndpoint(""); setReference(""); setReferenceKind("env"); setApiKey(""); setSaveFailed(false);
+    setEditingId(null); setDialogMode("create"); setName(""); setKind("analysis"); setCatalogId(""); setModelId(""); setProtocol(""); setCapabilities([]); setEndpoint(""); setReference(""); setReferenceKind("env"); setApiKey(""); setSaveFailed(false);
   }
 
   function openEdit(item: Record<string, unknown>) {
-    setEditingId(textField(item, "id")); setDialogMode("edit"); setName(textField(item, "name")); setKind(textField(item, "kind") === "llm" ? "llm" : "analysis"); setCatalogId(textField(item, "catalog_id")); setProtocol(textField(item, "protocol")); setCapabilities(Array.isArray(item.capabilities) ? item.capabilities.filter((value): value is string => typeof value === "string") : []); setEndpoint(textField(item, "endpoint"));
+    const savedModel = typeof item.model_id === "string" ? item.model_id : "";
+    setEditingId(textField(item, "id")); setDialogMode("edit"); setName(textField(item, "name")); setKind(textField(item, "kind") === "llm" ? "llm" : "analysis"); setCatalogId(textField(item, "catalog_id")); setModelId(savedModel); setProtocol(textField(item, "protocol")); setCapabilities(Array.isArray(item.capabilities) ? item.capabilities.filter((value): value is string => typeof value === "string") : []); setEndpoint(textField(item, "endpoint"));
     const secretRef = item.secret_ref; setReferenceKind(typeof secretRef === "object" && secretRef !== null && textField(secretRef as Record<string, unknown>, "kind") === "db" ? "db" : "env"); setReference(typeof secretRef === "object" && secretRef !== null ? textField(secretRef as Record<string, unknown>, "identifier") : ""); setApiKey(""); setSaveFailed(false);
   }
 
@@ -59,7 +61,7 @@ export function ProvidersPage({ role, csrfToken }: OperationsProps) {
     if (!writable) return;
     setSaveFailed(false);
     try {
-      const body = { name, kind, catalog_id: catalogId || undefined, endpoint, protocol: protocol || undefined, capabilities, secret_ref: { kind: referenceKind, identifier: reference || "PROVIDER_API_KEY" }, api_key: apiKey || undefined, enabled: true };
+      const body = { name, kind, catalog_id: catalogId || undefined, model_id: modelId || undefined, endpoint, protocol: protocol || undefined, capabilities, secret_ref: { kind: referenceKind, identifier: reference || "PROVIDER_API_KEY" }, api_key: apiKey || undefined, enabled: true };
       if (dialogMode === "edit" && editingId) await adminRequest(`/providers/${editingId}`, { method: "PATCH", csrfToken, body });
       else await adminRequest("/providers", { method: "POST", csrfToken, body });
       closeDialog(); await reload();
@@ -90,8 +92,9 @@ export function ProvidersPage({ role, csrfToken }: OperationsProps) {
       </> : null}
       {dialogMode ? <section className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="provider-dialog-title"><form className="dialog-card form-grid" onSubmit={(event) => { void submit(event); }}><h2 id="provider-dialog-title">{dialogMode === "create" ? "Provider 등록" : "Provider 수정"}</h2>
         <label htmlFor="provider-operation-kind">Provider 유형</label><select id="provider-operation-kind" value={kind} onChange={(event) => { setKind(event.target.value as ManagedProviderKind); setCatalogId(""); }}><option value="analysis">분석 Provider</option><option value="llm">Non-Vision LLM Provider</option></select>
-        <ProviderCatalogPicker kind={kind} value={catalogId} onChange={(entry: ProviderCatalogEntry | null) => { setCatalogId(entry?.provider_id ?? ""); setName(entry?.provider_id ?? ""); setEndpoint(entry?.default_endpoint ?? ""); setProtocol(entry?.protocol ?? ""); setCapabilities(entry?.capabilities ?? []); setReferenceKind("env"); setReference(entry?.secret_env ?? ""); }} />
+        <ProviderCatalogPicker kind={kind} value={catalogId} onChange={(entry: ProviderCatalogEntry | null) => { setCatalogId(entry?.provider_id ?? ""); setName(entry?.provider_id ?? ""); setModelId(entry?.default_model_id ?? ""); setEndpoint(entry?.default_endpoint ?? ""); setProtocol(entry?.protocol ?? ""); setCapabilities(entry?.capabilities ?? []); setReferenceKind("env"); setReference(entry?.secret_env ?? ""); }} />
         <label htmlFor="provider-operation-name">Provider 이름</label><input id="provider-operation-name" value={name} onChange={(event) => { setName(event.target.value); }} required />
+        <label htmlFor="provider-operation-model">기준 모델 (선택)</label><input id="provider-operation-model" value={modelId} onChange={(event) => { setModelId(event.target.value); }} placeholder="비워두면 Provider 기준 모델 사용" />
         <label htmlFor="provider-operation-endpoint">HTTPS endpoint</label><input id="provider-operation-endpoint" type="url" value={endpoint} onChange={(event) => { setEndpoint(event.target.value); }} required />
         <label htmlFor="provider-operation-reference">Secret 환경변수 이름</label><input id="provider-operation-reference" value={reference} onChange={(event) => { setReference(event.target.value); }} pattern="[A-Z][A-Z0-9_]*" />
         <label htmlFor="provider-operation-api-key">Provider API 키 {dialogMode === "edit" ? "(변경 시 입력)" : "(선택)"}</label><input id="provider-operation-api-key" type="password" value={apiKey} onChange={(event) => { setApiKey(event.target.value); }} autoComplete="new-password" />
