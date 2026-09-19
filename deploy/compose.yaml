@@ -44,6 +44,8 @@ services:
       MEDIA_BRIDGE_SNAPSHOT_PATH: /var/lib/media-bridge/snapshots/active.json
       MEDIA_BRIDGE_CONTROL_ORIGIN: ${MEDIA_BRIDGE_CONTROL_ORIGIN:-https://localhost}
       MEDIA_BRIDGE_CONTROL_HOST: ${MEDIA_BRIDGE_CONTROL_HOST:-localhost}
+      MEDIA_BRIDGE_CONTROL_GATEWAY_URL: ${MEDIA_BRIDGE_CONTROL_GATEWAY_URL:-https://media-bridge-gateway.sinsan.kr}
+      MEDIA_BRIDGE_CONTROL_GATEWAY_CREDENTIAL_FILE: /run/secrets/control_gateway_credential
       MEDIA_BRIDGE_CONTROL_BIND_HOST: 0.0.0.0
       MEDIA_BRIDGE_CONTROL_PORT: "8081"
       MEDIA_BRIDGE_CONSOLE_STATIC_ROOT: /opt/media-bridge/web
@@ -56,7 +58,7 @@ services:
       - /opt/media-bridge/migrations/alembic.ini
       - --apply
       - --start-control
-    secrets: [control_database_url, control_security_pepper, snapshot_private_key]
+    secrets: [control_database_url, control_security_pepper, snapshot_private_key, control_gateway_credential]
     networks: [database, product, egress]
     volumes: [snapshots:/var/lib/media-bridge/snapshots]
     tmpfs: ["/tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001"]
@@ -130,6 +132,8 @@ secrets:
     file: ${MEDIA_BRIDGE_CONTROL_DATABASE_URL_FILE:-./secrets/control-database-url.secret}
   control_security_pepper:
     file: ${MEDIA_BRIDGE_CONTROL_SECURITY_PEPPER_FILE:-./secrets/control-security-pepper.secret}
+  control_gateway_credential:
+    file: ${MEDIA_BRIDGE_CONTROL_GATEWAY_CREDENTIAL_FILE:-./secrets/control-gateway-credential.secret}
   snapshot_private_key:
     file: ${MEDIA_BRIDGE_SNAPSHOT_PRIVATE_KEY_FILE:-./secrets/snapshot-private-key.pem}
   snapshot_public_key:

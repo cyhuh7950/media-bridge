@@ -93,6 +93,8 @@ def build_control_app(
     snapshot_publisher: SnapshotPublisher | None = None,
     gateway_client: GatewayClient | None = None,
     secret_resolver: GatewaySecretResolver | None = None,
+    gateway_url: str | None = None,
+    gateway_credential: str | None = None,
     action_rate_limiter: AdminActionRateLimiter | None = None,
 ) -> Starlette:
     configuration = ConfigurationService(service.database, service.security)
@@ -111,6 +113,8 @@ def build_control_app(
         database=service.database,
         security=service.security,
         secret_resolver=resolver,
+        gateway_url=gateway_url,
+        gateway_credential=gateway_credential,
     )
     action_limiter = action_rate_limiter or AdminActionRateLimiter()
 
@@ -942,8 +946,11 @@ def build_control_app(
                 "media_size_invalid",
                 "routing_profile_required",
                 "routing_provider_unavailable",
+                "gateway_configuration_missing",
             }:
                 status = 400
+            if error.code == "gateway_configuration_missing":
+                status = 503
             return _error(error.code, status)
         return JSONResponse(result)
 

@@ -72,6 +72,8 @@ def build_control_runtime(
         snapshot_publisher=publisher,
         gateway_client=gateway_client,
         secret_resolver=secret_resolver,
+        gateway_url=settings.gateway_url,
+        gateway_credential=settings.gateway_credential,
     )
     app = (
         build_console_app(admin_app=admin_app, static_root=settings.console_static_root)

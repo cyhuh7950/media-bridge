@@ -34,6 +34,8 @@ def test_preview_has_zero_downstream_and_run_requires_literal_opt_in(
         allowed_host="control.test",
         gateway_client=gateway,
         secret_resolver=GatewaySecretResolver(),
+        gateway_url="https://gateway.example.test",
+        gateway_credential="mbc_gateway.external-value",
     )
     client = TestClient(app, base_url="https://control.test")
     login = client.post(
@@ -49,10 +51,11 @@ def test_preview_has_zero_downstream_and_run_requires_literal_opt_in(
 
     preview = client.post("/admin/v1/test-lab/preview", headers=headers, json=payload)
     assert preview.status_code == 200
-    assert preview.json()["action"] == "preview"
-    assert preview.json()["status"] == "validated"
-    assert gateway.calls == []
+    assert preview.json()["ok"] is True
+    assert preview.json()["gateway"]["execution"] == "data-plane"
+    assert gateway.calls[-3:] == ["upload", "responses", "delete"]
 
+    preview_call_count = len(gateway.calls)
     missing_opt_in = client.post(
         "/admin/v1/test-lab/run",
         headers=headers,
@@ -74,7 +77,7 @@ def test_preview_has_zero_downstream_and_run_requires_literal_opt_in(
     )
     assert missing_opt_in.status_code == 400
     assert false_opt_in.status_code == 400
-    assert gateway.calls == []
+    assert len(gateway.calls) == preview_call_count
 
     run = client.post(
         "/admin/v1/test-lab/run",
@@ -104,6 +107,8 @@ def test_preview_does_not_call_downstream_or_expose_credentials(
         allowed_host="control.test",
         gateway_client=gateway,
         secret_resolver=GatewaySecretResolver(),
+        gateway_url="https://gateway.example.test",
+        gateway_credential="mbc_gateway.external-value",
     )
     client = TestClient(app, base_url="https://control.test")
     login = client.post(
@@ -119,6 +124,6 @@ def test_preview_does_not_call_downstream_or_expose_credentials(
 
     response = client.post("/admin/v1/test-lab/preview", headers=headers, json=payload)
     assert response.status_code == 200
-    assert response.json()["status"] == "validated"
-    assert gateway.calls == []
+    assert response.json()["ok"] is True
+    assert gateway.calls[-3:] == ["upload", "responses", "delete"]
     database.close()

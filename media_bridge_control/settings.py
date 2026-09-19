@@ -60,6 +60,8 @@ class ControlSettings:
     smtp_username: str | None = None
     smtp_password: bytes | None = field(default=None, repr=False)
     admin_recovery_email: str | None = None
+    gateway_url: str | None = None
+    gateway_credential: str | None = field(default=None, repr=False)
 
     @classmethod
     def from_environment(cls) -> ControlSettings:
@@ -125,6 +127,13 @@ class ControlSettings:
         admin_recovery_email = (
             os.environ.get("MEDIA_BRIDGE_ADMIN_RECOVERY_EMAIL", "").strip() or None
         )
+        gateway_url = os.environ.get("MEDIA_BRIDGE_CONTROL_GATEWAY_URL", "").strip() or None
+        gateway_credential = None
+        if gateway_url:
+            gateway_credential = _secret(
+                "MEDIA_BRIDGE_CONTROL_GATEWAY_CREDENTIAL",
+                "MEDIA_BRIDGE_CONTROL_GATEWAY_CREDENTIAL_FILE",
+            ).decode()
         return cls(
             database_url=database_url,
             security_pepper=pepper,
@@ -140,4 +149,6 @@ class ControlSettings:
             smtp_username=smtp_username,
             smtp_password=smtp_password,
             admin_recovery_email=admin_recovery_email,
+            gateway_url=gateway_url,
+            gateway_credential=gateway_credential,
         )

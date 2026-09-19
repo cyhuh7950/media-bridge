@@ -20,6 +20,7 @@ function resultRecord(value: unknown): Record<string, unknown> {
 
 interface TestLabPageProps extends OperationsProps { resultTtlMs?: number; }
 type RoutingProfile = { id: string; name: string; enabled: boolean };
+type ResultSource = "full" | "omniroute";
 
 export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: TestLabPageProps) {
   const [request, setRequest] = useState("");
@@ -29,6 +30,7 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
   const [omniRouteEndpoint, setOmniRouteEndpoint] = useState(DEFAULT_GATEWAY_ENDPOINT);
   const [omniRouteApiKey, setOmniRouteApiKey] = useState("");
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [resultSource, setResultSource] = useState<ResultSource | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const writable = role !== "viewer" && csrfToken !== null;
@@ -47,19 +49,20 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
 
   useEffect(() => {
     if (result === null) return;
-    const timer = window.setTimeout(() => { setResult(null); setRequest(""); setMedia(null); if (fileInput.current) fileInput.current.value = ""; }, resultTtlMs);
+    const timer = window.setTimeout(() => { setResult(null); setResultSource(null); setRequest(""); setMedia(null); if (fileInput.current) fileInput.current.value = ""; }, resultTtlMs);
     return () => { window.clearTimeout(timer); };
   }, [result, resultTtlMs]);
 
-  function clearResult() { setResult(null); setRequest(""); setMedia(null); if (fileInput.current) fileInput.current.value = ""; }
+  function clearResult() { setResult(null); setResultSource(null); setRequest(""); setMedia(null); if (fileInput.current) fileInput.current.value = ""; }
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!writable || !routingProfileId || media === null || media.size < 1 || media.size > MAX_MEDIA_BYTES) { setError("입력값을 확인하세요."); return; }
-    setError(null); setResult(null);
+    setError(null); setResult(null); setResultSource(null);
     try {
       const response = await adminRequest<unknown>("/test-lab/preview", { method: "POST", csrfToken, body: { routing_profile_id: routingProfileId, target_model: "auto", conversion_profile: "generic", user_request: request, media_type: media.type === "application/pdf" ? "pdf" : "image", filename: media.name, declared_mime: media.type, media_base64: await toBase64(media) } });
       setResult(resultRecord(response));
+      setResultSource("full");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "upstream_or_downstream_failed"); }
   }
 
@@ -76,7 +79,7 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
       return;
     }
     if (!writable || csrfToken === null || media === null) return;
-    setError(null); setResult(null);
+    setError(null); setResult(null); setResultSource(null);
     try {
       const response = await adminRequest<unknown>("/test-lab/run", { method: "POST", csrfToken, body: {
         routing_profile_id: routingProfileId,
@@ -92,10 +95,11 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
         execute_downstream: true,
       } });
       setResult(resultRecord(response));
+      setResultSource("omniroute");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "omniroute_media_bridge_failed"); }
   }
 
   if (!writable) return <section aria-labelledby="test-lab-title"><h1 id="test-lab-title">테스트 랩</h1><p>viewer는 시험을 실행할 수 없습니다.</p></section>;
 
-  return <section aria-labelledby="test-lab-title"><h1 id="test-lab-title">테스트 랩</h1><p>선택한 라우팅으로 upstream부터 downstream까지 실행하고 결과를 확인합니다.</p><section aria-labelledby="deployment-endpoints-title" className="result-panel"><h2 id="deployment-endpoints-title">배포형 Media Bridge API endpoint</h2><p>기본 주소: <code>{DEFAULT_GATEWAY_ENDPOINT}</code></p><ul><li>OpenAI Responses API: <code>{DEFAULT_GATEWAY_ENDPOINT}/v1/responses</code></li><li>OpenAI Chat Completions: <code>{DEFAULT_GATEWAY_ENDPOINT}/v1/chat/completions</code></li><li>모델 조회: <code>{DEFAULT_GATEWAY_ENDPOINT}/v1/models</code></li><li>MCP: <code>{DEFAULT_GATEWAY_ENDPOINT}/mcp</code></li><li>Asset 업로드: <code>{DEFAULT_GATEWAY_ENDPOINT}/assets</code></li></ul></section><section aria-labelledby="full-test-title" className="result-panel"><h2 id="full-test-title">전체 파이프라인 시험</h2><p>라우팅을 선택하고 파일과 질문을 입력하면 upstream과 downstream 결과를 아래에 표시합니다.</p><form className="form-grid compact-form" onSubmit={(event) => { void submit(event); }}><label htmlFor="routing-profile">라우팅 프로필</label><select id="routing-profile" value={routingProfileId} onChange={(event) => { setRoutingProfileId(event.target.value); }} required><option value="">선택</option>{routingProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select><label htmlFor="test-media">질문에 첨부할 이미지 또는 PDF · 최대 2 MiB</label><input ref={fileInput} id="test-media" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(event) => { setMedia(event.target.files?.[0] ?? null); }} required /><label htmlFor="test-request">질문</label><textarea id="test-request" value={request} onChange={(event) => { setRequest(event.target.value); }} required /><button type="submit">전체 파이프라인 시험</button></form></section><section aria-labelledby="omniroute-test-title" className="result-panel"><h2 id="omniroute-test-title">OmniRoute → Media Bridge 전체 흐름 시험</h2><p>위에서 선택한 라우팅과 같은 파일·질문으로 OmniRoute에서 Media Bridge를 거쳐 upstage-document-parse와 Solar 4까지 실제 API 경로를 호출합니다.</p><form className="form-grid compact-form" onSubmit={(event) => { void submitOmniRoute(event); }}><label htmlFor="omniroute-endpoint">OmniRoute가 호출할 Media Bridge endpoint</label><input id="omniroute-endpoint" type="url" value={omniRouteEndpoint} onChange={(event) => { setOmniRouteEndpoint(event.target.value); }} placeholder="https://media-bridge-gateway.sinsan.kr" required /><p>기본 주소만 입력하세요. <code>/v1</code>는 자동으로 붙습니다.</p><label htmlFor="omniroute-api-key">Media Bridge 접근 키 원문</label><input id="omniroute-api-key" type="password" value={omniRouteApiKey} onChange={(event) => { setOmniRouteApiKey(event.target.value); }} placeholder="mbc_..." required /><p>접근 키 관리에서 발급할 때 표시된 원문 키를 입력하세요. 관리 목록의 이름만으로는 원문 키를 복구할 수 없습니다.</p><button type="submit">OmniRoute 전체 흐름 시험</button></form></section>{error ? <p role="alert">시험 실패: {error}</p> : null}{result ? <section className="result-panel" aria-label="시험 결과"><div className="inline-actions"><strong>시험 결과</strong><button className="secondary-button" type="button" onClick={clearResult}>결과 지우기</button></div><pre>{JSON.stringify(result, null, 2)}</pre></section> : null}</section>;
+  return <section aria-labelledby="test-lab-title"><h1 id="test-lab-title">테스트 랩</h1><p>선택한 라우팅으로 upstream부터 downstream까지 실행하고 결과를 확인합니다.</p><section aria-labelledby="deployment-endpoints-title" className="result-panel"><h2 id="deployment-endpoints-title">배포형 Media Bridge API endpoint</h2><p>기본 주소: <code>{DEFAULT_GATEWAY_ENDPOINT}</code></p><ul><li>OpenAI Responses API: <code>{DEFAULT_GATEWAY_ENDPOINT}/v1/responses</code></li><li>OpenAI Chat Completions: <code>{DEFAULT_GATEWAY_ENDPOINT}/v1/chat/completions</code></li><li>모델 조회: <code>{DEFAULT_GATEWAY_ENDPOINT}/v1/models</code></li><li>MCP: <code>{DEFAULT_GATEWAY_ENDPOINT}/mcp</code></li><li>Asset 업로드: <code>{DEFAULT_GATEWAY_ENDPOINT}/assets</code></li></ul></section><section aria-labelledby="full-test-title" className="result-panel"><h2 id="full-test-title">전체 파이프라인 시험</h2><p>라우팅을 선택하고 파일과 질문을 입력하면 upstream과 downstream 결과를 아래에 표시합니다.</p><form className="form-grid compact-form" onSubmit={(event) => { void submit(event); }}><label htmlFor="routing-profile">라우팅 프로필</label><select id="routing-profile" value={routingProfileId} onChange={(event) => { setRoutingProfileId(event.target.value); }} required><option value="">선택</option>{routingProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select><label htmlFor="test-media">질문에 첨부할 이미지 또는 PDF · 최대 2 MiB</label><input ref={fileInput} id="test-media" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(event) => { setMedia(event.target.files?.[0] ?? null); }} required /><label htmlFor="test-request">질문</label><textarea id="test-request" value={request} onChange={(event) => { setRequest(event.target.value); }} required /><button type="submit">전체 파이프라인 시험</button></form></section><section aria-labelledby="omniroute-test-title" className="result-panel"><h2 id="omniroute-test-title">OmniRoute → Media Bridge 전체 흐름 시험</h2><p>위에서 선택한 라우팅과 같은 파일·질문으로 OmniRoute에서 Media Bridge를 거쳐 upstage-document-parse와 Solar 4까지 실제 API 경로를 호출합니다.</p><form className="form-grid compact-form" onSubmit={(event) => { void submitOmniRoute(event); }}><label htmlFor="omniroute-endpoint">OmniRoute가 호출할 Media Bridge endpoint</label><input id="omniroute-endpoint" type="url" value={omniRouteEndpoint} onChange={(event) => { setOmniRouteEndpoint(event.target.value); }} placeholder="https://media-bridge-gateway.sinsan.kr" required /><p>기본 주소만 입력하세요. <code>/v1</code>는 자동으로 붙습니다.</p><label htmlFor="omniroute-api-key">Media Bridge 접근 키 원문</label><input id="omniroute-api-key" type="password" value={omniRouteApiKey} onChange={(event) => { setOmniRouteApiKey(event.target.value); }} placeholder="mbc_..." required /><p>접근 키 관리에서 발급할 때 표시된 원문 키를 입력하세요. 관리 목록의 이름만으로는 원문 키를 복구할 수 없습니다.</p><button type="submit">OmniRoute 전체 흐름 시험</button></form></section>{error ? <p role="alert">시험 실패: {error}</p> : null}{result ? <section className="result-panel" aria-label="시험 결과"><div className="inline-actions"><strong>시험 결과 · {resultSource === "omniroute" ? "OmniRoute → Media Bridge" : "전체 파이프라인(Control)"}</strong><button className="secondary-button" type="button" onClick={clearResult}>결과 지우기</button></div><pre>{JSON.stringify(result, null, 2)}</pre></section> : null}</section>;
 }
