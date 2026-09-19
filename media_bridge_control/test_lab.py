@@ -143,11 +143,21 @@ class TestLabService:
             return body["text"].strip()
         pages = body.get("pages") if isinstance(body, dict) else None
         if isinstance(pages, list):
-            return "\n".join(
+            page_text = "\n".join(
                 str(page["text"]).strip()
                 for page in pages
                 if isinstance(page, dict) and isinstance(page.get("text"), str)
             ).strip()
+            if page_text:
+                return page_text
+        content = body.get("content") if isinstance(body, dict) else None
+        if isinstance(content, dict):
+            for field in ("markdown", "text"):
+                value = content.get(field)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        if isinstance(content, str) and content.strip():
+            return content.strip()
         raise ValueError("upstream_invalid_response")
 
     async def _answer(
