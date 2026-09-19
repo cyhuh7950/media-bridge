@@ -108,6 +108,9 @@ def build_control_app(
     resolver = secret_resolver or GatewaySecretResolver()
     test_lab = TestLabService(
         gateway_client=gateway,
+        database=service.database,
+        security=service.security,
+        secret_resolver=resolver,
     )
     action_limiter = action_rate_limiter or AdminActionRateLimiter()
 
@@ -908,7 +911,7 @@ def build_control_app(
         target_id: str | None = None
         try:
             body = await _json(request, TestLabPreviewRequest, max_bytes=3 * 1024 * 1024)
-            target_id = body.gateway_url
+            target_id = str(body.routing_profile_id) if body.routing_profile_id else None
             result = await test_lab.preview(body)
             await run_in_threadpool(
                 audit.write,
@@ -929,8 +932,17 @@ def build_control_app(
                 target_id=target_id,
                 details={"reason_code": error.code, "status": "failed"},
             )
-            status = 404 if error.code == "connection_not_found" else 502
-            if error.code in {"invalid_media_base64", "media_size_invalid"}:
+            status = (
+                404
+                if error.code in {"connection_not_found", "routing_profile_unavailable"}
+                else 502
+            )
+            if error.code in {
+                "invalid_media_base64",
+                "media_size_invalid",
+                "routing_profile_required",
+                "routing_provider_unavailable",
+            }:
                 status = 400
             return _error(error.code, status)
         return JSONResponse(result)
