@@ -1,6 +1,7 @@
 import { useState, type SyntheticEvent } from "react";
 
 import { adminRequest } from "../api/client";
+import { ProviderCatalogPicker, type ProviderCatalogEntry, type ManagedProviderKind } from "../providers/ProviderCatalogPicker";
 import { booleanField, textField, type OperationsProps } from "./operationTypes";
 import { useAdminList } from "./useAdminList";
 
@@ -14,6 +15,10 @@ function providerReference(provider: Record<string, unknown>): string {
 export function ProvidersPage({ role, csrfToken }: OperationsProps) {
   const { items, failed, reload } = useAdminList("/providers");
   const [name, setName] = useState("");
+  const [kind, setKind] = useState<ManagedProviderKind>("analysis");
+  const [catalogId, setCatalogId] = useState("");
+  const [protocol, setProtocol] = useState("");
+  const [capabilities, setCapabilities] = useState<string[]>([]);
   const [endpoint, setEndpoint] = useState("");
   const [reference, setReference] = useState("");
   const [saveFailed, setSaveFailed] = useState(false);
@@ -29,8 +34,11 @@ export function ProvidersPage({ role, csrfToken }: OperationsProps) {
         csrfToken,
         body: {
           name,
-          kind: "vision",
+          kind,
+          catalog_id: catalogId,
           endpoint,
+          protocol,
+          capabilities,
           secret_ref: { kind: "env", identifier: reference },
           enabled: true,
         },
@@ -58,6 +66,19 @@ export function ProvidersPage({ role, csrfToken }: OperationsProps) {
       {writable ? (
         <form className="form-grid compact-form" onSubmit={(event) => { void submit(event); }}>
           <h2>Provider 추가</h2>
+          <label htmlFor="provider-operation-kind">Provider 유형</label>
+          <select id="provider-operation-kind" value={kind} onChange={(event) => { setKind(event.target.value as ManagedProviderKind); setCatalogId(""); }}>
+            <option value="analysis">분석 Provider</option>
+            <option value="llm">Non-Vision LLM Provider</option>
+          </select>
+          <ProviderCatalogPicker kind={kind} value={catalogId} onChange={(entry: ProviderCatalogEntry | null) => {
+            setCatalogId(entry?.provider_id ?? "");
+            setName(entry?.display_name ?? "");
+            setEndpoint(entry?.default_endpoint ?? "");
+            setProtocol(entry?.protocol ?? "");
+            setCapabilities(entry?.capabilities ?? []);
+            setReference(entry?.secret_env ?? "");
+          }} />
           <label htmlFor="provider-operation-name">Provider 이름</label>
           <input id="provider-operation-name" value={name} onChange={(event) => { setName(event.target.value); }} required />
           <label htmlFor="provider-operation-endpoint">HTTPS endpoint</label>

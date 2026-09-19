@@ -13,6 +13,7 @@ const ADMIN_ROOTS = new Set([
   "models",
   "policies",
   "providers",
+  "provider-catalog",
   "snapshots",
   "test-lab",
   "users",
