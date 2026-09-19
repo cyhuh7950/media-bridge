@@ -186,6 +186,9 @@ class ModelCapability(Base):
     __tablename__ = "model_capabilities"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    provider_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("providers.id"), nullable=True
+    )
     model_id: Mapped[str] = mapped_column(String(128), unique=True)
     aliases: Mapped[list[str]] = mapped_column(JSONB, default=list)
     input_modalities: Mapped[list[str]] = mapped_column(JSONB)

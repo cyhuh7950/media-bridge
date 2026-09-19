@@ -53,7 +53,7 @@ export function OnboardingWorkflow({ csrfToken }: { csrfToken: string }) {
   if (inventory === null) return <p role="status">온보딩 상태를 확인하고 있습니다.</p>;
   const step = deriveOnboardingStep(inventory);
   if (step === "provider") return <ProviderStep csrfToken={csrfToken} onSaved={reload} />;
-  if (step === "model") return <ModelsStep csrfToken={csrfToken} onSaved={reload} />;
+  if (step === "model") return <ModelsStep csrfToken={csrfToken} providers={inventory.providers} onSaved={reload} />;
   if (step === "policy") return <PolicyStep csrfToken={csrfToken} onSaved={reload} />;
   if (step === "credential") return <ConnectionStep csrfToken={csrfToken} onSaved={reload} />;
   if (step === "publish") return <PublishStep csrfToken={csrfToken} onPublished={reload} />;

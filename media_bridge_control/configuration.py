@@ -273,7 +273,15 @@ class ConfigurationService:
     def create_model(self, request: ModelCapabilityCreate) -> dict[str, Any]:
         try:
             with self._database.session() as session:
+                if request.provider_id is None:
+                    raise ConfigurationError("model_provider_required")
+                provider = session.get(Provider, request.provider_id)
+                if provider is None:
+                    raise ConfigurationError("model_provider_not_found")
+                if provider.kind != "llm":
+                    raise ConfigurationError("model_provider_invalid")
                 row = ModelCapability(
+                    provider_id=request.provider_id,
                     model_id=request.model_id,
                     aliases=sorted(request.aliases),
                     input_modalities=sorted(request.input_modalities),
@@ -305,6 +313,7 @@ class ConfigurationService:
                     raise ConfigurationError("configuration_not_found")
                 candidate = ModelCapabilityCreate.model_validate(
                     {
+                        "provider_id": row.provider_id,
                         "model_id": row.model_id,
                         "aliases": row.aliases,
                         "input_modalities": set(row.input_modalities),
@@ -316,6 +325,13 @@ class ConfigurationService:
                     }
                 )
                 row.model_id = candidate.model_id
+                if candidate.provider_id is not None:
+                    provider = session.get(Provider, candidate.provider_id)
+                    if provider is None:
+                        raise ConfigurationError("model_provider_not_found")
+                    if provider.kind != "llm":
+                        raise ConfigurationError("model_provider_invalid")
+                    row.provider_id = candidate.provider_id
                 row.aliases = sorted(candidate.aliases)
                 row.input_modalities = sorted(candidate.input_modalities)
                 row.evidence = candidate.evidence
@@ -340,6 +356,7 @@ class ConfigurationService:
     def _model(row: ModelCapability) -> dict[str, Any]:
         return {
             "id": str(row.id),
+            "provider_id": str(row.provider_id) if row.provider_id is not None else None,
             "model_id": row.model_id,
             "aliases": row.aliases,
             "input_modalities": row.input_modalities,

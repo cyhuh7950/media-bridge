@@ -285,6 +285,7 @@ class TestLabRunRequest(TestLabPreviewRequest):
 
 
 class ModelCapabilityCreate(AdminStrictModel):
+    provider_id: UUID | None = None
     model_id: Annotated[
         str,
         StringConstraints(pattern=r"^[a-z0-9][a-z0-9./:_-]{0,127}$"),
@@ -316,6 +317,7 @@ class ModelCapabilityCreate(AdminStrictModel):
 
 
 class ModelCapabilityUpdate(NonEmptyUpdate):
+    provider_id: UUID | None = None
     model_id: Annotated[
         str,
         StringConstraints(pattern=r"^[a-z0-9][a-z0-9./:_-]{0,127}$"),
@@ -341,7 +343,7 @@ class ModelCapabilityUpdate(NonEmptyUpdate):
 
 
 class PolicyCreate(AdminStrictModel):
-    name: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")]
+    name: Annotated[str, StringConstraints(pattern=r"^\S(?:.{0,126}\S)?$")]
     max_files: Annotated[int, Field(ge=1, le=32)]
     max_media_bytes: Annotated[int, Field(ge=1, le=50 * 1024 * 1024)]
     max_pdf_pages: Annotated[int, Field(ge=1, le=100)]
@@ -355,7 +357,7 @@ class PolicyCreate(AdminStrictModel):
 class PolicyUpdate(NonEmptyUpdate):
     name: Annotated[
         str,
-        StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"),
+        StringConstraints(pattern=r"^\S(?:.{0,126}\S)?$"),
     ] | None = None
     max_files: Annotated[int, Field(ge=1, le=32)] | None = None
     max_media_bytes: Annotated[int, Field(ge=1, le=50 * 1024 * 1024)] | None = None

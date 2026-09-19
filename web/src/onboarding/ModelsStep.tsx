@@ -2,7 +2,9 @@ import { useState, type SyntheticEvent } from "react";
 
 import { adminRequest } from "../api/client";
 
-export function ModelsStep({ csrfToken, onSaved }: { csrfToken: string; onSaved: () => Promise<void> }) {
+export function ModelsStep({ csrfToken, onSaved, providers }: { csrfToken: string; onSaved: () => Promise<void>; providers: Array<Record<string, unknown>> }) {
+  const llmProviders = providers.filter((provider) => provider.kind === "llm");
+  const [providerId, setProviderId] = useState("");
   const [modelId, setModelId] = useState("");
   const [evidence, setEvidence] = useState("");
   const [failed, setFailed] = useState(false);
@@ -16,6 +18,7 @@ export function ModelsStep({ csrfToken, onSaved }: { csrfToken: string; onSaved:
         method: "POST",
         csrfToken,
         body: {
+          provider_id: providerId,
           model_id: modelId,
           aliases: [],
           input_modalities: ["text"],
@@ -37,6 +40,11 @@ export function ModelsStep({ csrfToken, onSaved }: { csrfToken: string; onSaved:
       <h1 id="model-step-title">대상 모델 등록</h1>
       <p>확인되지 않은 capability는 등록하지 말고 fail-closed 상태를 유지하세요.</p>
       <form className="form-grid" onSubmit={(event) => { void submit(event); }}>
+        <label htmlFor="model-provider">Non-Vision LLM Provider</label>
+        <select id="model-provider" value={providerId} onChange={(event) => { setProviderId(event.target.value); }} required>
+          <option value="">Provider를 선택하세요</option>
+          {llmProviders.map((provider) => <option key={String(provider.id)} value={String(provider.id)}>{String(provider.name)}</option>)}
+        </select>
         <label htmlFor="model-id">정확한 model ID</label>
         <input id="model-id" value={modelId} onChange={(event) => { setModelId(event.target.value); }} required />
         <label htmlFor="model-evidence">Capability 근거</label>

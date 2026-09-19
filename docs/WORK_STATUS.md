@@ -203,3 +203,11 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - 로컬 검증: 라우팅 프로필 단위 테스트 3개, Operations 웹 테스트 7개, lint, TypeScript/build, Python compileall 통과.
 - `1ca267a` 기준 ysna-server Control 이미지를 재빌드·재기동했다. Control 컨테이너는 `healthy`이며 공개 `/`·`/routing-profiles`는 HTTP 200이다.
 - 브라우저에서 실제 저장 버튼을 누르는 사용자 smoke는 신산님이 확인한다.
+
+## 2026-09-19 — 모델 Provider 지정 및 접근 키 목록 표시 수정
+
+- 모델 등록·수정 팝업에 Non-Vision LLM Provider 선택을 추가하고, 저장 시 선택한 Provider를 함께 검증한다.
+- 모델 capability 레코드에 Provider 연결을 저장하도록 `0008_model_provider` 마이그레이션을 추가했다.
+- 정책 등록 기본 이름을 `기본 미디어 보안 정책`으로 변경하고 한국어 정책 이름을 허용했다.
+- 접근 키 목록에서 selector 일부가 상태 열에 노출되던 렌더링 오류를 제거하고, API의 `revoked` 값으로 `활성`·`폐기`를 표시하도록 수정했다.
+- 웹 테스트 7개, lint, TypeScript/build, Python compileall 통과. ysna-server 재배포 후 접근 키 폐기와 모델·정책 등록 smoke를 확인한다.
