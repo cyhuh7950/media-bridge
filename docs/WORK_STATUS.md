@@ -5,11 +5,11 @@
 작업계획: S3 Provider catalog — 카탈로그·관리 API·DB 스키마·Console 선택 UI·N:N routing 연결 완료, 운영 통합 검증은 다음 작업
 Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-body.md` untracked 보존 / 단일 writer 어울
 최근 완료 증거: TOTP QR·Provider 선택 우회 흐름의 기존 구현과 배포형 Control Plane 문서를 확인함. 2026-09-19 OmniRoute 공급자 화면에서 API 키 호환 1/1, API 키 Provider 5/230, Image Providers 0/8, Local Providers 0/14 및 OpenAI/Anthropic 호환 추가 기능을 확인함.
-현재 변경: Provider catalog, Provider schema/migration, onboarding/operations 선택 UI, N:N routing profile API·UI 구현 완료. 기존 `.pr-body.md`는 삭제하지 않음.
-실행·검증 결과: control unit/packaging 53 passed, web lint 0 errors, web tests 27 passed, web build·ruff·compileall·git diff --check 통과. WSL-server disposable PostgreSQL에서 migration/connection 4 passed, configuration API 2 passed. DB 등록·배포 검증은 미실행.
+현재 변경: Provider catalog, Provider schema/migration, onboarding/operations 선택 UI, N:N routing profile API·UI와 fail-closed Provider selection primitive 구현 완료. 기존 `.pr-body.md`는 삭제하지 않음.
+실행·검증 결과: control unit/packaging 56 passed, web lint 0 errors, web tests 27 passed, web build·ruff·compileall·git diff --check 통과. WSL-server disposable PostgreSQL에서 migration/connection 4 passed, configuration API 2 passed. 실제 Gateway wiring·DB 등록·배포 검증은 미실행.
 오류와 조치: 없음.
 미검증·승인 경계: 공개 OpenAI/Anthropic 계약, API key·tenant, DB migration, N:N routing, 비용·모니터링, OmniRoute 배포형 연결은 설계 승인 전 미구현·미검증. 인증·권한·Secret·비용·지속 schema 변경은 별도 승인 대상.
-정확한 다음 조치: WSL-server PostgreSQL에서 0005 migration round-trip, Provider 등록, routing profile 통합 테스트를 실행한다.
+정확한 다음 조치: Provider selection을 Gateway snapshot/runtime에 연결하고, WSL-server에서 routing profile 통합 테스트와 Provider sandbox를 실행한다.
 
 ## 2026-09-19 — Provider catalog schema checkpoint
 
@@ -35,6 +35,12 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - WSL-server 임시 checkout `465ae12`에서 전용 PostgreSQL 컨테이너를 생성해 `test_migrations.py`와 `test_connection_migration.py`를 실행했다: 4 passed.
 - 같은 환경에서 `test_configuration_api.py`를 실행했다: 2 passed.
 - 테스트 컨테이너 `media-bridge-test-pg`는 검증 후 제거했다.
+
+## 2026-09-19 — Provider selection primitive
+
+- `media_bridge_gateway/provider_selection.py`에 enabled·capability·health 필터와 priority/fallback/health/cost 선택 규칙을 추가했다.
+- 후보가 없으면 `provider_route_unavailable`로 fail-closed 처리한다.
+- Gateway snapshot/runtime wiring과 실제 downstream 호출 연결은 아직 남아 있다.
 
 ## 2026-09-18 — 배포형 범위 초안
 
