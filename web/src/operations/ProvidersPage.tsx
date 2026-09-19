@@ -21,6 +21,7 @@ export function ProvidersPage({ role, csrfToken }: OperationsProps) {
   const [capabilities, setCapabilities] = useState<string[]>([]);
   const [endpoint, setEndpoint] = useState("");
   const [reference, setReference] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [saveFailed, setSaveFailed] = useState(false);
   const writable = role !== "viewer" && csrfToken !== null;
 
@@ -40,12 +41,14 @@ export function ProvidersPage({ role, csrfToken }: OperationsProps) {
           protocol,
           capabilities,
           secret_ref: { kind: "env", identifier: reference },
+          api_key: apiKey || undefined,
           enabled: true,
         },
       });
       setName("");
       setEndpoint("");
       setReference("");
+      setApiKey("");
       await reload();
     } catch {
       setSaveFailed(true);
@@ -84,7 +87,9 @@ export function ProvidersPage({ role, csrfToken }: OperationsProps) {
           <label htmlFor="provider-operation-endpoint">HTTPS endpoint</label>
           <input id="provider-operation-endpoint" type="url" value={endpoint} onChange={(event) => { setEndpoint(event.target.value); }} required />
           <label htmlFor="provider-operation-reference">Secret 환경변수 이름</label>
-          <input id="provider-operation-reference" value={reference} onChange={(event) => { setReference(event.target.value); }} pattern="[A-Z][A-Z0-9_]*" required />
+          <input id="provider-operation-reference" value={reference} onChange={(event) => { setReference(event.target.value); }} pattern="[A-Z][A-Z0-9_]*" />
+          <label htmlFor="provider-operation-api-key">Provider API 키</label>
+          <input id="provider-operation-api-key" type="password" value={apiKey} onChange={(event) => { setApiKey(event.target.value); }} autoComplete="new-password" />
           {saveFailed ? <p role="alert">Provider를 저장할 수 없습니다.</p> : null}
           <button type="submit">Provider 추가</button>
         </form>

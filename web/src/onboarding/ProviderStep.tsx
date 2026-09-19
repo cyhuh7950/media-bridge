@@ -11,6 +11,7 @@ export function ProviderStep({ csrfToken, onSaved }: { csrfToken: string; onSave
   const [capabilities, setCapabilities] = useState<string[]>([]);
   const [endpoint, setEndpoint] = useState("");
   const [reference, setReference] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState(false);
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
@@ -28,6 +29,7 @@ export function ProviderStep({ csrfToken, onSaved }: { csrfToken: string; onSave
           protocol,
           capabilities,
           secret_ref: { kind: "env", identifier: reference },
+          api_key: apiKey || undefined,
           enabled: true,
         },
       });
@@ -61,7 +63,9 @@ export function ProviderStep({ csrfToken, onSaved }: { csrfToken: string; onSave
         <label htmlFor="provider-endpoint">HTTPS endpoint</label>
         <input id="provider-endpoint" type="url" value={endpoint} onChange={(event) => { setEndpoint(event.target.value); }} required />
         <label htmlFor="provider-reference">Secret 환경변수 이름</label>
-        <input id="provider-reference" value={reference} onChange={(event) => { setReference(event.target.value); }} pattern="[A-Z][A-Z0-9_]*" required />
+        <input id="provider-reference" value={reference} onChange={(event) => { setReference(event.target.value); }} pattern="[A-Z][A-Z0-9_]*" />
+        <label htmlFor="provider-api-key">Provider API 키 (선택)</label>
+        <input id="provider-api-key" type="password" value={apiKey} onChange={(event) => { setApiKey(event.target.value); }} autoComplete="new-password" />
         {error ? <p role="alert">Provider를 저장할 수 없습니다.</p> : null}
         <button type="submit">Provider 저장</button>
       </form>

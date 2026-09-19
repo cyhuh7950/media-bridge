@@ -21,6 +21,7 @@ SUPPORTED_REVISIONS = frozenset(
         "0003_deployment_auth",
         "0004_managed_provider_catalog",
         "0005_routing_profiles",
+        "0006_provider_api_keys",
     }
 )
 
@@ -40,7 +41,9 @@ def run_migration(
         raise MigrationError("schema_revision_unsupported")
     if current_revision == target_revision:
         return "schema_current"
-    if current_revision == "0005_routing_profiles" and target_revision != current_revision:
+    if current_revision == "0006_provider_api_keys" and target_revision != current_revision:
+        raise MigrationError("schema_revision_unsupported")
+    if current_revision == "0005_routing_profiles" and target_revision not in {"0005_routing_profiles", "0006_provider_api_keys"}:
         raise MigrationError("schema_revision_unsupported")
     if current_revision == "0004_managed_provider_catalog" and target_revision not in {
         "0004_managed_provider_catalog",
@@ -96,11 +99,11 @@ def apply_database_migration(*, database_url: str, alembic_ini: Path, apply: boo
 
     result = run_migration(
         current_revision=current,
-        target_revision="0005_routing_profiles",
+        target_revision="0006_provider_api_keys",
         apply=apply,
         upgrade=upgrade,
     )
-    if apply and current_revision(database_url) != "0005_routing_profiles":
+    if apply and current_revision(database_url) != "0006_provider_api_keys":
         raise MigrationError("migration_verification_failed")
     return result
 

@@ -44,8 +44,8 @@ def test_fresh_upgrade_creates_control_plane_schema(clean_postgres: str) -> None
     with engine.connect() as connection:
         revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
     engine.dispose()
-    assert revision == "0005_routing_profiles"
-    assert {"catalog_id", "protocol", "capabilities"} <= provider_columns
+    assert revision == "0006_provider_api_keys"
+    assert {"catalog_id", "protocol", "capabilities", "encrypted_api_key"} <= provider_columns
 
 
 def test_migration_round_trip_is_reversible(clean_postgres: str) -> None:

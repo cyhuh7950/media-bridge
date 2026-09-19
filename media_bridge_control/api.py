@@ -95,7 +95,7 @@ def build_control_app(
     secret_resolver: GatewaySecretResolver | None = None,
     action_rate_limiter: AdminActionRateLimiter | None = None,
 ) -> Starlette:
-    configuration = ConfigurationService(service.database)
+    configuration = ConfigurationService(service.database, service.security)
     credentials = CredentialService(
         database=service.database,
         security=service.security,

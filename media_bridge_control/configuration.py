@@ -31,6 +31,7 @@ from media_bridge_control.schemas import (
     RoutingProfileCreate,
     RoutingProfileUpdate,
 )
+from media_bridge_control.security import SecurityContext
 
 
 class ConfigurationError(RuntimeError):
@@ -40,8 +41,9 @@ class ConfigurationError(RuntimeError):
 
 
 class ConfigurationService:
-    def __init__(self, database: Database) -> None:
+    def __init__(self, database: Database, security: SecurityContext) -> None:
         self._database = database
+        self._security = security
 
     def list_users(self) -> list[dict[str, Any]]:
         with self._database.session() as session:
@@ -59,6 +61,8 @@ class ConfigurationService:
     def create_provider(self, request: ProviderCreate) -> dict[str, Any]:
         try:
             values = self._provider_values(request)
+            if request.api_key is not None:
+                values["encrypted_api_key"] = self._security.encrypt_secret(request.api_key)
             with self._database.session() as session:
                 row = Provider(
                     **values,
@@ -92,12 +96,15 @@ class ConfigurationService:
                             "kind": row.secret_ref_kind,
                             "identifier": row.secret_ref_identifier,
                         },
+                        "api_key": None,
                         "enabled": row.enabled,
                         **request.model_dump(exclude_unset=True),
                     }
                 )
                 for field, value in self._provider_values(candidate).items():
                     setattr(row, field, value)
+                if request.api_key is not None:
+                    row.encrypted_api_key = self._security.encrypt_secret(request.api_key)
                 session.flush()
                 return self._provider(row)
         except IntegrityError as error:
@@ -126,8 +133,8 @@ class ConfigurationService:
             "endpoint": request.endpoint,
             "protocol": protocol,
             "capabilities": sorted(capabilities),
-            "secret_ref_kind": request.secret_ref.kind,
-            "secret_ref_identifier": request.secret_ref.identifier,
+            "secret_ref_kind": "db" if request.api_key is not None else request.secret_ref.kind,
+            "secret_ref_identifier": "provider_api_key" if request.api_key is not None else request.secret_ref.identifier,
             "enabled": request.enabled,
         }
 
@@ -152,6 +159,7 @@ class ConfigurationService:
                 "kind": row.secret_ref_kind,
                 "identifier": row.secret_ref_identifier,
             },
+            "has_api_key": row.encrypted_api_key is not None,
             "enabled": row.enabled,
         }
 

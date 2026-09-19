@@ -139,7 +139,7 @@ class Provider(Base):
     __tablename__ = "providers"
     __table_args__ = (
         CheckConstraint("kind IN ('ocr', 'vision', 'analysis', 'llm')"),
-        CheckConstraint("secret_ref_kind IN ('env', 'docker_secret', 'external')"),
+        CheckConstraint("secret_ref_kind IN ('env', 'docker_secret', 'external', 'db')"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -151,6 +151,7 @@ class Provider(Base):
     capabilities: Mapped[list[str]] = mapped_column(JSONB, default=list)
     secret_ref_kind: Mapped[str] = mapped_column(String(32))
     secret_ref_identifier: Mapped[str] = mapped_column(String(255))
+    encrypted_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

@@ -87,7 +87,7 @@ class UserUpdate(NonEmptyUpdate):
 
 
 class SecretReference(AdminStrictModel):
-    kind: Literal["env", "docker_secret", "external"]
+    kind: Literal["env", "docker_secret", "external", "db"]
     identifier: Annotated[str, StringConstraints(min_length=1, max_length=255)]
 
     @model_validator(mode="after")
@@ -98,6 +98,8 @@ class SecretReference(AdminStrictModel):
         if self.kind == "docker_secret" and re.fullmatch(
             r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", identifier
         ):
+            return self
+        if self.kind == "db" and identifier == "provider_api_key":
             return self
         allowed_prefixes = ("vault://", "aws-sm://", "gcp-sm://", "azure-kv://")
         if (
@@ -129,6 +131,7 @@ class ProviderCreate(AdminStrictModel):
         Field(max_length=4),
     ] = Field(default_factory=set)
     secret_ref: SecretReference
+    api_key: Annotated[str, StringConstraints(min_length=1, max_length=4_096)] | None = None
     enabled: bool = True
 
 
@@ -155,6 +158,7 @@ class ProviderUpdate(NonEmptyUpdate):
         Field(max_length=4),
     ] | None = None
     secret_ref: SecretReference | None = None
+    api_key: Annotated[str, StringConstraints(min_length=1, max_length=4_096)] | None = None
     enabled: bool | None = None
 
 
