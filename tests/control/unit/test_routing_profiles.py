@@ -18,6 +18,16 @@ def test_routing_profile_requires_analysis_and_llm_provider_sets() -> None:
     assert profile.strategy == "health"
 
 
+def test_routing_profile_accepts_korean_display_name() -> None:
+    profile = RoutingProfileCreate(
+        name="기본 문서 분석",
+        analysis_provider_ids=[uuid4()],
+        llm_provider_ids=[uuid4()],
+    )
+
+    assert profile.name == "기본 문서 분석"
+
+
 def test_routing_profile_rejects_duplicate_provider_ids() -> None:
     provider_id = uuid4()
     with pytest.raises(ValidationError):

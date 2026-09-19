@@ -171,7 +171,7 @@ class ProviderUpdate(NonEmptyUpdate):
 
 
 class RoutingProfileCreate(AdminStrictModel):
-    name: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")]
+    name: Annotated[str, StringConstraints(pattern=r"^\S(?:.{0,126}\S)?$")]
     analysis_provider_ids: Annotated[list[UUID], Field(min_length=1, max_length=32)]
     llm_provider_ids: Annotated[list[UUID], Field(min_length=1, max_length=32)]
     strategy: Literal["priority", "fallback", "health", "cost"] = "priority"
@@ -189,7 +189,7 @@ class RoutingProfileCreate(AdminStrictModel):
 class RoutingProfileUpdate(NonEmptyUpdate):
     name: Annotated[
         str,
-        StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"),
+        StringConstraints(pattern=r"^\S(?:.{0,126}\S)?$"),
     ] | None = None
     analysis_provider_ids: Annotated[list[UUID], Field(min_length=1, max_length=32)] | None = None
     llm_provider_ids: Annotated[list[UUID], Field(min_length=1, max_length=32)] | None = None
