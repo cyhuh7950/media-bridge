@@ -116,7 +116,7 @@ it("uses the standard provider list actions with register/edit dialog and bulk d
   await user.click(within(firstRow).getByRole("button", { name: "수정" }));
   expect(screen.getByRole("dialog", { name: "Provider 수정" })).toBeInTheDocument();
   expect(screen.getByLabelText("Provider 이름")).toHaveValue("vision-primary");
-  expect(screen.getByLabelText("Secret 저장 위치")).toHaveValue("provider_api_key");
+  expect(screen.getByLabelText("Secret 저장 위치")).toHaveValue("DB에 저장된 API 키 사용 중");
   expect(screen.getByLabelText("Secret 저장 위치")).toHaveAttribute("readonly");
   await user.click(screen.getByRole("button", { name: "취소" }));
 
