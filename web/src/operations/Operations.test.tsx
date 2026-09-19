@@ -71,6 +71,60 @@ it("renders persisted provider references but no write controls for a viewer", a
   expect(screen.queryByLabelText("Provider Secret 원문")).not.toBeInTheDocument();
 });
 
+it("uses the standard provider list actions with register/edit dialog and bulk delete", async () => {
+  const providers = [
+    {
+      id: "provider-1",
+      name: "vision-primary",
+      kind: "analysis",
+      endpoint: "https://provider.test/v1",
+      secret_ref: { kind: "db", identifier: "provider_api_key" },
+      enabled: true,
+    },
+    {
+      id: "provider-2",
+      name: "llm-primary",
+      kind: "llm",
+      endpoint: "https://llm.test/v1",
+      secret_ref: { kind: "env", identifier: "LLM_API_KEY" },
+      enabled: true,
+    },
+  ];
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>((input, init) => {
+    const path = requestPath(input);
+    const method = init?.method ?? "GET";
+    calls.push(`${method} ${path}`);
+    if (method === "GET") return Promise.resolve(jsonResponse(providers));
+    return Promise.resolve(new Response(null, { status: 204 }));
+  }));
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const user = userEvent.setup();
+
+  render(<ProvidersPage role="admin" csrfToken="csrf-memory-only" />);
+
+  expect(await screen.findByRole("button", { name: "Provider 등록" })).toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  const firstRow = await screen.findByRole("row", { name: /vision-primary/ });
+  expect(within(firstRow).getByRole("button", { name: "수정" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Provider 등록" }));
+  expect(screen.getByRole("dialog", { name: "Provider 등록" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "취소" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+  await user.click(within(firstRow).getByRole("button", { name: "수정" }));
+  expect(screen.getByRole("dialog", { name: "Provider 수정" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Provider 이름")).toHaveValue("vision-primary");
+  await user.click(screen.getByRole("button", { name: "취소" }));
+
+  await user.click(screen.getByLabelText("vision-primary 선택"));
+  await user.click(screen.getByLabelText("llm-primary 선택"));
+  await user.click(screen.getByRole("button", { name: /선택 삭제/ }));
+  expect(calls).toContain("DELETE /admin/v1/providers/provider-1");
+  expect(calls).toContain("DELETE /admin/v1/providers/provider-2");
+});
+
 it("shows an issued credential once and clears it on close", async () => {
   const credential = "mbc_selector.operation-secret-marker";
   const fetchMock = vi.fn<typeof fetch>((input, init) => {
