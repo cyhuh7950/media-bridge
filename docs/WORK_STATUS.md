@@ -217,3 +217,11 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - Control 시작 마이그레이션 스크립트의 지원 목록과 단계 검증에 `0008_model_provider`를 추가했다.
 - 초기 재배포에서 0007에 머물러 502가 발생했으나, 수정 후 DB head가 `0008_model_provider`로 적용되고 Control이 `healthy`가 됐다.
 - 공개 `/`, `/models`, `/credentials`, `/policies`는 HTTP 200을 확인했다.
+
+## 2026-09-20 — Test Lab routed upstream/downstream execution
+
+- Test Lab은 항상 활성 라우팅 프로필을 선택하고, 선택한 라우팅의 analysis Provider로 파일을 실제 전송한 뒤 추출 텍스트를 LLM Provider에 전달한다.
+- 결과 패널은 `extractedText`, `forwardedText`, `originalMediaForwarded`, `answer`를 포함한 실제 처리 결과 JSON을 표시한다. 변환 profile·수동 endpoint·API key 입력은 제거된 상태다.
+- Provider 카탈로그의 base endpoint(`/v1`)는 downstream protocol에 맞는 `/chat/completions` 또는 `/responses`로 보정하고, Document Parse OCR 옵션을 함께 전송한다.
+- 웹 Test Lab 테스트 3개, TypeScript/build, Python ruff·compileall 통과. `317b012` 기준 ysna-server 재배포 후 `/test-lab` HTTP 200 확인.
+- PostgreSQL integration `test_test_lab_api.py`는 기존 preview 검증 계약을 전제로 해 새 실제 호출 계약에 맞춘 별도 갱신이 필요하며, 이번 확인에서 실행이 정체되어 PASS로 판정하지 않았다.
