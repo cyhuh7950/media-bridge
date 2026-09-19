@@ -2,14 +2,14 @@
 
 판정: RUNNING
 정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, 현재 worktree `D:/Project/Media-Bridge/.worktree/auth-totp-recovery-email`
-작업계획: S3 Provider catalog — 카탈로그·관리 API·DB 스키마 연결 완료, Console 선택 UI는 다음 작업
-Git: `codex/auth-totp-recovery-email` / `975f940` pushed / 기존 `.pr-body.md` untracked 보존 / 단일 writer 어울
+작업계획: S3 Provider catalog — 카탈로그·관리 API·DB 스키마·Console 선택 UI 연결 완료, routing은 다음 작업
+Git: `codex/auth-totp-recovery-email` / `f5c14d4` pushed / 기존 `.pr-body.md` untracked 보존 / 단일 writer 어울
 최근 완료 증거: TOTP QR·Provider 선택 우회 흐름의 기존 구현과 배포형 Control Plane 문서를 확인함. 2026-09-19 OmniRoute 공급자 화면에서 API 키 호환 1/1, API 키 Provider 5/230, Image Providers 0/8, Local Providers 0/14 및 OpenAI/Anthropic 호환 추가 기능을 확인함.
-현재 변경: Provider catalog와 Provider schema/migration 구현 완료. 기존 `.pr-body.md`는 삭제하지 않음.
-실행·검증 결과: Provider schema/catalog/packaging 단위 테스트 11 passed, control unit 전체 46 passed, ruff check·compileall·git diff --check 통과. PostgreSQL 통합 fixture는 Windows에서 준비되지 않아 미검증. DB 등록·Console·배포 검증은 미실행.
+현재 변경: Provider catalog, Provider schema/migration, onboarding/operations 선택 UI 구현 완료. 기존 `.pr-body.md`는 삭제하지 않음.
+실행·검증 결과: Provider schema/catalog/packaging 단위 테스트 11 passed, control unit 전체 46 passed, web lint 0 errors, web tests 27 passed, web build·ruff·compileall·git diff --check 통과. PostgreSQL 통합 fixture는 Windows에서 준비되지 않아 미검증. DB 등록·배포 검증은 미실행.
 오류와 조치: 없음.
 미검증·승인 경계: 공개 OpenAI/Anthropic 계약, API key·tenant, DB migration, N:N routing, 비용·모니터링, OmniRoute 배포형 연결은 설계 승인 전 미구현·미검증. 인증·권한·Secret·비용·지속 schema 변경은 별도 승인 대상.
-정확한 다음 조치: WSL-server PostgreSQL에서 0004 migration round-trip과 Provider 등록 통합 테스트를 실행한 뒤 Console의 catalog 선택 UI를 구현한다.
+정확한 다음 조치: WSL-server PostgreSQL에서 0004 migration round-trip과 Provider 등록 통합 테스트를 실행한 뒤 분석↔LLM routing profile을 구현한다.
 
 ## 2026-09-19 — Provider catalog schema checkpoint
 
@@ -17,6 +17,12 @@ Git: `codex/auth-totp-recovery-email` / `975f940` pushed / 기존 `.pr-body.md` 
 - Provider에 `llm`, `catalog_id`, `protocol`, `capabilities`를 추가하고 catalog 선택 시 endpoint/protocol/capabilities를 서버에서 보완한다.
 - Alembic `0004_managed_provider_catalog`을 추가했다. 기존 legacy provider는 nullable metadata로 보존하고, 데이터가 있는 managed provider의 downgrade는 거부한다.
 - 통합 PostgreSQL 검증은 WSL-server 실행 전까지 미검증으로 유지한다.
+
+## 2026-09-19 — Provider catalog selection UI checkpoint
+
+- `f5c14d4` (`feat: add provider catalog selection UI`) pushed to `origin/codex/auth-totp-recovery-email`.
+- 설치형 onboarding과 배포형 operations 화면에서 분석/Non-Vision LLM 유형과 카탈로그 Provider를 선택한다.
+- 선택한 카탈로그의 endpoint, protocol, capability, 권장 Secret 환경변수 이름을 자동 채우며 Secret 원문은 저장하지 않는다.
 
 ## 2026-09-18 — 배포형 범위 초안
 
