@@ -206,6 +206,26 @@ it("calls snapshot rollback only after explicit confirmation", async () => {
   expect(confirmMock).toHaveBeenCalledTimes(2);
 });
 
+it("publishes the validated draft and reports a publish error", async () => {
+  const calls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<typeof fetch>((input, init) => {
+      const path = requestPath(input);
+      calls.push(`${init?.method ?? "GET"} ${path}`);
+      if ((init?.method ?? "GET") === "GET") return Promise.resolve(jsonResponse([]));
+      if (path === "/admin/v1/drafts/validate") return Promise.resolve(jsonResponse({ draft_id: "draft-1" }, 201));
+      return Promise.resolve(jsonResponse({ error: { code: "configuration_invalid" } }, 409));
+    }),
+  );
+  const user = userEvent.setup();
+  render(<SnapshotsPage role="admin" csrfToken="csrf-memory-only" />);
+  await user.click(await screen.findByRole("button", { name: "현재 설정 검증 및 발행" }));
+  expect(calls).toContain("POST /admin/v1/drafts/validate");
+  expect(calls).toContain("POST /admin/v1/snapshots");
+  expect(await screen.findByRole("alert")).toHaveTextContent("configuration_invalid");
+});
+
 it("shows audit, operational event, health, and principal from their real endpoints", async () => {
   vi.stubGlobal(
     "fetch",
