@@ -5,13 +5,14 @@ import { ProviderCatalogPicker, type ProviderCatalogEntry, type ManagedProviderK
 import { booleanField, textField, type OperationsProps } from "./operationTypes";
 import { useAdminList } from "./useAdminList";
 
-function providerReference(provider: Record<string, unknown>): string {
-  const reference = provider.secret_ref;
-  if (typeof reference !== "object" || reference === null) return "—";
-  const fields = reference as Record<string, unknown>;
-  const kind = textField(fields, "kind") === "db" ? "DB" : "환경변수";
-  return `${kind}: ${textField(fields, "identifier")}`;
-}
+  function providerReference(provider: Record<string, unknown>): string {
+    const reference = provider.secret_ref;
+    if (typeof reference !== "object" || reference === null) return "—";
+    const fields = reference as Record<string, unknown>;
+    const kind = textField(fields, "kind") === "db" ? "DB" : "환경변수";
+    if (kind === "DB") return "DB에 저장된 API 키";
+    return `${kind}: ${textField(fields, "identifier")}`;
+  }
 
 function providerKindLabel(value: string): string {
   return value === "analysis" ? "분석" : value === "llm" ? "Non‑Vision LLM" : value;

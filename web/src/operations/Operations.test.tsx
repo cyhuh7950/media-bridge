@@ -71,6 +71,20 @@ it("renders persisted provider references but no write controls for a viewer", a
   expect(screen.queryByLabelText("Provider Secret 원문")).not.toBeInTheDocument();
 });
 
+it("does not expose the internal DB provider secret identifier", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse([{ id: "provider-1", name: "llm-primary", kind: "llm", endpoint: "https://llm.test/v1", secret_ref: { kind: "db", identifier: "provider_api_key" }, enabled: true }]),
+    ),
+  );
+
+  render(<ProvidersPage role="viewer" csrfToken={null} />);
+
+  expect(await screen.findByText("DB에 저장된 API 키")).toBeInTheDocument();
+  expect(screen.queryByText("DB: provider_api_key")).not.toBeInTheDocument();
+});
+
 it("uses the standard provider list actions with register/edit dialog and bulk delete", async () => {
   const providers = [
     {
