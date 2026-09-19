@@ -177,3 +177,6 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - DB에 저장된 Provider를 수정할 때 자동 표시되는 `provider_api_key`를 환경변수 이름 정규식으로 검증하던 UI 오류를 수정했다.
 - DB 참조는 `Secret 저장 위치` 읽기 전용으로 표시하고, 환경변수 참조에만 대문자 환경변수 형식을 적용한다.
 - Web Operations 테스트 6개 통과, lint와 TypeScript/build 통과. ysna-server 재배포 후 수정 팝업에서 저장 smoke를 확인한다.
+
+- 배포 완료: `abeab1f` 기준 Control 이미지를 ysna-server에서 재빌드·재기동했고 Control과 PostgreSQL이 `healthy`이다.
+- 공개 `/` 및 `/providers`는 서버 내부 확인 기준 HTTP 200을 반환한다. DB Provider 수정 팝업의 저장 smoke는 신산님이 브라우저에서 확인한다.
