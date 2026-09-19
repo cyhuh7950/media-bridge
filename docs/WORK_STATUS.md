@@ -93,3 +93,10 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - Rebuilt and redeployed `media-bridge-control:0.1.0-deploy` on ysna-server from the pushed branch commit.
 - Deployment initially restarted because existing Secret files were `ubuntu:ubuntu 0400` while the image runs as UID `10001`; values were not changed. Secret ownership was corrected to `10001:10001` with mode `0400`; Control and PostgreSQL are healthy afterward.
 - Data Plane remains restarting because the signed snapshot is still absent; this is outside the Provider screen change and requires initial snapshot publish before gateway traffic.
+
+## 2026-09-19 — ysna public 502 upstream network repair
+
+- Public `https://media-bridge.sinsan.kr` returned OpenResty 502 because Nginx Proxy Manager was attached only to `proxy-network`; its configured upstream `media-bridge-control` is on `media-bridge_product`.
+- Control and PostgreSQL were healthy; Data Plane remained snapshot-dependent and was unrelated to the Control console 502.
+- Connected the existing `nginx-proxy-manager` container to Docker network `media-bridge_product` without changing source, secrets, or database data.
+- Verification: NPM resolved `media-bridge-control` at `172.26.0.2`, upstream health returned HTTP 200, and the public URL returned HTTP 200.
