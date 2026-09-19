@@ -195,3 +195,11 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - Operations 테스트 7개, lint, TypeScript 검사, production build 통과.
 - `04e1987` 기준 ysna-server 재배포 완료. Control `healthy`, 공개 `/`·`/providers` HTTP 200.
 - Chrome에서 강제 새로고침 후 목록의 `등록됨`과 수정 팝업의 Secret 필드 비표시를 실제 확인했다.
+
+## 2026-09-19 — 한국어 라우팅 프로필 이름 저장 오류 수정
+
+- 원인: 라우팅 프로필 이름 스키마가 ASCII 문자만 허용해 `기본 문서 분석` 같은 한국어 이름을 거부했다.
+- `RoutingProfileCreate/Update.name` 검증을 Unicode 이름을 허용하는 공백 규칙으로 변경하고, 한국어 표시 이름 회귀 테스트를 추가했다.
+- 로컬 검증: 라우팅 프로필 단위 테스트 3개, Operations 웹 테스트 7개, lint, TypeScript/build, Python compileall 통과.
+- `1ca267a` 기준 ysna-server Control 이미지를 재빌드·재기동했다. Control 컨테이너는 `healthy`이며 공개 `/`·`/routing-profiles`는 HTTP 200이다.
+- 브라우저에서 실제 저장 버튼을 누르는 사용자 smoke는 신산님이 확인한다.
