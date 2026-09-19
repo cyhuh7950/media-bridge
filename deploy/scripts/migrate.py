@@ -96,7 +96,7 @@ def apply_database_migration(*, database_url: str, alembic_ini: Path, apply: boo
 
     result = run_migration(
         current_revision=current,
-        target_revision="0004_managed_provider_catalog",
+        target_revision="0005_routing_profiles",
         apply=apply,
         upgrade=upgrade,
     )
