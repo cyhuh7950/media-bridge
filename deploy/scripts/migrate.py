@@ -23,6 +23,7 @@ SUPPORTED_REVISIONS = frozenset(
         "0005_routing_profiles",
         "0006_provider_api_keys",
         "0007_provider_models",
+        "0008_model_provider",
     }
 )
 
@@ -45,12 +46,14 @@ def run_migration(
     if current_revision == "0006_provider_api_keys" and target_revision not in {
         "0006_provider_api_keys",
         "0007_provider_models",
+        "0008_model_provider",
     }:
         raise MigrationError("schema_revision_unsupported")
     if current_revision == "0005_routing_profiles" and target_revision not in {
         "0005_routing_profiles",
         "0006_provider_api_keys",
         "0007_provider_models",
+        "0008_model_provider",
     }:
         raise MigrationError("schema_revision_unsupported")
     if current_revision == "0004_managed_provider_catalog" and target_revision not in {
@@ -58,6 +61,7 @@ def run_migration(
         "0005_routing_profiles",
         "0006_provider_api_keys",
         "0007_provider_models",
+        "0008_model_provider",
     }:
         raise MigrationError("schema_revision_unsupported")
     if current_revision == "0003_deployment_auth" and target_revision not in {
@@ -66,6 +70,7 @@ def run_migration(
         "0005_routing_profiles",
         "0006_provider_api_keys",
         "0007_provider_models",
+        "0008_model_provider",
     }:
         raise MigrationError("schema_revision_unsupported")
     if not apply:
