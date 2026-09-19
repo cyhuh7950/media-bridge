@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from media_bridge.contracts import AssetSource, PrepareForModelResult
 
 _SAFE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_CLIENT_CREDENTIAL = re.compile(r"^mbc_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
 
 
 class GatewayClientError(RuntimeError):
@@ -179,7 +180,7 @@ class HttpGatewayClient:
         expect_empty: bool = False,
     ) -> dict[str, object]:
         if (
-            not credential.startswith("mbc_")
+            _CLIENT_CREDENTIAL.fullmatch(credential) is None
             or credential.strip() != credential
             or " " in credential
             or len(credential) > 160
