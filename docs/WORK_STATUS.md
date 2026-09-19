@@ -109,3 +109,9 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - 다음 조치: 이 커밋을 ysna-server Control 이미지로 배포하고 공개 `/providers`에서 새로고침 후 관리자 등록 버튼과 실제 등록/수정/삭제를 확인한다.
 - 배포 완료: `7fcf220` 기준 Control 이미지를 ysna-server에서 재빌드·재기동했고 컨테이너 health가 `healthy`가 되었다. 공개 `/`와 `/providers`는 HTTP 200을 반환했다.
 - Data Plane은 서명된 초기 snapshot 부재로 계속 재시작 중이며, 이번 관리자 콘솔 수정과 무관하다. 브라우저 관리자 smoke는 신산님이 수행한다.
+
+## 2026-09-19 — 카탈로그 표시명 Provider 저장 오류 수정
+
+- 원인: 카탈로그 표시명 `Upstage Document Parse`가 공백을 포함한 Provider 이름으로 전송되어 서버 식별자 검증에 거부되었다.
+- 수정: 카탈로그 선택 시 화면 표시명은 유지하고 저장 이름은 안정적인 `provider_id`(`upstage-document-parse`)로 자동 입력한다.
+- Web 테스트 `29 passed`, lint, TypeScript 검사, production build 통과. ysna-server Control 재배포 후 공개 `/providers`에서 관리자 저장 동작을 확인한다.
