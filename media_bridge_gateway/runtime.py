@@ -89,6 +89,14 @@ class GatewayTransactionFactory:
             state_store=state_store,
             snapshot_version=snapshot.version,
         )
+        registry = snapshot.body.get("registry")
+        registry_models = registry.get("models", []) if isinstance(registry, dict) else []
+        configured_models = snapshot.body.get("models", registry_models)
+        models = tuple(
+            item if isinstance(item, str) else item.get("id")
+            for item in configured_models
+            if (isinstance(item, str) and item) or (isinstance(item, dict) and item.get("id"))
+        )
         return GatewayGeneration(
             version=snapshot.version,
             snapshot_id=str(snapshot.snapshot_id),
@@ -99,11 +107,7 @@ class GatewayTransactionFactory:
             service=service,
             state_store=state_store,
             transaction=transaction,
-            models=tuple(
-                item
-                for item in snapshot.body.get("models", [])
-                if isinstance(item, str) and item
-            ),
+            models=models,
         )
 
 

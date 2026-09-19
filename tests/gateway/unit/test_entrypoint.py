@@ -108,6 +108,7 @@ def test_gateway_process_factory_builds_from_strict_environment(
     process = build_gateway_process_from_environment()
 
     assert process.runtime.current().version == 1
+    assert process.runtime.current().models == ("vendor/text-model",)
     asyncio.run(process.close())
     assert list((tmp_path / "assets").iterdir()) == []
 
