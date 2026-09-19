@@ -58,3 +58,34 @@ it("redirects an anonymous user to login and clears the password after authentic
   expect(window.sessionStorage).toHaveLength(0);
   expect(fetchMock.mock.calls.some(([input]) => requestPath(input) === "/admin/v1/auth/login")).toBe(true);
 });
+
+it("logs out from the console header and returns to login", async () => {
+  window.history.replaceState({}, "", "/providers");
+  const fetchMock = vi.fn<typeof fetch>((input, init) => {
+    const path = requestPath(input);
+    if (path === "/admin/v1/me") {
+      return Promise.resolve(jsonResponse({ username: "admin", role: "admin", csrf_token: "csrf-session" }));
+    }
+    if (path === "/admin/v1/auth/logout" && init?.method === "POST") {
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+    if (path === "/admin/v1/health") return Promise.resolve(jsonResponse({ status: "ok" }));
+    if (path === "/admin/v1/snapshots") return Promise.resolve(jsonResponse([{ version: 1 }]));
+    if (["/admin/v1/providers", "/admin/v1/models", "/admin/v1/policies", "/admin/v1/events"].includes(path)) {
+      return Promise.resolve(jsonResponse([]));
+    }
+    return Promise.reject(new Error(`unexpected request: ${path}`));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const user = userEvent.setup();
+
+  render(<App />);
+
+  expect(await screen.findByRole("heading", { name: "Providers" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "로그아웃" }));
+
+  expect(await screen.findByRole("heading", { name: "Media Bridge 로그인" })).toBeInTheDocument();
+  const logoutCall = fetchMock.mock.calls.find(([input, init]) => requestPath(input) === "/admin/v1/auth/logout" && init?.method === "POST");
+  expect(logoutCall).toBeDefined();
+  expect(new Headers(logoutCall?.[1]?.headers).get("x-csrf-token")).toBe("csrf-session");
+});

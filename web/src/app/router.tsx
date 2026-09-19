@@ -98,7 +98,10 @@ function ConsoleLayout() {
     <div className="app-shell">
       <header>
         <strong>Media Bridge</strong>
-        <span>{auth.principal.username} · {auth.principal.role}</span>
+        <div className="header-actions">
+          <span>{auth.principal.username} · {auth.principal.role}</span>
+          <button type="button" className="header-logout" onClick={() => { void auth.logout(); }}>로그아웃</button>
+        </div>
       </header>
       <nav aria-label="주요 메뉴">
         <NavLink to="/">Dashboard</NavLink>

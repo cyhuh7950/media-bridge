@@ -15,6 +15,9 @@ input, textarea { min-height: 2.75rem; border: 1px solid var(--border); border-r
 .eyebrow { margin: 0; color: var(--accent); font-size: .8rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .app-shell { min-height: 100vh; display: grid; grid-template: auto 1fr / 14rem 1fr; }
 .app-shell header { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 1.5rem; color: white; background: #102b25; }
+.header-actions { display: flex; align-items: center; gap: .75rem; }
+.header-logout { min-height: 2.25rem; border: 1px solid rgb(255 255 255 / 65%); padding: .35rem .7rem; background: transparent; }
+.header-logout:hover { background: rgb(255 255 255 / 14%); }
 .app-shell nav { display: flex; flex-direction: column; gap: .25rem; padding: 1rem; border-right: 1px solid var(--border); background: var(--panel); }
 .app-shell nav a { border-radius: .45rem; padding: .65rem .75rem; color: var(--ink); text-decoration: none; }
 .app-shell nav a.active { color: white; background: var(--accent); }

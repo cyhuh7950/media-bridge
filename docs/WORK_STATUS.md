@@ -116,3 +116,9 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - 수정: 카탈로그 선택 시 화면 표시명은 유지하고 저장 이름은 안정적인 `provider_id`(`upstage-document-parse`)로 자동 입력한다.
 - Web 테스트 `29 passed`, lint, TypeScript 검사, production build 통과. ysna-server Control 재배포 후 공개 `/providers`에서 관리자 저장 동작을 확인한다.
 - 배포 완료: `18745fd` 기준 Control 재빌드·재기동 후 health `healthy`; 공개 `/`와 `/providers` HTTP 200 확인. Provider 등록 화면의 실제 저장 smoke는 신산님이 수행한다.
+
+## 2026-09-19 — 콘솔 로그아웃 버튼 추가
+
+- 헤더에 인증된 사용자용 `로그아웃` 버튼을 추가해 CSRF 보호 `/admin/v1/auth/logout` 호출 후 로그인 화면으로 돌아가도록 했다.
+- 회귀 테스트를 추가했고 Web 테스트 `30 passed`, lint, TypeScript 검사와 production build가 통과했다.
+- 다음 조치: 이 커밋을 ysna-server Control 이미지로 재배포하고 공개 URL의 헤더 로그아웃 버튼 노출을 확인한다.
