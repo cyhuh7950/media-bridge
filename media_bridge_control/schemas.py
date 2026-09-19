@@ -251,10 +251,7 @@ class ConnectionUpdate(NonEmptyUpdate):
 class TestLabPreviewRequest(AdminStrictModel):
     gateway_url: Annotated[str, StringConstraints(max_length=2_048)] | None = None
     api_key: Annotated[str, StringConstraints(min_length=1, max_length=4_096)] | None = None
-    target_model: Annotated[
-        str,
-        StringConstraints(pattern=r"^[a-z0-9][a-z0-9./:_-]{0,127}$"),
-    ]
+    target_model: Annotated[str, StringConstraints(min_length=1, max_length=128)]
     conversion_profile: Literal["generic", "error_screenshot", "document"] = "generic"
     user_request: Annotated[str, StringConstraints(min_length=1, max_length=20_000)]
     media_type: Literal["image", "pdf"]

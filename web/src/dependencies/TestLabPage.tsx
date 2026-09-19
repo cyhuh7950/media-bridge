@@ -30,16 +30,16 @@ function resultRecord(value: unknown): Record<string, unknown> {
 }
 
 interface TestLabPageProps extends OperationsProps { resultTtlMs?: number; }
+type RoutingProfile = { id: string; name: string; enabled: boolean };
 
 export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: TestLabPageProps) {
   const [previewModel, setPreviewModel] = useState("");
-  const [previewProfile, setPreviewProfile] = useState("generic");
   const [previewRequest, setPreviewRequest] = useState("");
   const [previewMedia, setPreviewMedia] = useState<File | null>(null);
+  const [routingProfiles, setRoutingProfiles] = useState<RoutingProfile[]>([]);
   const [downstreamUrl, setDownstreamUrl] = useState("");
   const [downstreamKey, setDownstreamKey] = useState("");
   const [downstreamModel, setDownstreamModel] = useState("");
-  const [downstreamProfile, setDownstreamProfile] = useState("generic");
   const [downstreamRequest, setDownstreamRequest] = useState("");
   const [downstreamMedia, setDownstreamMedia] = useState<File | null>(null);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
@@ -47,6 +47,21 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
   const previewFileInput = useRef<HTMLInputElement>(null);
   const downstreamFileInput = useRef<HTMLInputElement>(null);
   const writable = role !== "viewer" && csrfToken !== null;
+
+  useEffect(() => {
+    let active = true;
+    void adminRequest<RoutingProfile[]>("/routing-profiles").then((profiles) => {
+      if (active) {
+        setRoutingProfiles(profiles.filter((profile) => profile.enabled));
+        const first = profiles[0];
+        if (first !== undefined) {
+          setPreviewModel((current) => current || first.name);
+          setDownstreamModel((current) => current || first.name);
+        }
+      }
+    }).catch(() => { if (active) setRoutingProfiles([]); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (result === null) return;
@@ -71,7 +86,7 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
     const media = run ? downstreamMedia : previewMedia;
     const userRequest = run ? downstreamRequest : previewRequest;
     const targetModel = run ? downstreamModel : previewModel;
-    const profile = run ? downstreamProfile : previewProfile;
+    const profile = "generic";
     if (!writable || media === null || (run && (!downstreamUrl || !downstreamKey))) return;
     if (media.size < 1 || media.size > MAX_MEDIA_BYTES) { setError(true); clearTransient(); return; }
     setResult(null); setError(false);
@@ -111,8 +126,8 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
       <h2 id="preview-test-title">Preview 테스트</h2>
       <p>Provider나 downstream을 호출하지 않고 입력과 변환 결과만 확인합니다.</p>
       <form className="form-grid compact-form" onSubmit={(event) => { void submit(event, false); }}>
-        <label htmlFor="preview-model">Preview 라우팅 프로필</label><input id="preview-model" value={previewModel} onChange={(event) => { setPreviewModel(event.target.value); }} pattern="[a-z0-9][a-z0-9./:_-]*" required />
-        <label htmlFor="preview-profile">변환 profile</label><select id="preview-profile" value={previewProfile} onChange={(event) => { setPreviewProfile(event.target.value); }}><option value="generic">generic</option><option value="error_screenshot">error_screenshot</option><option value="document">document</option></select>
+        <label htmlFor="preview-model">Preview 라우팅 프로필</label><select id="preview-model" value={previewModel} onChange={(event) => { setPreviewModel(event.target.value); }} required><option value="">선택</option>{routingProfiles.map((profile) => <option key={profile.id} value={profile.name}>{profile.name}</option>)}</select>
+        <p>변환 방식은 파일 형식과 내용에 따라 시스템이 자동으로 판단합니다.</p>
         <label htmlFor="preview-request">Preview 사용자 요청</label><textarea id="preview-request" value={previewRequest} onChange={(event) => { setPreviewRequest(event.target.value); }} required />
         <label htmlFor="preview-media">Preview 이미지 또는 PDF · 최대 2 MiB</label><input ref={previewFileInput} id="preview-media" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(event) => { setPreviewMedia(event.target.files?.[0] ?? null); }} required />
         <button type="submit">Preview 실행</button>
@@ -124,8 +139,8 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
       <form className="form-grid compact-form" onSubmit={(event) => { void submit(event, true); }}>
         <label htmlFor="downstream-endpoint">OmniRoute downstream API endpoint</label><input id="downstream-endpoint" type="url" value={downstreamUrl} onChange={(event) => { setDownstreamUrl(event.target.value); }} placeholder="https://omniroute.example/v1" pattern="https://.*" required />
         <label htmlFor="downstream-api-key">OmniRoute downstream API 키</label><input id="downstream-api-key" type="password" value={downstreamKey} onChange={(event) => { setDownstreamKey(event.target.value); }} autoComplete="off" required />
-        <label htmlFor="downstream-model">downstream 라우팅 프로필</label><input id="downstream-model" value={downstreamModel} onChange={(event) => { setDownstreamModel(event.target.value); }} pattern="[a-z0-9][a-z0-9./:_-]*" required />
-        <label htmlFor="downstream-profile">변환 profile</label><select id="downstream-profile" value={downstreamProfile} onChange={(event) => { setDownstreamProfile(event.target.value); }}><option value="generic">generic</option><option value="error_screenshot">error_screenshot</option><option value="document">document</option></select>
+        <label htmlFor="downstream-model">downstream 라우팅 프로필</label><select id="downstream-model" value={downstreamModel} onChange={(event) => { setDownstreamModel(event.target.value); }} required><option value="">선택</option>{routingProfiles.map((profile) => <option key={profile.id} value={profile.name}>{profile.name}</option>)}</select>
+        <p>변환 방식은 Preview와 동일하게 시스템이 자동으로 판단합니다.</p>
         <label htmlFor="downstream-request">downstream 사용자 요청</label><textarea id="downstream-request" value={downstreamRequest} onChange={(event) => { setDownstreamRequest(event.target.value); }} required />
         <label htmlFor="downstream-media">downstream 이미지 또는 PDF · 최대 2 MiB</label><input ref={downstreamFileInput} id="downstream-media" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(event) => { setDownstreamMedia(event.target.files?.[0] ?? null); }} required />
         <button type="submit">downstream 테스트 실행</button>
