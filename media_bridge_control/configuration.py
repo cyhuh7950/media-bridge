@@ -17,6 +17,7 @@ from media_bridge_control.models import (
     ModelCapability,
     Policy,
     Provider,
+    RoutingProfile,
     User,
 )
 from media_bridge_control.provider_catalog import ProviderCatalogError, get_provider_catalog_entry
@@ -27,6 +28,8 @@ from media_bridge_control.schemas import (
     PolicyUpdate,
     ProviderCreate,
     ProviderUpdate,
+    RoutingProfileCreate,
+    RoutingProfileUpdate,
 )
 
 
@@ -149,6 +152,93 @@ class ConfigurationService:
                 "kind": row.secret_ref_kind,
                 "identifier": row.secret_ref_identifier,
             },
+            "enabled": row.enabled,
+        }
+
+    def create_routing_profile(self, request: RoutingProfileCreate) -> dict[str, Any]:
+        try:
+            with self._database.session() as session:
+                analysis_ids, llm_ids = self._routing_provider_ids(session, request)
+                row = RoutingProfile(
+                    name=request.name,
+                    analysis_provider_ids=analysis_ids,
+                    llm_provider_ids=llm_ids,
+                    strategy=request.strategy,
+                    enabled=request.enabled,
+                )
+                session.add(row)
+                session.flush()
+                return self._routing_profile(row)
+        except IntegrityError as error:
+            raise ConfigurationError("configuration_conflict") from error
+
+    def list_routing_profiles(self) -> list[dict[str, Any]]:
+        with self._database.session() as session:
+            rows = list(session.scalars(select(RoutingProfile).order_by(RoutingProfile.name)))
+            return [self._routing_profile(row) for row in rows]
+
+    def update_routing_profile(
+        self,
+        profile_id: UUID,
+        request: RoutingProfileUpdate,
+    ) -> dict[str, Any]:
+        try:
+            with self._database.session() as session:
+                row = session.get(RoutingProfile, profile_id)
+                if row is None:
+                    raise ConfigurationError("configuration_not_found")
+                values: dict[str, Any] = {
+                    "name": row.name,
+                    "analysis_provider_ids": [UUID(value) for value in row.analysis_provider_ids],
+                    "llm_provider_ids": [UUID(value) for value in row.llm_provider_ids],
+                    "strategy": row.strategy,
+                    "enabled": row.enabled,
+                    **request.model_dump(exclude_unset=True),
+                }
+                candidate = RoutingProfileCreate.model_validate(values)
+                analysis_ids, llm_ids = self._routing_provider_ids(session, candidate)
+                row.name = candidate.name
+                row.analysis_provider_ids = analysis_ids
+                row.llm_provider_ids = llm_ids
+                row.strategy = candidate.strategy
+                row.enabled = candidate.enabled
+                session.flush()
+                return self._routing_profile(row)
+        except IntegrityError as error:
+            raise ConfigurationError("configuration_conflict") from error
+        except (ValidationError, ValueError) as error:
+            raise ConfigurationError("invalid_configuration") from error
+
+    @staticmethod
+    def _routing_provider_ids(
+        session: Session,
+        request: RoutingProfileCreate,
+    ) -> tuple[list[str], list[str]]:
+        provider_ids = set(request.analysis_provider_ids + request.llm_provider_ids)
+        rows = list(session.scalars(select(Provider).where(Provider.id.in_(provider_ids))))
+        by_id = {row.id: row for row in rows}
+        if len(by_id) != len(provider_ids):
+            raise ConfigurationError("routing_profile_provider_not_found")
+        if any(
+            by_id[item].kind not in {"analysis", "vision", "ocr"}
+            for item in request.analysis_provider_ids
+        ):
+            raise ConfigurationError("routing_profile_analysis_provider_invalid")
+        if any(by_id[item].kind != "llm" for item in request.llm_provider_ids):
+            raise ConfigurationError("routing_profile_llm_provider_invalid")
+        return (
+            [str(item) for item in request.analysis_provider_ids],
+            [str(item) for item in request.llm_provider_ids],
+        )
+
+    @staticmethod
+    def _routing_profile(row: RoutingProfile) -> dict[str, Any]:
+        return {
+            "id": str(row.id),
+            "name": row.name,
+            "analysis_provider_ids": list(row.analysis_provider_ids or []),
+            "llm_provider_ids": list(row.llm_provider_ids or []),
+            "strategy": row.strategy,
             "enabled": row.enabled,
         }
 

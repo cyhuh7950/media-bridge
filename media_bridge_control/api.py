@@ -43,6 +43,8 @@ from media_bridge_control.schemas import (
     PublishSnapshotRequest,
     RecoveryCodeRequest,
     RecoveryLoginRequest,
+    RoutingProfileCreate,
+    RoutingProfileUpdate,
     TestLabPreviewRequest,
     TestLabRunRequest,
     TotpCodeRequest,
@@ -481,6 +483,50 @@ def build_control_app(
             status = 404 if error.code == "configuration_not_found" else 409
             return _error(error.code, status)
         return Response(status_code=204)
+
+    async def routing_profiles(request: Request) -> Response:
+        writable = request.method == "POST"
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator"}) if writable else frozenset(
+                {"admin", "operator", "viewer"}
+            ),
+            require_csrf=writable,
+        )
+        if rejected is not None:
+            return rejected
+        if not writable:
+            return JSONResponse(await run_in_threadpool(configuration.list_routing_profiles))
+        try:
+            body = await _json(request, RoutingProfileCreate)
+            result = await run_in_threadpool(configuration.create_routing_profile, body)
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except ConfigurationError as error:
+            return _error(error.code, 409)
+        return JSONResponse(result, status_code=201)
+
+    async def routing_profile_item(request: Request) -> Response:
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator"}),
+            require_csrf=True,
+        )
+        if rejected is not None:
+            return rejected
+        try:
+            body = await _json(request, RoutingProfileUpdate)
+            result = await run_in_threadpool(
+                configuration.update_routing_profile,
+                request.path_params["item_id"],
+                body,
+            )
+        except ControlPlaneError as error:
+            return _error(error.code, 400)
+        except ConfigurationError as error:
+            status = 404 if error.code == "configuration_not_found" else 409
+            return _error(error.code, status)
+        return JSONResponse(result)
 
     async def models(request: Request) -> Response:
         writable = request.method == "POST"
@@ -1036,6 +1082,12 @@ def build_control_app(
             ),
             Route("/admin/v1/providers", providers, methods=["GET", "POST"]),
             Route("/admin/v1/provider-catalog", provider_catalog, methods=["GET"]),
+            Route("/admin/v1/routing-profiles", routing_profiles, methods=["GET", "POST"]),
+            Route(
+                "/admin/v1/routing-profiles/{item_id:uuid}",
+                routing_profile_item,
+                methods=["PATCH"],
+            ),
             Route(
                 "/admin/v1/providers/{item_id:uuid}",
                 provider_item,

@@ -158,6 +158,41 @@ class ProviderUpdate(NonEmptyUpdate):
     enabled: bool | None = None
 
 
+class RoutingProfileCreate(AdminStrictModel):
+    name: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")]
+    analysis_provider_ids: Annotated[list[UUID], Field(min_length=1, max_length=32)]
+    llm_provider_ids: Annotated[list[UUID], Field(min_length=1, max_length=32)]
+    strategy: Literal["priority", "fallback", "health", "cost"] = "priority"
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def require_unique_provider_ids(self) -> "RoutingProfileCreate":
+        if len(set(self.analysis_provider_ids)) != len(self.analysis_provider_ids):
+            raise ValueError("analysis_provider_ids must be unique")
+        if len(set(self.llm_provider_ids)) != len(self.llm_provider_ids):
+            raise ValueError("llm_provider_ids must be unique")
+        return self
+
+
+class RoutingProfileUpdate(NonEmptyUpdate):
+    name: Annotated[
+        str,
+        StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"),
+    ] | None = None
+    analysis_provider_ids: Annotated[list[UUID], Field(min_length=1, max_length=32)] | None = None
+    llm_provider_ids: Annotated[list[UUID], Field(min_length=1, max_length=32)] | None = None
+    strategy: Literal["priority", "fallback", "health", "cost"] | None = None
+    enabled: bool | None = None
+
+    @model_validator(mode="after")
+    def require_unique_provider_ids(self) -> "RoutingProfileUpdate":
+        for field_name in ("analysis_provider_ids", "llm_provider_ids"):
+            provider_ids = getattr(self, field_name)
+            if provider_ids is not None and len(set(provider_ids)) != len(provider_ids):
+                raise ValueError(f"{field_name} must be unique")
+        return self
+
+
 class ConnectionCreate(AdminStrictModel):
     name: Annotated[
         str,

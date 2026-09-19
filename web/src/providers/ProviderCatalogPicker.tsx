@@ -24,15 +24,17 @@ export function ProviderCatalogPicker({
   onChange: (entry: ProviderCatalogEntry | null) => void;
 }) {
   const [entries, setEntries] = useState<ProviderCatalogEntry[] | null>(null);
+  const [loadedKind, setLoadedKind] = useState<ManagedProviderKind | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
-    setEntries(null);
-    setFailed(false);
     void adminRequest<ProviderCatalogEntry[]>(`/provider-catalog?kind=${kind}`)
       .then((payload) => {
-        if (active) setEntries(payload);
+        if (active) {
+          setEntries(payload);
+          setLoadedKind(kind);
+        }
       })
       .catch((error: unknown) => {
         if (active && (error instanceof SafeApiError || error instanceof Error)) setFailed(true);
@@ -51,10 +53,10 @@ export function ProviderCatalogPicker({
           onChange(entry);
         }}
         required
-        disabled={entries === null}
+        disabled={loadedKind !== kind}
       >
-        <option value="">{entries === null ? "목록을 불러오는 중…" : "Provider를 선택하세요"}</option>
-        {entries?.map((entry) => <option key={entry.provider_id} value={entry.provider_id}>{entry.display_name}</option>)}
+        <option value="">{loadedKind !== kind ? "목록을 불러오는 중…" : "Provider를 선택하세요"}</option>
+        {loadedKind === kind ? entries?.map((entry) => <option key={entry.provider_id} value={entry.provider_id}>{entry.display_name}</option>) : null}
       </select>
       {failed ? <p role="alert">Provider 카탈로그를 불러올 수 없습니다.</p> : null}
     </>

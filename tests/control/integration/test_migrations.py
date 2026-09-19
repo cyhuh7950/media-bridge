@@ -20,6 +20,7 @@ EXPECTED_TABLES = {
     "operational_events",
     "policies",
     "providers",
+    "routing_profiles",
     "recovery_codes",
     "signing_keys",
     "snapshots",
@@ -43,7 +44,7 @@ def test_fresh_upgrade_creates_control_plane_schema(clean_postgres: str) -> None
     with engine.connect() as connection:
         revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
     engine.dispose()
-    assert revision == "0004_managed_provider_catalog"
+    assert revision == "0005_routing_profiles"
     assert {"catalog_id", "protocol", "capabilities"} <= provider_columns
 
 

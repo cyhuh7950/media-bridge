@@ -19,6 +19,7 @@ import { DashboardPage } from "../operations/DashboardPage";
 import { ModelsPage } from "../operations/ModelsPage";
 import { PoliciesPage } from "../operations/PoliciesPage";
 import { ProvidersPage } from "../operations/ProvidersPage";
+import { RoutingProfilesPage } from "../operations/RoutingProfilesPage";
 import { SnapshotsPage } from "../operations/SnapshotsPage";
 import { SystemPage } from "../operations/SystemPage";
 
@@ -102,6 +103,7 @@ function ConsoleLayout() {
       <nav aria-label="주요 메뉴">
         <NavLink to="/">Dashboard</NavLink>
         <NavLink to="/providers">Providers</NavLink>
+        <NavLink to="/routing-profiles">Routing</NavLink>
         <NavLink to="/models">Models</NavLink>
         <NavLink to="/policies">Policies</NavLink>
         {auth.principal.role === "admin" ? <NavLink to="/credentials">Credentials</NavLink> : null}
@@ -117,6 +119,7 @@ function ConsoleLayout() {
           <Route element={<PublishedSnapshotGuard role={auth.principal.role} />}>
             <Route path="/" element={<DashboardPage role={auth.principal.role} />} />
             <Route path="/providers" element={<ProvidersPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
+            <Route path="/routing-profiles" element={<RoutingProfilesPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
             <Route path="/models" element={<ModelsPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
             <Route path="/policies" element={<PoliciesPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
             <Route path="/credentials" element={<CredentialsPage role={auth.principal.role} csrfToken={auth.csrfToken} />} />
