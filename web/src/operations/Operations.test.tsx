@@ -227,6 +227,20 @@ it("publishes the validated draft and reports a publish error", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("configuration_invalid");
 });
 
+it("explains an expired CSRF session when publishing", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<typeof fetch>((input, init) => {
+      if ((init?.method ?? "GET") === "GET") return Promise.resolve(jsonResponse([]));
+      return Promise.resolve(jsonResponse({ error: { code: "csrf_rejected" } }, 403));
+    }),
+  );
+  const user = userEvent.setup();
+  render(<SnapshotsPage role="admin" csrfToken="expired-token" />);
+  await user.click(await screen.findByRole("button", { name: "현재 설정 검증 및 발행" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("로그아웃 후 다시 로그인하세요");
+});
+
 it("edits all eight policy controls from the standard dialog", async () => {
   const fetchMock = vi.fn<typeof fetch>((input, init) => {
     const path = requestPath(input);

@@ -8,6 +8,12 @@ interface DraftResponse {
   draft_id: string;
 }
 
+function publishErrorMessage(code: string): string {
+  if (code === "csrf_rejected") return "로그인 보안 토큰이 만료되었거나 일치하지 않습니다. 로그아웃 후 다시 로그인하세요.";
+  if (code === "configuration_incomplete") return "Provider 기준 모델, 정책 등 필수 설정이 완성되지 않았습니다.";
+  return `발행할 수 없습니다. (${code})`;
+}
+
 export function SnapshotsPage({ role, csrfToken }: OperationsProps) {
   const allowed = role === "admin";
   const { items, failed, reload } = useAdminList(allowed ? "/snapshots" : null);
@@ -24,7 +30,7 @@ export function SnapshotsPage({ role, csrfToken }: OperationsProps) {
       await adminRequest("/snapshots", { method: "POST", csrfToken, body: { draft_id: draft.draft_id } });
       await reload();
     } catch (cause) {
-      setError(cause instanceof SafeApiError ? `발행할 수 없습니다. (${cause.code})` : "발행할 수 없습니다. 잠시 후 다시 시도하세요.");
+      setError(cause instanceof SafeApiError ? publishErrorMessage(cause.code) : "발행할 수 없습니다. 잠시 후 다시 시도하세요.");
     } finally {
       setBusy(false);
     }
