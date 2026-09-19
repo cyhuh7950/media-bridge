@@ -124,6 +124,11 @@ class TestLabService:
         asset_id: str,
     ) -> dict[str, Any]:
         return {
+            "routing_profile_id": (
+                str(request.routing_profile_id)
+                if request.routing_profile_id is not None
+                else None
+            ),
             "content": [
                 {"type": "text", "text": request.user_request},
                 {

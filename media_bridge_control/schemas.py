@@ -249,6 +249,7 @@ class ConnectionUpdate(NonEmptyUpdate):
 
 
 class TestLabPreviewRequest(AdminStrictModel):
+    routing_profile_id: UUID | None = None
     gateway_url: Annotated[str, StringConstraints(max_length=2_048)] | None = None
     api_key: Annotated[str, StringConstraints(min_length=1, max_length=4_096)] | None = None
     target_model: Annotated[str, StringConstraints(min_length=1, max_length=128)]
