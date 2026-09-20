@@ -208,6 +208,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
         vision = OpenAICompatibleVisionBackend(
             endpoint=_required("MEDIA_BRIDGE_VISION_ENDPOINT"),
             model=_required("MEDIA_BRIDGE_VISION_MODEL"),
+            api_key_env="MEDIA_BRIDGE_VISION_API_KEY",
             credential_loader=lambda: db_provider_credential("openai-vision"),
             client=client,
         )
