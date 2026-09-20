@@ -43,10 +43,6 @@ sanitizer를 통과한 텍스트만 전달하는 fail-closed MCP 제품입니다
 
 핵심 안전 경계는 MCP 도구의 선택 호출이 아니라 `/v1/responses` ingress와 `RouterAdapter`입니다.
 
-현재 브랜치에는 승인된 A안 ingress 코드가 구현돼 있지만 PCWSL Codex provider 설정과 배포는
-수행하지 않았습니다. 실제 traffic이 Media Bridge를 통하도록 연결하고 직접 OmniRoute 접근을
-차단하기 전에는 PCWSL 요청이 자동 보호된다고 간주하지 않습니다.
-
 ```text
 OpenAI Responses request
   -> strict normalizer + tenant state isolation
