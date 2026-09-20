@@ -27,6 +27,12 @@ from media_bridge.contracts import (
 )
 from media_bridge.contracts_v2 import InteropV2Result, provider_call_allowed
 from media_bridge.mcp_server import build_mcp_server
+from media_bridge.openai_chat import (
+    ChatNormalizationError,
+    chat_request_to_responses,
+    chat_response_from_responses,
+    chat_stream_from_responses,
+)
 from media_bridge.service import MediaBridgeService
 from media_bridge_gateway.auth import CredentialAuthenticationError
 from media_bridge_gateway.contracts import DataPlaneSubject, DownstreamError
@@ -256,6 +262,7 @@ class DataPlaneAuthMiddleware:
             "/v1/prepare": "gateway.prepare",
             "/v1/models": "gateway.models",
             "/v1/responses": "gateway.responses",
+            "/v1/chat/completions": "gateway.responses",
             "/mcp": "gateway.mcp",
         }[route_key]
         emit_safely(
@@ -528,6 +535,78 @@ def build_gateway_app(
             return _error("gateway_failed", "Gateway failed safely.", 500)
         return _error(result.error.code, result.error.message, result.http_status)
 
+    async def chat_completions(request: Request) -> Response:
+        content_type = request.headers.get("content-type", "").partition(";")[0].lower()
+        if content_type != "application/json":
+            return _error(
+                "unsupported_content_type",
+                "Chat Completions request must use application/json.",
+                415,
+            )
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > max_responses_body_bytes:
+                return _error(
+                    "request_too_large",
+                    "Chat Completions request exceeded the configured limit.",
+                    413,
+                )
+        try:
+            responses_payload = chat_request_to_responses(json.loads(bytes(body)))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return _error("invalid_json", "Chat Completions request is not valid JSON.", 400)
+        except ChatNormalizationError as error:
+            return _error(error.code, error.safe_message, 400)
+        generation = current_generation.get()
+        subject = current_subject.get()
+        if generation is None or subject is None:
+            return _error("gateway_unavailable", "Gateway request context is unavailable.", 503)
+        result = await generation.transaction.invoke(responses_payload, subject=subject)
+        current_event_status.set(
+            result.warning.code
+            if result.warning is not None
+            else "completed"
+            if result.status == "completed"
+            else result.error.code
+            if result.error is not None
+            else "gateway_failed"
+        )
+        if result.gate_result is not None:
+            current_event_model.set(result.gate_result.target_model)
+        if result.status == "completed" and result.response is not None:
+            gateway_response = result.response
+            model = str(responses_payload["model"])
+            if gateway_response.stream is not None:
+                return StreamingResponse(
+                    chat_stream_from_responses(
+                        gateway_response.stream,
+                        response_id=gateway_response.response_id,
+                        request_model=model,
+                    ),
+                    status_code=gateway_response.status_code,
+                    media_type="text/event-stream",
+                )
+            try:
+                converted = chat_response_from_responses(
+                    gateway_response.body,
+                    request_model=model,
+                )
+            except ValueError:
+                return _error(
+                    "invalid_downstream_response",
+                    "Responses gateway returned an invalid response.",
+                    502,
+                )
+            return Response(
+                content=converted,
+                status_code=gateway_response.status_code,
+                media_type="application/json",
+            )
+        if result.error is None:
+            return _error("gateway_failed", "Gateway failed safely.", 500)
+        return _error(result.error.code, result.error.message, result.http_status)
+
     service = RuntimeBoundMediaBridgeService(runtime)
     server = build_mcp_server(service, tenant_provider=_tenant_provider)
     mcp_app = server.streamable_http_app(
@@ -543,6 +622,7 @@ def build_gateway_app(
         Route("/assets/{asset_id:str}", delete_asset, methods=["DELETE"]),
         Route("/v1/prepare", prepare, methods=["POST"]),
         Route("/v1/responses", responses, methods=["POST"]),
+        Route("/v1/chat/completions", chat_completions, methods=["POST"]),
         Mount("/", app=mcp_app),
     ]
     app = Starlette(routes=routes, lifespan=mcp_app.router.lifespan_context)

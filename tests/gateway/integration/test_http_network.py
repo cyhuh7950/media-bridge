@@ -63,6 +63,14 @@ async def test_actual_tcp_responses_json_sse_mcp_limits_and_no_redirect(
                 headers=authorization,
                 json={"model": "text-model", "input": "hello"},
             )
+            chat_response = await client.post(
+                "/v1/chat/completions",
+                headers=authorization,
+                json={
+                    "model": "text-model",
+                    "messages": [{"role": "user", "content": "hello from chat"}],
+                },
+            )
             async with client.stream(
                 "POST",
                 "/v1/responses",
@@ -138,6 +146,9 @@ async def test_actual_tcp_responses_json_sse_mcp_limits_and_no_redirect(
 
         assert json_response.status_code == 200
         assert json_response.json()["id"] == "resp_gateway"
+        assert chat_response.status_code == 200
+        assert chat_response.json()["object"] == "chat.completion"
+        assert chat_response.json()["choices"][0]["message"]["role"] == "assistant"
         assert sse_status == 200
         assert sse_content_type.startswith("text/event-stream")
         assert b"[DONE]" in remaining_events
@@ -156,7 +167,7 @@ async def test_actual_tcp_responses_json_sse_mcp_limits_and_no_redirect(
         assert unknown.status_code == 404
         assert duplicate_auth.status_code == 401
         assert duplicate_cookie.status_code == 401
-        assert len(downstream.requests) == 3
+        assert len(downstream.requests) == 4
 
         http_client = create_mcp_http_client(headers=authorization)
         async with (
