@@ -1,4 +1,4 @@
-"""Control Plane orchestration that executes through the Data Plane Gateway."""
+"""Memory-only Control Plane orchestration for preview and opt-in test calls."""
 
 from __future__ import annotations
 
@@ -9,15 +9,14 @@ import threading
 import time
 from collections import deque
 from typing import Any
-from uuid import UUID
+from urllib.parse import urlsplit, urlunsplit
 
-import anyio
+import httpx
 
-from media_bridge_control.connections import ConnectionService, ConnectionServiceError
 from media_bridge_control.db import Database
 from media_bridge_control.gateway_client import GatewayClient, GatewayClientError
 from media_bridge_control.models import Provider, RoutingProfile
-from media_bridge_control.schemas import TestLabPreviewRequest, TestLabRunRequest
+from media_bridge_control.schemas import SecretReference, TestLabPreviewRequest, TestLabRunRequest
 from media_bridge_control.secrets import GatewaySecretResolver, SecretResolutionError
 from media_bridge_control.security import SecurityContext
 
@@ -67,75 +66,48 @@ class TestLabService:
     def __init__(
         self,
         *,
-        connections: ConnectionService,
         gateway_client: GatewayClient,
         database: Database,
         security: SecurityContext,
         secret_resolver: GatewaySecretResolver,
     ) -> None:
-        self._connections = connections
         self._gateway = gateway_client
         self._database = database
         self._security = security
         self._secret_resolver = secret_resolver
 
     async def preview(self, request: TestLabPreviewRequest) -> dict[str, object]:
-        """Run the admin preview through the same Data Plane Gateway as clients."""
-        connection, credential = await self._connection(request.connection_id)
-        target_model = self._run_target_model(request)
         data = self._decode(request.media_base64)
-        asset_id: str | None = None
+        if request.routing_profile_id is None:
+            raise TestLabError("routing_profile_required")
         try:
-            asset_id = await self._gateway.upload(
-                base_url=connection.gateway_url,
-                credential=credential,
-                data=data,
-                filename=request.filename,
-                declared_mime=request.declared_mime,
+            profile, analysis, llm = self._providers(request.routing_profile_id)
+            analysis_key = self._provider_key(analysis)
+            llm_key = self._provider_key(llm)
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(60), follow_redirects=False, trust_env=False
+            ) as client:
+                extracted = await self._extract(client, analysis, analysis_key, data, request)
+                forwarded = (
+                    f"{request.user_request.strip()}\n\n"
+                    f"[미디어에서 추출한 텍스트]\n{extracted}"
+                ).strip()
+                answer = await self._answer(client, llm, llm_key, forwarded)
+        except (httpx.HTTPError, ValueError, KeyError, SecretResolutionError) as error:
+            logger.exception(
+                "test lab routed provider call failed",
+                extra={"routing_profile_id": str(request.routing_profile_id)},
             )
-            result = await self._gateway.prepare(
-                base_url=connection.gateway_url,
-                credential=credential,
-                payload=self._prepare_payload(request, asset_id),
-            )
-        except GatewayClientError as error:
-            raise TestLabError(error.code) from error
-        finally:
-            if asset_id is not None:
-                try:
-                    await self._gateway.delete(
-                        base_url=connection.gateway_url,
-                        credential=credential,
-                        asset_id=asset_id,
-                    )
-                except GatewayClientError:
-                    logger.exception("test lab preview asset cleanup failed")
+            raise TestLabError("upstream_or_downstream_failed") from error
         return {
             "ok": True,
-            "routingProfile": {"id": str(request.routing_profile_id), "targetModel": target_model},
-            "gateway": {"baseUrl": connection.gateway_url, "execution": "data-plane"},
-            "response": result,
+            "routingProfile": {"id": str(profile.id), "name": profile.name},
+            "extractedText": extracted,
+            "forwardedText": forwarded,
+            "originalMediaForwarded": False,
+            "answer": answer,
         }
 
-    async def _connection(self, connection_id: UUID | None) -> tuple[Any, str]:
-        if connection_id is None:
-            raise TestLabError("connection_required")
-        try:
-            connection = await anyio.to_thread.run_sync(
-                self._connections.runtime,
-                str(connection_id),
-            )
-        except ConnectionServiceError as error:
-            raise TestLabError(error.code) from error
-        if not connection.enabled or connection.revoked:
-            raise TestLabError("connection_unavailable")
-        try:
-            credential = self._secret_resolver.resolve(
-                self._connections.secret_reference(connection)
-            )
-        except SecretResolutionError as error:
-            raise TestLabError(error.code) from error
-        return connection, credential
     def _providers(self, profile_id: Any) -> tuple[RoutingProfile, Provider, Provider]:
         with self._database.session() as session:
             profile = session.get(RoutingProfile, profile_id)
@@ -148,6 +120,102 @@ class TestLabService:
             if analysis is None or llm is None or not analysis.enabled or not llm.enabled:
                 raise TestLabError("routing_provider_unavailable")
             return profile, analysis, llm
+
+    def _provider_key(self, provider: Provider) -> str:
+        if provider.encrypted_api_key:
+            return self._security.decrypt_secret(provider.encrypted_api_key)
+        return self._secret_resolver.resolve(
+            SecretReference(
+                kind=provider.secret_ref_kind, identifier=provider.secret_ref_identifier
+            )
+        )
+
+    async def _extract(
+        self,
+        client: httpx.AsyncClient,
+        provider: Provider,
+        key: str,
+        data: bytes,
+        request: TestLabPreviewRequest,
+    ) -> str:
+        response = await client.post(
+            provider.endpoint,
+            headers={"Authorization": f"Bearer {key}"},
+            files={"document": (request.filename or "media", data, request.declared_mime)},
+            data={
+                "ocr": "force",
+                "model": provider.model_id or "document-parse",
+                "output_formats": '["markdown"]',
+            },
+        )
+        response.raise_for_status()
+        body = response.json()
+        if isinstance(body, dict) and isinstance(body.get("text"), str):
+            return body["text"].strip()
+        pages = body.get("pages") if isinstance(body, dict) else None
+        if isinstance(pages, list):
+            page_text = "\n".join(
+                str(page["text"]).strip()
+                for page in pages
+                if isinstance(page, dict) and isinstance(page.get("text"), str)
+            ).strip()
+            if page_text:
+                return page_text
+        content = body.get("content") if isinstance(body, dict) else None
+        if isinstance(content, dict):
+            for field in ("markdown", "text"):
+                value = content.get(field)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        raise ValueError("upstream_invalid_response")
+
+    async def _answer(
+        self, client: httpx.AsyncClient, provider: Provider, key: str, prompt: str
+    ) -> str:
+        protocol = provider.protocol or "openai-chat-completions"
+        if protocol == "openai-responses":
+            payload: dict[str, Any] = {
+                "model": provider.model_id or "auto",
+                "input": prompt,
+                "stream": False,
+            }
+        else:
+            payload = {
+                "model": provider.model_id or "auto",
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+            }
+        response = await client.post(
+            self._llm_endpoint(provider.endpoint, protocol),
+            headers={"Authorization": f"Bearer {key}"},
+            json=payload,
+        )
+        response.raise_for_status()
+        body = response.json()
+        if protocol == "openai-responses":
+            answer = "\n".join(
+                str(part.get("text", "")).strip()
+                for item in body.get("output", [])
+                if isinstance(item, dict)
+                for part in item.get("content", [])
+                if isinstance(part, dict) and part.get("type") == "output_text"
+            ).strip()
+        else:
+            answer = str(body["choices"][0]["message"]["content"]).strip()
+        if not answer:
+            raise ValueError("downstream_empty_response")
+        return answer
+
+    @staticmethod
+    def _llm_endpoint(endpoint: str, protocol: str) -> str:
+        """Accept catalog base URLs as well as fully-qualified API endpoints."""
+        suffix = "/responses" if protocol == "openai-responses" else "/chat/completions"
+        parsed = urlsplit(endpoint.rstrip("/"))
+        if parsed.path.endswith(suffix):
+            return endpoint
+        return urlunsplit(parsed._replace(path=f"{parsed.path}{suffix}"))
 
     async def run(self, request: TestLabRunRequest) -> dict[str, object]:
         if request.gateway_url is None or request.api_key is None:

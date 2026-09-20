@@ -103,11 +103,9 @@ def build_control_app(
     )
     audit = AuditEventWriter(service.database)
     events = OperationalEventWriter(service.database)
-    connections = ConnectionService(service.database)
     gateway = gateway_client or HttpGatewayClient()
     resolver = secret_resolver or GatewaySecretResolver()
     test_lab = TestLabService(
-        connections=connections,
         gateway_client=gateway,
         database=service.database,
         security=service.security,
