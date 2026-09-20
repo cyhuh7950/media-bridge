@@ -9,12 +9,16 @@ import threading
 import time
 from collections import deque
 from typing import Any
+from uuid import UUID
 
+import anyio
+
+from media_bridge_control.connections import ConnectionService, ConnectionServiceError
 from media_bridge_control.db import Database
 from media_bridge_control.gateway_client import GatewayClient, GatewayClientError
 from media_bridge_control.models import Provider, RoutingProfile
 from media_bridge_control.schemas import TestLabPreviewRequest, TestLabRunRequest
-from media_bridge_control.secrets import GatewaySecretResolver
+from media_bridge_control.secrets import GatewaySecretResolver, SecretResolutionError
 from media_bridge_control.security import SecurityContext
 
 logger = logging.getLogger(__name__)
@@ -63,39 +67,36 @@ class TestLabService:
     def __init__(
         self,
         *,
+        connections: ConnectionService,
         gateway_client: GatewayClient,
         database: Database,
         security: SecurityContext,
         secret_resolver: GatewaySecretResolver,
-        gateway_url: str | None = None,
-        gateway_credential: str | None = None,
     ) -> None:
+        self._connections = connections
         self._gateway = gateway_client
         self._database = database
         self._security = security
         self._secret_resolver = secret_resolver
-        self._gateway_url = gateway_url
-        self._gateway_credential = gateway_credential
 
     async def preview(self, request: TestLabPreviewRequest) -> dict[str, object]:
         """Run the admin preview through the same Data Plane Gateway as clients."""
-        if not self._gateway_url or not self._gateway_credential:
-            raise TestLabError("gateway_configuration_missing")
+        connection, credential = await self._connection(request.connection_id)
         target_model = self._run_target_model(request)
         data = self._decode(request.media_base64)
         asset_id: str | None = None
         try:
             asset_id = await self._gateway.upload(
-                base_url=self._gateway_url,
-                credential=self._gateway_credential,
+                base_url=connection.gateway_url,
+                credential=credential,
                 data=data,
                 filename=request.filename,
                 declared_mime=request.declared_mime,
             )
-            result = await self._gateway.responses(
-                base_url=self._gateway_url,
-                credential=self._gateway_credential,
-                payload=self._responses_payload(request, asset_id, target_model),
+            result = await self._gateway.prepare(
+                base_url=connection.gateway_url,
+                credential=credential,
+                payload=self._prepare_payload(request, asset_id),
             )
         except GatewayClientError as error:
             raise TestLabError(error.code) from error
@@ -103,8 +104,8 @@ class TestLabService:
             if asset_id is not None:
                 try:
                     await self._gateway.delete(
-                        base_url=self._gateway_url,
-                        credential=self._gateway_credential,
+                        base_url=connection.gateway_url,
+                        credential=credential,
                         asset_id=asset_id,
                     )
                 except GatewayClientError:
@@ -112,9 +113,29 @@ class TestLabService:
         return {
             "ok": True,
             "routingProfile": {"id": str(request.routing_profile_id), "targetModel": target_model},
-            "gateway": {"baseUrl": self._gateway_url, "execution": "data-plane"},
+            "gateway": {"baseUrl": connection.gateway_url, "execution": "data-plane"},
             "response": result,
         }
+
+    async def _connection(self, connection_id: UUID | None) -> tuple[Any, str]:
+        if connection_id is None:
+            raise TestLabError("connection_required")
+        try:
+            connection = await anyio.to_thread.run_sync(
+                self._connections.runtime,
+                str(connection_id),
+            )
+        except ConnectionServiceError as error:
+            raise TestLabError(error.code) from error
+        if not connection.enabled or connection.revoked:
+            raise TestLabError("connection_unavailable")
+        try:
+            credential = self._secret_resolver.resolve(
+                self._connections.secret_reference(connection)
+            )
+        except SecretResolutionError as error:
+            raise TestLabError(error.code) from error
+        return connection, credential
     def _providers(self, profile_id: Any) -> tuple[RoutingProfile, Provider, Provider]:
         with self._database.session() as session:
             profile = session.get(RoutingProfile, profile_id)

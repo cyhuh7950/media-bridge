@@ -26,6 +26,7 @@ def test_preview_has_zero_downstream_and_run_requires_literal_opt_in(
     migrated_postgres: str,
     monkeypatch: object,
 ) -> None:
+    monkeypatch.setenv("MEDIA_BRIDGE_GATEWAY_CREDENTIAL", "mbc_gateway.db-reference")
     database, service = configured_control(migrated_postgres)
     gateway = StubGatewayClient()
     app = build_control_app(
@@ -34,8 +35,6 @@ def test_preview_has_zero_downstream_and_run_requires_literal_opt_in(
         allowed_host="control.test",
         gateway_client=gateway,
         secret_resolver=GatewaySecretResolver(),
-        gateway_url="https://gateway.example.test",
-        gateway_credential="mbc_gateway.external-value",
     )
     client = TestClient(app, base_url="https://control.test")
     login = client.post(
@@ -47,13 +46,27 @@ def test_preview_has_zero_downstream_and_run_requires_literal_opt_in(
         "origin": "https://control.test",
         "x-csrf-token": login.json()["csrf_token"],
     }
-    payload = _preview_payload()
+    created = client.post(
+        "/admin/v1/connections",
+        headers=headers,
+        json={
+            "name": "primary-gateway",
+            "gateway_url": "https://gateway.example.test",
+            "credential_secret_ref": {
+                "kind": "env",
+                "identifier": "MEDIA_BRIDGE_GATEWAY_CREDENTIAL",
+            },
+        },
+    )
+    assert created.status_code == 201
+    payload = {**_preview_payload(), "connection_id": created.json()["id"]}
 
     preview = client.post("/admin/v1/test-lab/preview", headers=headers, json=payload)
     assert preview.status_code == 200
     assert preview.json()["ok"] is True
     assert preview.json()["gateway"]["execution"] == "data-plane"
-    assert gateway.calls[-3:] == ["upload", "responses", "delete"]
+    assert gateway.calls == ["upload", "prepare", "delete"]
+    assert "responses" not in gateway.calls
 
     preview_call_count = len(gateway.calls)
     missing_opt_in = client.post(
@@ -107,8 +120,6 @@ def test_preview_does_not_call_downstream_or_expose_credentials(
         allowed_host="control.test",
         gateway_client=gateway,
         secret_resolver=GatewaySecretResolver(),
-        gateway_url="https://gateway.example.test",
-        gateway_credential="mbc_gateway.external-value",
     )
     client = TestClient(app, base_url="https://control.test")
     login = client.post(
@@ -120,10 +131,24 @@ def test_preview_does_not_call_downstream_or_expose_credentials(
         "origin": "https://control.test",
         "x-csrf-token": login.json()["csrf_token"],
     }
-    payload = _preview_payload()
+    monkeypatch.setenv("MEDIA_BRIDGE_GATEWAY_CREDENTIAL", "mbc_gateway.db-reference")
+    created = client.post(
+        "/admin/v1/connections",
+        headers=headers,
+        json={
+            "name": "primary-gateway",
+            "gateway_url": "https://gateway.example.test",
+            "credential_secret_ref": {
+                "kind": "env",
+                "identifier": "MEDIA_BRIDGE_GATEWAY_CREDENTIAL",
+            },
+        },
+    )
+    assert created.status_code == 201
+    payload = {**_preview_payload(), "connection_id": created.json()["id"]}
 
     response = client.post("/admin/v1/test-lab/preview", headers=headers, json=payload)
-    assert response.status_code == 200
-    assert response.json()["ok"] is True
-    assert gateway.calls[-3:] == ["upload", "responses", "delete"]
+    assert response.status_code == 502
+    assert response.json() == {"error": {"code": "gateway_unavailable"}}
+    assert gateway.calls == ["upload", "prepare", "delete"]
     database.close()
