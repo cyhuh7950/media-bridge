@@ -160,14 +160,3 @@ OmniRoute 직접 inference endpoint가 caller에서 계속 접근 가능하면 i
 .venv/bin/ruff check media_bridge media_bridge_control migrations tests
 .venv/bin/mypy media_bridge media_bridge_control
 ```
-
-실제 provider 자격증명을 사용하는 OCR·Vision·Solar 호출, PCWSL Codex→실제 OmniRoute E2E,
-운영 배포는 자동 테스트 범위가 아닙니다. 공개 매뉴얼에 기록된 검증 절차와 실제 배포 환경의
-결과를 별도로 확인해야 합니다.
-
-## 기존 Solar 코드
-
-`solar_error_analyzer/`와 서버 상위 경로의 단일 파일은 기준선 보존용 legacy snapshot입니다.
-새 Media Bridge runtime, MCP 도구, router는 해당 curl 기반 코드나 직접 키 인자 경로를
-사용하지 않습니다. legacy snapshot은 새 패키지의 보안 경계나 운영 진입점으로 간주하지
-않습니다.
