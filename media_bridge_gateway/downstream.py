@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from media_bridge.backends import SecretConfigurationError, load_secret
+from media_bridge.backends import AnalysisBackend, BackendStatus
 from media_bridge.receipts import GateReceiptSigner, ReceiptValidationError
 from media_bridge_gateway.contracts import (
     DownstreamError,
@@ -368,34 +369,117 @@ class GuardedResponsesDownstream:
         )
 
     def _verify_seal(self, sealed: SealedGatewayRequest) -> None:
-        if _REQUEST_NONCE.fullmatch(sealed.request_nonce) is None:
-            raise DownstreamGuardError("downstream request nonce is invalid")
-        try:
-            computed_digest = digest_gateway_payload(
-                {
-                    "payload": sealed.payload,
-                    "request_nonce": sealed.request_nonce,
-                }
+        _verify_seal(sealed, self._receipt_signer)
+
+
+def _verify_seal(sealed: SealedGatewayRequest, signer: GateReceiptSigner) -> None:
+    if _REQUEST_NONCE.fullmatch(sealed.request_nonce) is None:
+        raise DownstreamGuardError("downstream request nonce is invalid")
+    try:
+        computed_digest = digest_gateway_payload(
+            {
+                "payload": sealed.payload,
+                "request_nonce": sealed.request_nonce,
+            }
+        )
+    except (TypeError, ValueError, OverflowError) as error:
+        raise DownstreamGuardError("downstream payload digest could not be computed") from error
+    if not secrets.compare_digest(computed_digest, sealed.output_digest):
+        raise DownstreamGuardError("downstream payload digest does not match the receipt")
+    try:
+        signer.verify(sealed.receipt, expected=sealed.binding)
+    except ReceiptValidationError as error:
+        raise DownstreamGuardError("downstream payload has no valid receipt") from error
+    if sealed.capability not in {"non_vision", "vision"}:
+        raise DownstreamGuardError("downstream capability is not active and exact")
+    if sealed.action not in {"passthrough", "converted"}:
+        raise DownstreamGuardError("downstream action is not permitted")
+    if sealed.action == "converted" and sealed.capability != "non_vision":
+        raise DownstreamGuardError("converted payload has an invalid capability boundary")
+    if sealed.payload.get("model") != sealed.target_id:
+        raise DownstreamGuardError("downstream target does not match the sealed target")
+    if sealed.payload.get("previous_response_id") is not None:
+        raise DownstreamGuardError("downstream payload contains server-side state")
+    if sealed.payload.get("conversation") is not None:
+        raise DownstreamGuardError("downstream payload contains server-side conversation state")
+    if sealed.capability == "non_vision" and _contains_media_reference(sealed.payload):
+        raise DownstreamGuardError("non-vision downstream payload contains media")
+
+
+def _text_from_responses_payload(payload: dict[str, object]) -> str:
+    input_value = payload.get("input")
+    if isinstance(input_value, str):
+        return input_value.strip()
+    texts: list[str] = []
+
+    def collect(value: object) -> None:
+        if isinstance(value, dict):
+            if value.get("type") == "input_text" and isinstance(value.get("text"), str):
+                texts.append(value["text"])
+            for child in value.values():
+                collect(child)
+        elif isinstance(value, list):
+            for child in value:
+                collect(child)
+
+    collect(input_value)
+    return "\n\n".join(text.strip() for text in texts if text.strip())
+
+
+class ProviderResponsesDownstream:
+    """Receipt-guarded Responses facade backed by the DB-selected LLM adapter."""
+
+    def __init__(
+        self,
+        *,
+        backend: AnalysisBackend,
+        receipt_signer: GateReceiptSigner,
+        model: str,
+    ) -> None:
+        self._backend = backend
+        self._receipt_signer = receipt_signer
+        self._model = model
+        self._replay_guard = _ReceiptReplayGuard()
+
+    async def close(self) -> None:
+        return None
+
+    async def invoke(self, request: SealedGatewayRequest) -> GatewayResponse:
+        _verify_seal(request, self._receipt_signer)
+        self._replay_guard.consume(request.receipt)
+        prompt = _text_from_responses_payload(request.payload)
+        if not prompt:
+            raise DownstreamError(
+                "downstream_payload_invalid",
+                "Downstream request did not contain text input.",
+                http_status=400,
             )
-        except (TypeError, ValueError, OverflowError) as error:
-            raise DownstreamGuardError("downstream payload digest could not be computed") from error
-        if not secrets.compare_digest(computed_digest, sealed.output_digest):
-            raise DownstreamGuardError("downstream payload digest does not match the receipt")
-        try:
-            self._receipt_signer.verify(sealed.receipt, expected=sealed.binding)
-        except ReceiptValidationError as error:
-            raise DownstreamGuardError("downstream payload has no valid receipt") from error
-        if sealed.capability not in {"non_vision", "vision"}:
-            raise DownstreamGuardError("downstream capability is not active and exact")
-        if sealed.action not in {"passthrough", "converted"}:
-            raise DownstreamGuardError("downstream action is not permitted")
-        if sealed.action == "converted" and sealed.capability != "non_vision":
-            raise DownstreamGuardError("converted payload has an invalid capability boundary")
-        if sealed.payload.get("model") != sealed.target_id:
-            raise DownstreamGuardError("downstream target does not match the sealed target")
-        if sealed.payload.get("previous_response_id") is not None:
-            raise DownstreamGuardError("downstream payload contains server-side state")
-        if sealed.payload.get("conversation") is not None:
-            raise DownstreamGuardError("downstream payload contains server-side conversation state")
-        if sealed.capability == "non_vision" and _contains_media_reference(sealed.payload):
-            raise DownstreamGuardError("non-vision downstream payload contains media")
+        result = await self._backend.analyze(context=prompt, user_request="")
+        if result.status is not BackendStatus.SUCCESS or not result.analysis:
+            code = result.error_code or "upstream"
+            raise DownstreamError(
+                f"downstream_{code}",
+                "Configured Provider rejected the downstream request.",
+            )
+        response_id = f"resp_{secrets.token_urlsafe(18)}"
+        body = _canonical_json(
+            {
+                "id": response_id,
+                "object": "response",
+                "model": self._model,
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": result.analysis}],
+                    }
+                ],
+            }
+        )
+        return GatewayResponse(
+            body=body,
+            content_type="application/json",
+            response_id=response_id,
+            status_code=200,
+        )

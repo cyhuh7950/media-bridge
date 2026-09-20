@@ -32,7 +32,8 @@ from media_bridge_control.models import Provider
 from media_bridge_control.security import SecurityContext
 from media_bridge.runtime_snapshot import capability_registry_from_snapshot
 from media_bridge_gateway.app import build_gateway_app
-from media_bridge_gateway.downstream import GuardedResponsesDownstream
+from media_bridge_gateway.contracts import ResponsesDownstream
+from media_bridge_gateway.downstream import ProviderResponsesDownstream
 from media_bridge_gateway.rate_limit import CredentialRouteRateLimiter
 from media_bridge_gateway.runtime import (
     GatewayTransactionFactory,
@@ -103,7 +104,7 @@ class GatewayProcess:
     app: ASGIApp
     runtime: VerifiedSnapshotRuntime
     asset_store: AssetStore
-    downstream: GuardedResponsesDownstream
+    downstream: ResponsesDownstream
     http_client: httpx.AsyncClient
     database: Database
 
@@ -121,7 +122,7 @@ class GatewayProcess:
 
 async def _close_partial_http_resources(
     *,
-    downstream: GuardedResponsesDownstream | None,
+    downstream: ResponsesDownstream | None,
     client: httpx.AsyncClient | None,
 ) -> None:
     if downstream is not None:
@@ -134,7 +135,7 @@ async def _close_partial_http_resources(
 
 def _cleanup_partial_build(
     *,
-    downstream: GuardedResponsesDownstream | None,
+    downstream: ResponsesDownstream | None,
     client: httpx.AsyncClient | None,
     runtime: VerifiedSnapshotRuntime | None,
     asset_store: AssetStore,
@@ -169,7 +170,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
         ).encode()
     )
     client: httpx.AsyncClient | None = None
-    downstream: GuardedResponsesDownstream | None = None
+    downstream: ResponsesDownstream | None = None
     runtime: VerifiedSnapshotRuntime | None = None
     database: Database | None = None
     try:
@@ -188,7 +189,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
         db = database
         security = SecurityContext(pepper=credential_pepper)
 
-        def db_provider_credential(catalog_id: str) -> str:
+        def db_provider(catalog_id: str) -> Provider:
             with db.session() as session:
                 provider = session.scalar(
                     select(Provider).where(
@@ -196,12 +197,24 @@ def build_gateway_process_from_environment() -> GatewayProcess:
                         Provider.enabled.is_(True),
                     )
                 )
-            if provider is None or not provider.encrypted_api_key:
+            if provider is None:
+                raise ValueError("provider is not configured")
+            return provider
+
+        def db_provider_credential(catalog_id: str) -> str:
+            provider = db_provider(catalog_id)
+            if not provider.encrypted_api_key:
                 raise ValueError("provider credential is not configured")
             return security.decrypt_secret(provider.encrypted_api_key)
 
+        ocr_provider = db_provider("upstage-document-parse")
+        solar_provider = db_provider("upstage-solar")
+        solar_endpoint = solar_provider.endpoint.rstrip("/")
+        if not solar_endpoint.endswith("/chat/completions"):
+            solar_endpoint = f"{solar_endpoint}/chat/completions"
+        solar_model = solar_provider.model_id or "solar-pro4"
         ocr = UpstageOcrBackend(
-            endpoint=_required("MEDIA_BRIDGE_OCR_ENDPOINT"),
+            endpoint=ocr_provider.endpoint,
             credential_loader=lambda: db_provider_credential("upstage-document-parse"),
             client=client,
         )
@@ -213,18 +226,15 @@ def build_gateway_process_from_environment() -> GatewayProcess:
             client=client,
         )
         solar = SolarAnalysisBackend(
-            endpoint=os.environ.get(
-                "MEDIA_BRIDGE_SOLAR_ENDPOINT",
-                "https://api.upstage.ai/v1/chat/completions",
-            ),
-            model=os.environ.get("MEDIA_BRIDGE_SOLAR_MODEL", "solar-pro4"),
+            endpoint=solar_endpoint,
+            model=solar_model,
             credential_loader=lambda: db_provider_credential("upstage-solar"),
             client=client,
         )
-        configured_downstream = GuardedResponsesDownstream(
-            endpoint=_required("MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL"),
+        configured_downstream = ProviderResponsesDownstream(
+            backend=solar,
             receipt_signer=receipt_signer,
-            verify=_backend_tls_verify(),
+            model=solar_model,
         )
         downstream = configured_downstream
 
