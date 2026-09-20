@@ -341,10 +341,14 @@ class PreRequestGate:
                     forbidden_locators=forbidden_locators,
                     max_length=200_000,
                 ),
-                visual_description=self._sanitizer(
-                    "\n".join(description_sections),
-                    forbidden_locators=forbidden_locators,
-                    max_length=200_000,
+                visual_description=(
+                    self._sanitizer(
+                        "\n".join(description_sections),
+                        forbidden_locators=forbidden_locators,
+                        max_length=200_000,
+                    )
+                    if description_sections
+                    else ""
                 ),
                 structured_context=self._sanitizer(
                     "\n\n".join(converted_sections),
