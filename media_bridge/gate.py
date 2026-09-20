@@ -306,28 +306,13 @@ class PreRequestGate:
                         )
                     ocr_text = ocr_result.text or "No text detected."
 
-                    vision_result = await self._vision_backend.describe(
-                        data=page.data,
-                        mime_type=page.mime_type,
-                        profile=conversion_profile,
-                    )
-                    if (
-                        vision_result.status is not BackendStatus.SUCCESS
-                        or not vision_result.description
-                    ):
-                        raise GateFailureError("vision_failed", "Vision description failed.")
-                    description = vision_result.description
                     media_ocr_sections.append(ocr_text)
-                    media_description_sections.append(description)
                     page_label = (
                         f"Media {media_index} page {page.page_number}"
                         if acquired.media_type == "pdf"
                         else f"Media {media_index}"
                     )
-                    media_converted_sections.append(
-                        f"[{page_label} OCR]\n{ocr_text}\n"
-                        f"[{page_label} visual description]\n{description}"
-                    )
+                    media_converted_sections.append(f"[{page_label} OCR]\n{ocr_text}")
             except GateFailureError as failure:
                 processing_failure = failure
             except Exception:

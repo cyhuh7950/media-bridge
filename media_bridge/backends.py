@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -136,12 +137,14 @@ class UpstageOcrBackend:
         endpoint: str,
         api_key_env: str = "UPSTAGE_API_KEY",
         api_key_file_env: str | None = None,
+        credential_loader: Callable[[], str] | None = None,
         client: httpx.AsyncClient,
     ) -> None:
         _validate_endpoint(endpoint)
         self._endpoint = endpoint
         self._api_key_env = api_key_env
         self._api_key_file_env = api_key_file_env
+        self._credential_loader = credential_loader
         self._client = client
 
     async def extract(
@@ -152,8 +155,12 @@ class UpstageOcrBackend:
         filename: str | None,
     ) -> OcrResult:
         try:
-            secret = load_secret(self._api_key_env, self._api_key_file_env)
-        except SecretConfigurationError:
+            secret = (
+                self._credential_loader()
+                if self._credential_loader is not None
+                else load_secret(self._api_key_env, self._api_key_file_env)
+            )
+        except (SecretConfigurationError, ValueError):
             return OcrResult(BackendStatus.FAILURE, error_code="configuration")
         try:
             response = await self._client.post(
@@ -208,6 +215,7 @@ class OpenAICompatibleVisionBackend:
         model: str,
         api_key_env: str,
         api_key_file_env: str | None = None,
+        credential_loader: Callable[[], str] | None = None,
         client: httpx.AsyncClient,
     ) -> None:
         _validate_endpoint(endpoint)
@@ -215,6 +223,7 @@ class OpenAICompatibleVisionBackend:
         self._model = model
         self._api_key_env = api_key_env
         self._api_key_file_env = api_key_file_env
+        self._credential_loader = credential_loader
         self._client = client
 
     async def describe(
@@ -227,8 +236,12 @@ class OpenAICompatibleVisionBackend:
         if mime_type not in {"image/png", "image/jpeg", "image/webp"}:
             return VisionResult(BackendStatus.FAILURE, error_code="unsupported_media")
         try:
-            secret = load_secret(self._api_key_env, self._api_key_file_env)
-        except SecretConfigurationError:
+            secret = (
+                self._credential_loader()
+                if self._credential_loader is not None
+                else load_secret(self._api_key_env, self._api_key_file_env)
+            )
+        except (SecretConfigurationError, ValueError):
             return VisionResult(BackendStatus.FAILURE, error_code="configuration")
         encoded = base64.b64encode(data).decode("ascii")
         payload = {
@@ -283,6 +296,7 @@ class SolarAnalysisBackend:
         model: str,
         api_key_env: str = "SOLAR_API_KEY",
         api_key_file_env: str | None = None,
+        credential_loader: Callable[[], str] | None = None,
         client: httpx.AsyncClient,
     ) -> None:
         _validate_endpoint(endpoint)
@@ -290,12 +304,17 @@ class SolarAnalysisBackend:
         self._model = model
         self._api_key_env = api_key_env
         self._api_key_file_env = api_key_file_env
+        self._credential_loader = credential_loader
         self._client = client
 
     async def analyze(self, *, context: str, user_request: str) -> AnalysisResult:
         try:
-            secret = load_secret(self._api_key_env, self._api_key_file_env)
-        except SecretConfigurationError:
+            secret = (
+                self._credential_loader()
+                if self._credential_loader is not None
+                else load_secret(self._api_key_env, self._api_key_file_env)
+            )
+        except (SecretConfigurationError, ValueError):
             return AnalysisResult(BackendStatus.FAILURE, error_code="configuration")
         payload: dict[str, Any] = {
             "model": self._model,

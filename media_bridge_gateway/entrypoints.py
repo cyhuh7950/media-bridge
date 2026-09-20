@@ -6,13 +6,13 @@ import asyncio
 import base64
 import binascii
 import os
-import re
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 import uvicorn
+from sqlalchemy import select
 from starlette.types import ASGIApp
 
 from media_bridge.acquisition import MediaAcquirer
@@ -27,6 +27,9 @@ from media_bridge.config_snapshot import SignedSnapshot, SnapshotVerifier
 from media_bridge.gate import PreRequestGate
 from media_bridge.pdf_pipeline import PdfiumPageRenderer
 from media_bridge.receipts import GateReceiptSigner
+from media_bridge_control.db import Database
+from media_bridge_control.models import Provider
+from media_bridge_control.security import SecurityContext
 from media_bridge.runtime_snapshot import capability_registry_from_snapshot
 from media_bridge_gateway.app import build_gateway_app
 from media_bridge_gateway.downstream import GuardedResponsesDownstream
@@ -41,9 +44,6 @@ from media_bridge_gateway.state import GatewayStateStore
 
 class GatewayConfigurationError(RuntimeError):
     pass
-
-
-_ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]{0,127}$")
 
 
 def _required(name: str) -> str:
@@ -105,6 +105,7 @@ class GatewayProcess:
     asset_store: AssetStore
     downstream: GuardedResponsesDownstream
     http_client: httpx.AsyncClient
+    database: Database
 
     async def close(self) -> None:
         try:
@@ -115,6 +116,7 @@ class GatewayProcess:
                 await self.downstream.close()
             finally:
                 await self.http_client.aclose()
+                self.database.close()
 
 
 async def _close_partial_http_resources(
@@ -169,6 +171,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
     client: httpx.AsyncClient | None = None
     downstream: GuardedResponsesDownstream | None = None
     runtime: VerifiedSnapshotRuntime | None = None
+    database: Database | None = None
     try:
         client = httpx.AsyncClient(
             timeout=httpx.Timeout(30),
@@ -177,43 +180,44 @@ def build_gateway_process_from_environment() -> GatewayProcess:
             verify=_backend_tls_verify(),
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
-        ocr_credential_env = os.environ.get(
-            "MEDIA_BRIDGE_OCR_CREDENTIAL_ENV", "MEDIA_BRIDGE_OCR_API_KEY"
-        ).strip()
-        vision_credential_env = os.environ.get(
-            "MEDIA_BRIDGE_VISION_CREDENTIAL_ENV", "MEDIA_BRIDGE_VISION_API_KEY"
-        ).strip()
-        if (
-            _ENV_NAME.fullmatch(ocr_credential_env) is None
-            or _ENV_NAME.fullmatch(vision_credential_env) is None
-        ):
-            raise GatewayConfigurationError("media credential environment name is invalid")
+        database_url = load_secret(
+            "MEDIA_BRIDGE_CONTROL_DATABASE_URL",
+            "MEDIA_BRIDGE_CONTROL_DATABASE_URL_FILE",
+        )
+        database = Database(database_url)
+        db = database
+        security = SecurityContext(pepper=credential_pepper)
+
+        def db_provider_credential(catalog_id: str) -> str:
+            with db.session() as session:
+                provider = session.scalar(
+                    select(Provider).where(
+                        Provider.catalog_id == catalog_id,
+                        Provider.enabled.is_(True),
+                    )
+                )
+            if provider is None or not provider.encrypted_api_key:
+                raise ValueError("provider credential is not configured")
+            return security.decrypt_secret(provider.encrypted_api_key)
+
         ocr = UpstageOcrBackend(
             endpoint=_required("MEDIA_BRIDGE_OCR_ENDPOINT"),
-            api_key_env=ocr_credential_env,
-            api_key_file_env=None,
+            credential_loader=lambda: db_provider_credential("upstage-document-parse"),
             client=client,
         )
         vision = OpenAICompatibleVisionBackend(
             endpoint=_required("MEDIA_BRIDGE_VISION_ENDPOINT"),
             model=_required("MEDIA_BRIDGE_VISION_MODEL"),
-            api_key_env=vision_credential_env,
-            api_key_file_env=None,
+            credential_loader=lambda: db_provider_credential("openai-vision"),
             client=client,
         )
-        solar_credential_env = os.environ.get(
-            "MEDIA_BRIDGE_SOLAR_CREDENTIAL_ENV", "MEDIA_BRIDGE_SOLAR_API_KEY"
-        ).strip()
-        if _ENV_NAME.fullmatch(solar_credential_env) is None:
-            raise GatewayConfigurationError("solar credential environment name is invalid")
         solar = SolarAnalysisBackend(
             endpoint=os.environ.get(
                 "MEDIA_BRIDGE_SOLAR_ENDPOINT",
                 "https://api.upstage.ai/v1/chat/completions",
             ),
             model=os.environ.get("MEDIA_BRIDGE_SOLAR_MODEL", "solar-pro4"),
-            api_key_env=solar_credential_env,
-            api_key_file_env=None,
+            credential_loader=lambda: db_provider_credential("upstage-solar"),
             client=client,
         )
         configured_downstream = GuardedResponsesDownstream(
@@ -277,6 +281,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
             asset_store=asset_store,
             downstream=configured_downstream,
             http_client=client,
+            database=database,
         )
     except BaseException:
         _cleanup_partial_build(
@@ -285,6 +290,8 @@ def build_gateway_process_from_environment() -> GatewayProcess:
             runtime=runtime,
             asset_store=asset_store,
         )
+        if database is not None:
+            database.close()
         raise
 
 

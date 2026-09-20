@@ -196,7 +196,7 @@ async def test_image_nonvision_delivers_only_converted_text(tmp_path: Path) -> N
     assert spy.calls[0].media_count == 0
     serialized = repr(spy.calls[0].content)
     assert "ERROR 104" in serialized
-    assert "red stack trace" in serialized
+    assert "red stack trace" not in serialized
     assert "original-secret.png" not in serialized
     assert "base64" not in serialized
 
@@ -232,9 +232,8 @@ async def test_pdf_nonvision_delivers_only_converted_text(tmp_path: Path) -> Non
     assert spy.calls[0].media_count == 0
     assert renderer.calls == 1
     assert ocr.inputs[0]["mime_type"] == "image/png"
-    assert vision.inputs[0]["mime_type"] == "image/png"
+    assert vision.calls == 0
     assert ocr.inputs[0]["data"].startswith(b"\x89PNG")
-    assert vision.inputs[0]["data"].startswith(b"\x89PNG")
 
 
 @pytest.mark.asyncio
@@ -270,7 +269,7 @@ async def test_pdf_render_failure_blocks_before_backends_and_downstream(tmp_path
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure_stage", ["ocr", "vision", "sanitizer", "cleanup"])
+@pytest.mark.parametrize("failure_stage", ["ocr", "sanitizer", "cleanup"])
 async def test_every_conversion_boundary_failure_makes_zero_downstream_calls(
     tmp_path: Path,
     failure_stage: str,

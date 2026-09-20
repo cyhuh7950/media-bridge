@@ -83,6 +83,7 @@ services:
       MEDIA_BRIDGE_SNAPSHOT_KEY_ID: ${MEDIA_BRIDGE_SNAPSHOT_KEY_ID:-media-bridge-0-1}
       MEDIA_BRIDGE_SNAPSHOT_PUBLIC_KEY_FILE: /run/secrets/snapshot_public_key
       MEDIA_BRIDGE_GATEWAY_AUTH_PEPPER_FILE: /run/secrets/gateway_auth_pepper
+      MEDIA_BRIDGE_CONTROL_DATABASE_URL_FILE: /run/secrets/control_database_url
       MEDIA_BRIDGE_RECEIPT_SECRET_FILE: /run/secrets/receipt_secret
       MEDIA_BRIDGE_ASSET_ROOT: /var/lib/media-bridge/assets
       MEDIA_BRIDGE_OCR_ENDPOINT: ${MEDIA_BRIDGE_OCR_ENDPOINT:-https://api.upstage.ai/v1/document-digitization}
@@ -93,13 +94,14 @@ services:
       MEDIA_BRIDGE_SOLAR_API_KEY_FILE: /run/secrets/solar_api_key
       MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL: ${MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL:-https://localhost/v1/responses}
     secrets:
+      - control_database_url
       - snapshot_public_key
       - gateway_auth_pepper
       - receipt_secret
       - ocr_api_key
       - vision_api_key
       - solar_api_key
-    networks: [product, egress]
+    networks: [database, product, egress]
     volumes:
       - snapshots:/var/lib/media-bridge/snapshots:ro
       - assets:/var/lib/media-bridge/assets
