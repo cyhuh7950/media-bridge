@@ -167,6 +167,11 @@ class UpstageOcrBackend:
                 self._endpoint,
                 headers={"Authorization": f"Bearer {secret}"},
                 files={"document": (filename or "media", data, mime_type)},
+                data={
+                    "ocr": "force",
+                    "model": "document-parse",
+                    "output_formats": '["markdown"]',
+                },
             )
         except httpx.TimeoutException:
             return OcrResult(BackendStatus.FAILURE, error_code="timeout")
@@ -195,14 +200,24 @@ class UpstageOcrBackend:
         if isinstance(direct, str):
             return direct.strip()
         pages = payload.get("pages")
-        if not isinstance(pages, list):
-            return None
-        texts = [
-            str(page["text"]).strip()
-            for page in pages
-            if isinstance(page, dict) and isinstance(page.get("text"), str)
-        ]
-        return "\n".join(text for text in texts if text)
+        if isinstance(pages, list):
+            texts = [
+                str(page["text"]).strip()
+                for page in pages
+                if isinstance(page, dict) and isinstance(page.get("text"), str)
+            ]
+            text = "\n".join(text for text in texts if text)
+            if text:
+                return text
+        content = payload.get("content")
+        if isinstance(content, dict):
+            for field in ("markdown", "text"):
+                value = content.get(field)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        return None
 
 
 class OpenAICompatibleVisionBackend:

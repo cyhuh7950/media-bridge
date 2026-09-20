@@ -40,6 +40,10 @@ async def test_upstage_ocr_success_uses_header_not_url(monkeypatch: pytest.Monke
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"] == "Bearer provider-secret"
         assert "provider-secret" not in str(request.url)
+        body = request.content
+        assert b'name="ocr"' in body and b'\r\n\r\nforce' in body
+        assert b'name="model"' in body and b'\r\n\r\ndocument-parse' in body
+        assert b'name="output_formats"' in body and b'\r\n\r\n["markdown"]' in body
         return httpx.Response(200, json={"text": "Fatal: connection timeout"})
 
     async with _client(httpx.MockTransport(handler)) as client:
