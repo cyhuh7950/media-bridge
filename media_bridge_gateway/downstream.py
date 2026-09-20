@@ -439,7 +439,10 @@ class ProviderResponsesDownstream:
         self._backend = backend
         self._receipt_signer = receipt_signer
         self._model = model
-        self._replay_guard = _ReceiptReplayGuard()
+        self._replay_guard = _ReceiptReplayGuard(
+            clock=time.time,
+            max_entries=100_000,
+        )
 
     async def close(self) -> None:
         return None
