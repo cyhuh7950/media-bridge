@@ -1,15 +1,16 @@
 # Media Bridge 작업현황
 
-## 2026-09-22 — WSL 배포형 clean redeploy 및 최초 Secret 준비
+## 2026-09-22 — WSL 배포형 clean redeploy 및 초기 Control 기동 복구
 
 - 신산님 지시를 최신 기준으로 적용한다: WSL 배포형 Media Bridge의 이전 리소스는 정리하고 기존 `/home/daon/deploy/media-bridge/.env`만 보존한다. 기존 WSL DB/볼륨은 재사용하지 않고 새 DB로 시작한다. 개인 설치형 런타임과 다른 프로젝트 리소스는 범위 밖이다.
-- 최초 배포에서 DB 볼륨이 없을 때 시스템 Secret 6개를 생성하고, 재배포는 유효한 기존 파일을 보존하며, 일부 누락 또는 기존 DB만 존재하면 덮어쓰지 않고 중단하는 `deploy/scripts/secret_bootstrap.py`와 설치 문서를 추가 중이다. Provider credential은 계속 DB 정본으로 유지한다.
-- ysna-server 운영 Control 컨테이너가 참조 중인 pepper 파일의 위치를 값 노출 없이 확인했다. 신산님 제안에 따라 새 WSL DB의 pepper로 가져올지를 준비하되 원문은 출력하지 않는다. ysna DB와 WSL DB는 서로 다른 PostgreSQL system identifier임을 확인했다.
-- WSL 새 배포 checkout은 지정 branch `codex/manual-integrated-revision`의 `7ff06daa304fd04eeab3df2359b47bfd133d9d16`이다. 이전 DB의 오프라인 복구 백업은 `/home/daon/deploy/backups/media-bridge-pre-redeploy-20260922/`에 임시 생성했으며, 아직 이전 리소스를 삭제하거나 DB/Secret을 변경하지 않았다.
-- secret bootstrap TDD: RED는 대상 모듈 부재로 실패, GREEN은 8 tests passed. 관련 package checks 20 passed / 1 failed; 유일한 실패는 변경하지 않은 `test_compose_has_three_isolated_services`의 기존 Compose network 기대값 불일치다. Ruff와 diff check 통과.
-- 다음: 승인된 동일 branch에 변경을 commit/push하고, ysna pepper를 값 노출 없이 새 WSL 배포에 복사, 이전 Media Bridge deployment volumes/images/checkout 내용을 제거하되 `.env`만 남긴 뒤 새 DB/Secrets를 배포한다. HTTPS 접근 경로는 Control이 HTTPS 전용임을 감안해 별도로 확인한다.
+- 최초 배포에서 DB 볼륨이 없을 때 시스템 Secret 6개를 생성하고 재배포 시 유효한 기존 파일을 보존하며, 일부 누락 또는 기존 DB만 존재하면 중단하는 `deploy/scripts/secret_bootstrap.py`를 추가했다. Provider credential 정본은 계속 DB다.
+- 이전 배포형 전용 DB/asset/snapshot volumes 6개와 이미지 2개를 제거했고 기존 `/home/daon/deploy/media-bridge`에는 `.env`만 남겼다. 개인 설치형 런타임과 타 프로젝트 리소스는 보존했다. 이전 DB 백업은 임시로 `/home/daon/deploy/backups/media-bridge-pre-redeploy-20260922/`에 남아 있다.
+- ysna-server에서 현재 운영 Control이 참조하는 pepper(메타데이터만 확인)를 사용자가 제안해 새 WSL Secret으로 원문 노출 없이 전송했다. 새 DB의 bootstrap 재검증은 `deployment_secrets_preserved`; 전체 Secret 파일 권한·소유자 기준을 통과했다.
+- 지정 branch `codex/manual-integrated-revision`의 배포 commit은 `a78c179febdbae70a3a90266482e231c691e66ea`. 신규 DB에 migration `0009_provider_reasoning_effort`까지 적용됐다. 단, Control 시작 검사는 아직 `0008_model_provider`를 요구해 컨테이너가 재시작했고, 원인을 확인해 migration head 일치 회귀 테스트(RED 재현)를 추가했다.
+- 이 수정의 unit 결과: 새 회귀 테스트 RED에서 `control_plane_migration_required` 확인 후 상수만 `0009_provider_reasoning_effort`로 맞춰 GREEN. `tests/control/unit`: 56 passed, Ruff와 `git diff --check` 통과. 신규 Control image는 아직 수정 전이며, 새 수정은 미커밋이다.
+- 다음: 최소 수정 commit/push를 같은 지정 branch에 반영하고 새 image를 빌드해 Control health 및 `0009`를 확인한다. HTTPS 외부 진입·브라우저 검증은 미확인이다.
 
-판정: RUNNING — 배포형 reasoning 지원 검증 진행 중; 운영 배포는 DB migration 승인 전 대기
+판정: RUNNING — 새 WSL 배포형 Control migration-head 회귀 복구 및 health 확인 중
 정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, `docs/WORK_STATUS.md`, `docs/superpowers/specs/2026-09-22-llm-reasoning-levels-design.md`
 작업계획: 배포형은 실행 가능한 지원 Non‑Vision LLM의 Provider/API/model별 설정과 downstream 반영, 설치형은 Upstage Solar 설정. 분석 Provider 및 N:N 연결 보존. 계획 구현은 `codex/manual-integrated-revision`에서만 진행하며 다른 branch/worktree는 생성하지 않음. 신산님은 nullable Provider DB column 및 migration 추가를 승인했으나, ysna-server DB 적용은 별도 승인 대상
 Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-integrated-revision` / 추가 branch 생성 금지

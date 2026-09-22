@@ -13,7 +13,7 @@ from media_bridge_control.db import Database
 from media_bridge_control.runtime import build_control_runtime
 from media_bridge_control.settings import ControlSettings
 
-EXPECTED_MIGRATION_HEAD = "0008_model_provider"
+EXPECTED_MIGRATION_HEAD = "0009_provider_reasoning_effort"
 
 
 class MigrationStateError(RuntimeError):
