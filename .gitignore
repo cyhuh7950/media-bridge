@@ -19,3 +19,4 @@ build/
 !.env.example
 deploy/secrets/*.secret
 deploy/secrets/*.pem
+deploy/secrets/.secret-bootstrap-*

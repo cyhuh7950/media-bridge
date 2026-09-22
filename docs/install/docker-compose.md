@@ -8,12 +8,21 @@ rollback까지 검증된 code-ready 산출물이다. 운영 배포와 다른 PC 
 - Docker Engine과 Compose plugin
 - exact image tag/digest 검토
 - `deploy/.env.example`을 기반으로 만든 non-secret `.env`
-- `deploy/secrets/README.md`에 따른 외부 Secret 파일
+- 최초 배포 시 `deploy/scripts/secret_bootstrap.py`가 생성하는 시스템 Secret 파일
 - Control/Data credential digest가 일치하도록 같은 credential pepper 원문을 각 서비스에 별도 mount
 
-Secret 파일은 저장소 밖에 두고 provider key, client credential, 비밀번호, 서명 개인키를 `.env`에
-넣지 않는다. standalone rootful Compose에서는 non-root UID `10001`이 읽도록 host owner와 mode
-`0400`을 맞춘다.
+Secret 파일을 저장소에 커밋하지 않는다. Provider API 키와 client credential은 운영 화면의 DB 정본을
+사용하고 `.env`에 넣지 않는다. 최초 배포 전에 다음 스크립트를 실행한다.
+
+```bash
+sudo python3 deploy/scripts/secret_bootstrap.py
+```
+
+DB 볼륨이 아직 없을 때만 DB 암호, DB URL, Control/Gateway pepper, snapshot Ed25519 key pair,
+receipt secret을 생성한다. 재배포에서는 기존 파일을 검증하고 그대로 보존한다. DB 볼륨이 있는데
+Secret 파일이 전부 없거나 일부만 있으면 새 키로 덮어쓰지 않고 중단한다. 이는 DB에 저장된 Provider
+credential을 새 pepper로 복호화할 수 없게 되는 사고를 막는다. standalone rootful Compose의 file-backed
+Secret은 DB 컨테이너 UID `999`, 애플리케이션 UID `10001`, mode `0400`으로 저장한다.
 
 ## 순서
 
