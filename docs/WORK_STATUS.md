@@ -1,15 +1,15 @@
 # Media Bridge 작업현황
 
-판정: RUNNING — LLM 추론 등급 설정 기능 설계 검토
+판정: RUNNING — LLM 추론 등급 설정 범위 재확인
 정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, `docs/WORK_STATUS.md`, `docs/superpowers/specs/2026-09-22-llm-reasoning-levels-design.md`
 작업계획: 배포형·설치형 Provider/모델별 추론 등급 설정; 구현 계획은 설계 명세 사용자 검토·승인 뒤 작성
 Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-integrated-revision` / 추가 branch 생성 금지
-최근 완료 증거: 두 실행 경로의 설정/요청 구성을 읽기 전용으로 조사했고, 제공사 공식 API 문서와 대조해 추론 필드 및 모델별 기본·지원 차이를 확인함.
-현재 변경: 구현 전 설계 초안과 이 작업현황 기록만 변경. 소스 코드, DB, Secret, 배포 설정은 수정하지 않음.
-실행·검증 결과: 설계 초안 자체 검토 및 `git diff --check` 수행. feature code/test 및 실제 Provider 호출은 아직 미수행.
+최근 완료 증거: `media_bridge_gateway/entrypoints.py`에서 기동 시 DB의 `upstage-solar`를 직접 읽어 Solar backend를 만들고, `GatewayTransactionFactory`에 같은 고정 downstream을 전달하는 것을 확인함. `media_bridge_control/configuration.py`의 snapshot에는 Provider 목록이 있지만 이 entrypoint는 snapshot Provider 목록으로 LLM downstream을 선택하지 않음.
+현재 변경: 구현 전 설계 초안과 작업현황만 변경. 기존 설계의 배포형 실행 경로 설명은 실제 entrypoint와 불일치해 범위 재확인 전 사용하지 않음. 소스 코드, DB, Secret, 배포 설정은 수정하지 않음.
+실행·검증 결과: 읽기 전용 코드 조사. feature code/test 및 실제 Provider 호출은 미수행.
 오류와 조치: 저장소 내 `AGENTS.md`와 `docs/DEVELOPMENT_ENVIRONMENT.md`는 현재 worktree에서 발견되지 않음. PMO 공통 지침과 확인 가능한 DESIGN/WORK_PLAN/WORK_STATUS를 적용.
-미검증·승인 경계: DB migration, provider별 model-capability registry, adapter/API 계약 구현은 미승인·미구현. 배포 및 실제 유료 Provider 검증도 수행하지 않음.
-정확한 다음 조치: 신산님이 설계 초안을 검토·승인하면 구현 계획서를 작성하고 다음 검토를 요청한다. 명세 승인 전 코드 변경은 하지 않는다.
+미검증·승인 경계: UI에 설정을 추가하는 범위와 DB catalog 전체의 Provider 실행을 동적으로 연결하는 범위가 분리되지 않음. DB migration, provider별 model-capability registry, adapter/API 계약, 실제 Provider 호출은 미구현. 배포 및 실제 유료 Provider 검증도 수행하지 않음.
+정확한 다음 조치: 실제 실행 중인 Upstage Solar에 한정할지, 배포형의 모든 catalog Provider를 동적 선택·실행하는 기반까지 포함할지 신산님 결정 후 명세를 수정하고 구현 계획을 작성한다.
 
 ## 2026-09-19 — Provider catalog schema checkpoint
 
