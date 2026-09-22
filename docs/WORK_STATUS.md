@@ -8,10 +8,11 @@
 - ysna-server에서 현재 운영 Control이 참조하는 pepper(메타데이터만 확인)를 사용자가 제안해 새 WSL Secret으로 원문 노출 없이 전송했다. 새 DB의 bootstrap 재검증은 `deployment_secrets_preserved`; 전체 Secret 파일 권한·소유자 기준을 통과했다.
 - 최소 수정 commit `0da6282158d129c02f40dcd50ccee3090c3c6a0e`를 기존 원격 branch에 push하고 WSL checkout도 fast-forward했다. 수정 image `media-bridge-control:0.1.0`, image ID `sha256:321a95691cc2bce84afbb740fcf4a4823405379dbc383c7480812d9dbff56564`; Control과 신규 DB 모두 healthy, DB revision은 `0009_provider_reasoning_effort`다.
 - 이 수정의 unit 결과: 회귀 테스트는 수정 전 `control_plane_migration_required`로 RED, `0009_provider_reasoning_effort`를 허용한 뒤 GREEN. `tests/control/unit` 및 migration rollback 검사 합계 70 passed, 변경 파일 Ruff와 `git diff --check` 통과.
-- 브라우저 진입은 막혀 있다. 요청 주소 `172.27.253.53:8642`는 기존 개인 설치형 런타임이 이미 점유 중이며, 배포형 Control은 HTTPS 전용으로 내부 `8081`에만 연결돼 host port가 없다. 설치형 런타임 중지·8642 점유 변경이나 HTTPS 우회는 하지 않았다. Data service 및 Provider/Snapshot 기반 Gateway 기능 확인은 아직 미수행이다.
-- 다음: 브라우저 인수 전에는 배포형에 쓸 수 있는 별도 승인된 HTTPS 진입점/주소가 필요하다. 포트 8642를 배포형에 넘기려면 설치형 중단이 필요하므로, 기존 설치형을 보존하는 현재 지시와 충돌한다.
+- 신산님 지시에 따라 Control의 published port를 환경변수화하고, WSL `.env`에는 `172.27.253.53:18642`만 설정했다(파일 mode 0600, 나머지 기존 항목은 유지). 지정 branch commit `49f5051` 및 계약 테스트를 push하고 WSL checkout을 동기화한 뒤 Control만 재생성했다. Compose mapping은 `172.27.253.53:18642 -> 8081`; Windows에서 `/` HTTP 200, Control healthy, DB healthy 및 revision `0009_provider_reasoning_effort`를 확인했다. 개인 설치형은 계속 `127.0.0.1:8642` 및 `172.17.0.1:8642`에서 실행 중이다.
+- 직접 HTTPS 시험은 TLS `wrong version number`로 실패했다. Control 컨테이너는 TLS가 아닌 HTTP `8081`을 제공하고 Admin API는 HTTPS scheme/Host/Origin을 강제한다. health API는 HTTP 200이지만 로그인·onboarding은 usable하다고 입증되지 않았다. bootstrap POST는 안전검토에서 상태변경 위험으로 거부되어 수행하지 않았다. HTTP를 허용하도록 보안을 낮추지 않았다.
+- Data service 및 Provider/Snapshot 기반 Gateway 검증은 미수행이다. 다음에는 18642 앞에 승인된 TLS termination과 인증서 경로를 구성해야 사용자 로그인/onboarding을 검증할 수 있다.
 
-판정: PARTIAL — 수정 branch/image/DB migration/Control health 완료; 사용자 브라우저 인수와 Data/Gateway 검증은 포트·HTTPS 진입 경로 미확정으로 대기
+판정: PARTIAL — Control/DB health와 18642 HTTP route 확인; HTTPS 로그인/onboarding 및 Data/Gateway 검증은 TLS ingress 필요로 미완료
 정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, `docs/WORK_STATUS.md`, `docs/superpowers/specs/2026-09-22-llm-reasoning-levels-design.md`
 작업계획: 배포형은 실행 가능한 지원 Non‑Vision LLM의 Provider/API/model별 설정과 downstream 반영, 설치형은 Upstage Solar 설정. 분석 Provider 및 N:N 연결 보존. 계획 구현은 `codex/manual-integrated-revision`에서만 진행하며 다른 branch/worktree는 생성하지 않음. 신산님은 nullable Provider DB column 및 migration을 승인했고 신규 WSL DB에 `0009_provider_reasoning_effort`를 적용했다. ysna-server DB에는 migration을 적용하지 않았다.
 Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-integrated-revision` / 추가 branch 생성 금지
