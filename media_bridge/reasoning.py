@@ -96,7 +96,15 @@ def reasoning_capability(
         return None
 
     if provider == "gemini" and protocol == "gemini-generate-content":
-        gemini_25_budgets = (("low", 1024), ("medium", 8192), ("high", 24576))
+        gemini_25_budgets: tuple[tuple[_Effort, str | int], ...] = (
+            ("low", 1024),
+            ("medium", 8192),
+            ("high", 24576),
+        )
+        gemini_25_flash_budgets: tuple[tuple[_Effort, str | int], ...] = (
+            ("none", 0),
+            *gemini_25_budgets,
+        )
         if model == "gemini-2.5-pro":
             return _capability("gemini-budget", gemini_25_budgets)
         if model in {
@@ -105,7 +113,7 @@ def reasoning_capability(
             "gemini-2.5-flash-lite",
             "gemini-2.5-flash-lite-preview",
         }:
-            return _capability("gemini-budget", (("none", 0), *gemini_25_budgets))
+            return _capability("gemini-budget", gemini_25_flash_budgets)
 
         gemini_3_levels: dict[str, tuple[_Effort, ...]] = {
             "gemini-3.8-flash": ("low", "medium", "high"),

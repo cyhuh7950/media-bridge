@@ -13,6 +13,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from media_bridge.reasoning import reasoning_capability
 from media_bridge_control.audit import AuditEventWriter, OperationalEventWriter
 from media_bridge_control.bootstrap import (
     AuthenticationError,
@@ -459,6 +460,24 @@ def build_control_app(
         if kind not in {"analysis", "llm"}:
             return _error("invalid_provider_catalog_kind", 400)
         return JSONResponse(provider_catalog_payload(kind))
+
+    async def provider_reasoning_options(request: Request) -> Response:
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator", "viewer"}),
+        )
+        if rejected is not None:
+            return rejected
+        catalog_id = request.query_params.get("catalog_id")
+        protocol = request.query_params.get("protocol")
+        model_id = request.query_params.get("model_id")
+        if not catalog_id or not protocol or not model_id:
+            return _error("provider_reasoning_query_required", 400)
+        capability = reasoning_capability(catalog_id, protocol, model_id)
+        efforts = ["provider_default"]
+        if capability is not None:
+            efforts.extend(capability.efforts)
+        return JSONResponse({"efforts": efforts})
 
     async def provider_item(request: Request) -> Response:
         principal, rejected = await authorize(
@@ -1131,6 +1150,11 @@ def build_control_app(
             ),
             Route("/admin/v1/providers", providers, methods=["GET", "POST"]),
             Route("/admin/v1/provider-catalog", provider_catalog, methods=["GET"]),
+            Route(
+                "/admin/v1/provider-reasoning-options",
+                provider_reasoning_options,
+                methods=["GET"],
+            ),
             Route("/admin/v1/routing-profiles", routing_profiles, methods=["GET", "POST"]),
             Route(
                 "/admin/v1/routing-profiles/{item_id:uuid}",

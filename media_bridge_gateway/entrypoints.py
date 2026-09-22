@@ -9,6 +9,7 @@ import os
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import UUID
 
 import httpx
 import uvicorn
@@ -18,6 +19,7 @@ from starlette.types import ASGIApp
 from media_bridge.acquisition import MediaAcquirer
 from media_bridge.assets import AssetStore
 from media_bridge.backends import (
+    AnalysisBackend,
     OpenAICompatibleVisionBackend,
     SolarAnalysisBackend,
     UpstageOcrBackend,
@@ -25,12 +27,13 @@ from media_bridge.backends import (
 )
 from media_bridge.config_snapshot import SignedSnapshot, SnapshotVerifier
 from media_bridge.gate import PreRequestGate
+from media_bridge.llm_backends import build_llm_backend
 from media_bridge.pdf_pipeline import PdfiumPageRenderer
 from media_bridge.receipts import GateReceiptSigner
+from media_bridge.runtime_snapshot import capability_registry_from_snapshot
 from media_bridge_control.db import Database
 from media_bridge_control.models import Provider
 from media_bridge_control.security import SecurityContext
-from media_bridge.runtime_snapshot import capability_registry_from_snapshot
 from media_bridge_gateway.app import build_gateway_app
 from media_bridge_gateway.contracts import ResponsesDownstream
 from media_bridge_gateway.downstream import ProviderResponsesDownstream
@@ -201,8 +204,19 @@ def build_gateway_process_from_environment() -> GatewayProcess:
                 raise ValueError("provider is not configured")
             return provider
 
-        def db_provider_credential(catalog_id: str) -> str:
-            provider = db_provider(catalog_id)
+        def db_provider_by_id(provider_id: str) -> Provider:
+            try:
+                parsed_id = UUID(provider_id)
+            except (TypeError, ValueError) as error:
+                raise ValueError("provider is not configured") from error
+            with db.session() as session:
+                provider = session.get(Provider, parsed_id)
+            if provider is None or not provider.enabled:
+                raise ValueError("provider is not configured")
+            return provider
+
+        def db_provider_credential(provider_id: str) -> str:
+            provider = db_provider_by_id(provider_id)
             if not provider.encrypted_api_key:
                 raise ValueError("provider credential is not configured")
             return security.decrypt_secret(provider.encrypted_api_key)
@@ -215,28 +229,43 @@ def build_gateway_process_from_environment() -> GatewayProcess:
         solar_model = solar_provider.model_id or "solar-pro4"
         ocr = UpstageOcrBackend(
             endpoint=ocr_provider.endpoint,
-            credential_loader=lambda: db_provider_credential("upstage-document-parse"),
+            credential_loader=lambda: db_provider_credential(str(ocr_provider.id)),
             client=client,
         )
         vision = OpenAICompatibleVisionBackend(
             endpoint=_required("MEDIA_BRIDGE_VISION_ENDPOINT"),
             model=_required("MEDIA_BRIDGE_VISION_MODEL"),
             api_key_env="MEDIA_BRIDGE_VISION_API_KEY",
-            credential_loader=lambda: db_provider_credential("openai-vision"),
+            credential_loader=lambda: db_provider_credential(str(db_provider("openai-vision").id)),
             client=client,
         )
         solar = SolarAnalysisBackend(
             endpoint=solar_endpoint,
             model=solar_model,
-            credential_loader=lambda: db_provider_credential("upstage-solar"),
+            credential_loader=lambda: db_provider_credential(str(solar_provider.id)),
             client=client,
         )
-        configured_downstream = ProviderResponsesDownstream(
-            backend=solar,
-            receipt_signer=receipt_signer,
-            model=solar_model,
-        )
-        downstream = configured_downstream
+
+        def provider_backend(provider: dict[str, object]) -> AnalysisBackend:
+            provider_id = provider.get("id")
+            if not isinstance(provider_id, str) or not provider_id:
+                raise ValueError("provider identifier is invalid")
+
+            def credential_loader() -> str:
+                return db_provider_credential(provider_id)
+
+            return build_llm_backend(
+                provider,
+                credential_loader=credential_loader,
+                client=client,
+            )
+
+        def downstream_factory(snapshot: SignedSnapshot) -> ProviderResponsesDownstream:
+            return ProviderResponsesDownstream(
+                snapshot=snapshot.body,
+                receipt_signer=receipt_signer,
+                backend_factory=provider_backend,
+            )
 
         def gate_factory(snapshot: SignedSnapshot) -> PreRequestGate:
             return PreRequestGate(
@@ -250,7 +279,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
 
         factory = GatewayTransactionFactory(
             gate_factory=gate_factory,
-            downstream_factory=lambda _snapshot: configured_downstream,
+            downstream_factory=downstream_factory,
             receipt_signer=receipt_signer,
             state_store_factory=GatewayStateStore,
             credential_pepper=credential_pepper,
@@ -258,6 +287,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
         )
         runtime = VerifiedSnapshotRuntime(verifier=verifier, generation_factory=factory)
         runtime.load(snapshot_path)
+        downstream = runtime.current().downstream
         app = build_gateway_app(
             runtime=runtime,
             asset_store=asset_store,
@@ -290,7 +320,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
             app=app,
             runtime=runtime,
             asset_store=asset_store,
-            downstream=configured_downstream,
+            downstream=downstream,
             http_client=client,
             database=database,
         )

@@ -458,8 +458,10 @@ async def test_personal_settings_page_saves_non_secret_npm_config(
     assert "mb service restart" in saved.text
     persisted = json.loads(config_file.read_text(encoding="utf-8"))
     assert persisted["port"] == 8877
-    assert persisted["solar"]["apiKeyEnv"] == "UPSTAGE_API_KEY"
+    assert persisted["solar"]["apiKeyEnv"] == ""
+    assert '환경변수 대체 입력' not in page.text
     assert "apiKey" not in persisted["solar"]
+    assert persisted["textLlm"]["reasoningEffort"] == "provider_default"
 
 
 class FakeProviderTester:
@@ -562,6 +564,7 @@ async def test_provider_console_saves_generic_profiles_and_secrets_without_echo(
             "model": "text-model",
             "credentialRef": "text-llm",
             "credentialEnv": "CUSTOM_LLM_KEY",
+            "reasoningEffort": "provider_default",
             "apiKey": "llm-secret-value",
         },
         "mediaProcessor": {
@@ -587,20 +590,38 @@ async def test_provider_console_saves_generic_profiles_and_secrets_without_echo(
             )
             loaded = await client.get("/api/settings")
             page = await client.get("/")
+            options = await client.get(
+                "/api/reasoning-options?preset=upstage-solar&protocol=openai-chat-completions&model=solar-pro4",
+                headers={"origin": "http://127.0.0.1:8642"},
+            )
+            denied_options = await client.get(
+                "/api/reasoning-options?preset=upstage-solar&protocol=openai-chat-completions&model=solar-pro4",
+                headers={"origin": "https://malicious.example"},
+            )
     finally:
         await runtime.close()
 
     assert saved.status_code == 200
     assert loaded.status_code == 200
+    assert options.json() == {"options": ["low", "medium", "high"]}
+    assert denied_options.status_code == 403
+    assert 'name="reasoning_effort"' in page.text
+    assert '환경변수 대체 입력' not in page.text
+    assert 'solar_api_key_env' not in npm_runtime_module._settings_script()
+    assert 'ocr_api_key_env' not in npm_runtime_module._settings_script()
     assert loaded.json()["credentials"] == {"text-llm": True, "media-processor": True}
     serialized = json.dumps(loaded.json()) + page.text + config_file.read_text(encoding="utf-8")
     assert "llm-secret-value" not in serialized
     assert "ocr-secret-value" not in serialized
+    persisted = json.loads(config_file.read_text(encoding="utf-8"))
+    assert persisted["textLlm"]["credentialEnv"] == ""
+    assert persisted["mediaProcessor"]["credentialEnv"] == ""
     assert credential_store.get("text-llm") == "llm-secret-value"
     assert credential_store.get("media-processor") == "ocr-secret-value"
     persisted = json.loads(config_file.read_text(encoding="utf-8"))
     assert persisted["codingAgent"]["preset"] == "eoul-gateway"
     assert persisted["textLlm"]["model"] == "text-model"
+    assert persisted["textLlm"]["reasoningEffort"] == "provider_default"
     assert persisted["mediaProcessor"]["protocol"] == "upstage-document-parse"
 
 
@@ -715,6 +736,7 @@ async def test_real_provider_tester_runs_ocr_then_text_without_forwarding_media(
                 json={"content": {"text": "사진에서 읽은 문장"}},
             )
         body = json.loads(request.content)
+        assert body["reasoning_effort"] == "high"
         serialized = json.dumps(body, ensure_ascii=False)
         assert "사진에서 읽은 문장" in serialized
         assert "fake-image-bytes" not in serialized
@@ -734,9 +756,11 @@ async def test_real_provider_tester_runs_ocr_then_text_without_forwarding_media(
     tester = ProviderTester(store, transport=httpx.MockTransport(handler))
     config = {
         "textLlm": {
+            "preset": "upstage-solar",
             "protocol": "openai-chat-completions",
             "endpoint": "https://api.example.test/v1/chat/completions",
-            "model": "text-model",
+            "model": "solar-pro4",
+            "reasoningEffort": "high",
             "credentialRef": "text-llm",
             "credentialEnv": "MISSING_LLM_KEY",
         },

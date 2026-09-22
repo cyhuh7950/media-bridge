@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from media_bridge.contracts import StrictModel
+from media_bridge.reasoning import ReasoningEffort
 
 
 class AdminStrictModel(StrictModel):
@@ -136,6 +137,7 @@ class ProviderCreate(AdminStrictModel):
     ] = Field(default_factory=set)
     secret_ref: SecretReference
     api_key: Annotated[str, StringConstraints(min_length=1, max_length=4_096)] | None = None
+    reasoning_effort: ReasoningEffort = "provider_default"
     enabled: bool = True
 
 
@@ -167,6 +169,7 @@ class ProviderUpdate(NonEmptyUpdate):
     ] | None = None
     secret_ref: SecretReference | None = None
     api_key: Annotated[str, StringConstraints(min_length=1, max_length=4_096)] | None = None
+    reasoning_effort: ReasoningEffort | None = None
     enabled: bool | None = None
 
 

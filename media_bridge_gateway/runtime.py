@@ -90,13 +90,21 @@ class GatewayTransactionFactory:
             snapshot_version=snapshot.version,
         )
         registry = snapshot.body.get("registry")
-        registry_models = registry.get("models", []) if isinstance(registry, dict) else []
-        configured_models = snapshot.body.get("models", registry_models)
-        models = tuple(
-            item if isinstance(item, str) else item.get("id")
-            for item in configured_models
-            if (isinstance(item, str) and item) or (isinstance(item, dict) and item.get("id"))
+        registry_models = (
+            registry.get("models", []) if isinstance(registry, dict) else []
         )
+        configured_models = snapshot.body.get("models", registry_models)
+        if not isinstance(configured_models, list):
+            configured_models = []
+        model_names: list[str] = []
+        for item in configured_models:
+            if isinstance(item, str) and item:
+                model_names.append(item)
+            elif isinstance(item, dict):
+                model_id = item.get("id")
+                if isinstance(model_id, str) and model_id:
+                    model_names.append(model_id)
+        models = tuple(model_names)
         return GatewayGeneration(
             version=snapshot.version,
             snapshot_id=str(snapshot.snapshot_id),

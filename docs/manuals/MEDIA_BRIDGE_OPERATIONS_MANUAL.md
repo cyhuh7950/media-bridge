@@ -2,7 +2,7 @@
 
 ## 문서 목적
 
-이 매뉴얼은 배포형 Media Bridge의 관리 콘솔에서 Provider, 라우팅, 모델, 정책, 접근 키, Snapshot, 연결을 등록하고 운영하는 방법을 설명합니다. Media Bridge는 미디어 입력을 검사·분석한 뒤 허용된 요청을 Non‑Vision LLM Provider로 전달하므로, 아래 순서대로 설정해야 실제 요청을 안전하게 처리할 수 있습니다.
+이 매뉴얼은 배포형 Media Bridge의 관리 콘솔에서 Provider, 라우팅, 모델, 정책, 접근 키와 Snapshot을 등록하고 운영하는 방법을 설명합니다. Provider와 credential은 DB 설정을 정본으로 사용합니다. Media Bridge는 미디어 입력을 검사·분석한 뒤 허용된 요청을 Non‑Vision LLM Provider로 전달합니다.
 
 ## 설정 순서
 
@@ -36,8 +36,8 @@ Provider는 Media Bridge가 호출할 외부 분석 서비스와 LLM 서비스�
 1. **Provider 등록**을 선택합니다.
 2. Provider 유형을 선택합니다.
 3. 카탈로그에서 Provider를 선택합니다. 선택하면 이름과 endpoint가 자동으로 채워집니다.
-4. 필요하면 **기준 모델**을 입력합니다.
-5. DB에 직접 저장할 API 키를 입력하거나, 환경변수 참조를 사용할 경우 환경변수 이름을 입력합니다.
+4. 필요하면 **기준 모델**을 입력합니다. 추론 등급을 지원하는 Non‑Vision LLM이면 Provider 기본값 또는 지원 등급도 선택합니다.
+5. Provider API 키를 기존 DB credential 관리 경로로 저장하거나 이미 등록된 DB credential을 선택합니다. 새 Secret 파일은 요구하지 않습니다.
 6. 등록합니다.
 
 기준 모델은 선택 사항입니다.
@@ -45,7 +45,16 @@ Provider는 Media Bridge가 호출할 외부 분석 서비스와 LLM 서비스�
 - 기준 모델을 입력하면 해당 Provider 호출에 그 모델을 사용합니다.
 - 비워두면 카탈로그에 정의된 Provider 기준 모델을 자동으로 사용합니다.
 
-API 키를 입력하면 키 원문은 DB에 암호화되어 저장되고 목록에는 원문이나 내부 식별자를 표시하지 않습니다. 환경변수 참조를 직접 사용하는 경우에만 `PROVIDER_API_KEY`처럼 대문자와 숫자, 밑줄을 사용합니다.
+Provider API 키는 DB에서 암호화해 보관하며, 관리 화면은 원문을 다시 표시하지 않습니다. Gateway는 Provider ID를 기준으로 DB credential을 조회하므로 별도의 Gateway Secret 파일을 추가할 필요가 없습니다.
+
+### Non‑Vision LLM 추론 등급
+
+추론 등급은 Provider 유형이 **Non‑Vision LLM**일 때만 설정합니다. 선택한 카탈로그 Provider, API 프로토콜, 모델 조합이 지원하는 경우에만 선택지가 표시됩니다. 현재 Upstage Solar의 `solar-pro3` 및 `solar-pro4` Chat Completions 조합은 `low`, `medium`, `high`를 지원합니다.
+
+- **Provider 기본값**은 추론 파라미터를 요청에 넣지 않아 Provider 기본 동작을 사용합니다. 새 Provider와 기존 설정 모두 이 값을 기본으로 유지합니다.
+- 지원 등급을 선택하면 저장 후 Snapshot을 발행해야 실제 Gateway 요청에 반영됩니다. 설치형에서는 설정을 저장하면 LLM 연결 시험과 전체 흐름 시험 모두 같은 선택값을 사용합니다.
+- 모델이나 프로토콜을 지원하지 않는 조합으로 바꾸면 기존 등급을 자동 적용하지 않습니다. 지원되는 등급 또는 Provider 기본값을 명시적으로 선택해야 저장할 수 있습니다.
+- 분석 Provider, 이미지 변환 단계 및 분석 Provider와 Non‑Vision LLM 사이의 N:N 라우팅 설정은 추론 등급과 별개이며 변경되지 않습니다.
 
 ## 라우팅
 
@@ -118,31 +127,6 @@ Snapshot은 현재 DB 설정을 검증하고 운영용 서명 설정으로 발�
 4. Gateway가 새 Snapshot을 사용합니다.
 
 잘못된 설정을 발행한 경우 Snapshot 목록에서 원하는 버전의 **이 버전으로 rollback**을 선택합니다. Snapshot 발행과 rollback은 관리자만 수행할 수 있습니다.
-
-## 연결
-
-연결 메뉴는 외부 Gateway 또는 다른 Media Bridge 인스턴스의 HTTPS Endpoint와 인증 Secret 참조를 관리합니다. Provider 등록과는 별개의 기능입니다.
-
-### 등록 항목
-
-- **이름**: 연결 대상의 구분 이름
-- **Gateway HTTPS URL**: `https://`로 시작하는 외부 Endpoint
-- **Secret 참조 종류**:
-  - 환경변수
-  - Docker Secret
-  - 외부 Secret Store
-- **Secret 식별자**: 선택한 참조 종류에 맞는 식별자
-
-예를 들어 OmniRoute 배포형을 연결할 때는 다음처럼 입력합니다.
-
-```text
-이름: OmniRoute 배포형
-Gateway HTTPS URL: https://omniroute.sinsan.kr/v1
-Secret 참조 종류: 환경변수
-Secret 식별자: OMNIROUTE_API_KEY
-```
-
-등록 후 **연결 시험**을 실행해 Endpoint와 Secret 참조가 정상인지 확인합니다. 연결 시험은 operator도 수행할 수 있지만 등록·폐기는 관리자만 수행합니다.
 
 ## 운영 시 확인 사항
 

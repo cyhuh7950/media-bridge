@@ -176,3 +176,83 @@ def test_configuration_items_support_guarded_patch_and_delete(
         assert deleted.status_code == 204
         assert client.get(f"/admin/v1/{collection}").json() == []
     database.close()
+
+
+def test_provider_reasoning_effort_is_validated_and_options_are_authenticated(
+    migrated_postgres: str,
+) -> None:
+    client, csrf, database = _configured_client(migrated_postgres)
+    headers = {"origin": "https://control.test", "x-csrf-token": csrf}
+    query = "catalog_id=upstage-solar&protocol=openai-chat-completions&model_id=solar-pro4"
+
+    options = client.get(f"/admin/v1/provider-reasoning-options?{query}")
+    assert options.status_code == 200
+    assert options.json() == {"efforts": ["provider_default", "low", "medium", "high"]}
+    assert "credential" not in options.text.lower()
+
+    created = client.post(
+        "/admin/v1/providers",
+        headers=headers,
+        json={
+            "name": "solar-reasoning",
+            "kind": "llm",
+            "catalog_id": "upstage-solar",
+            "model_id": "solar-pro4",
+            "endpoint": "https://api.upstage.ai/v1/chat/completions",
+            "protocol": "openai-chat-completions",
+            "secret_ref": {"kind": "db", "identifier": "provider_api_key"},
+            "reasoning_effort": "high",
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["reasoning_effort"] == "high"
+    assert "encrypted_api_key" not in created.text
+
+    unsupported = client.post(
+        "/admin/v1/providers",
+        headers=headers,
+        json={
+            "name": "solar-analysis",
+            "kind": "analysis",
+            "catalog_id": "upstage-document-parse",
+            "model_id": "solar-pro4",
+            "endpoint": "https://api.upstage.ai/v1/document-digitization",
+            "protocol": "document-digitization",
+            "secret_ref": {"kind": "db", "identifier": "provider_api_key"},
+            "reasoning_effort": "high",
+        },
+    )
+    assert unsupported.status_code == 409
+
+    changed_model = client.patch(
+        f"/admin/v1/providers/{created.json()['id']}",
+        headers=headers,
+        json={"model_id": "solar-mini"},
+    )
+    assert changed_model.status_code == 409
+    assert client.get("/admin/v1/providers").json()[0]["reasoning_effort"] == "high"
+
+    database.close()
+
+
+def test_provider_reasoning_options_require_authentication(migrated_postgres: str) -> None:
+    database = Database(migrated_postgres)
+    service = ControlPlaneService(
+        database=database,
+        security=SecurityContext(pepper=b"c" * 32),
+    )
+    client = TestClient(
+        build_control_app(
+            service=service,
+            allowed_origin="https://control.test",
+            allowed_host="control.test",
+        ),
+        base_url="https://control.test",
+    )
+
+    response = client.get(
+        "/admin/v1/provider-reasoning-options?catalog_id=upstage-solar"
+        "&protocol=openai-chat-completions&model_id=solar-pro4"
+    )
+    assert response.status_code == 401
+    database.close()

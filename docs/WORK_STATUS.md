@@ -1,15 +1,34 @@
 # Media Bridge 작업현황
 
-판정: RUNNING — Task 1 완료, Task 2 DB migration 승인 대기
+판정: RUNNING — 배포형 reasoning 지원 검증 진행 중; 운영 배포는 DB migration 승인 전 대기
 정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, `docs/WORK_STATUS.md`, `docs/superpowers/specs/2026-09-22-llm-reasoning-levels-design.md`
-작업계획: 배포형은 실행 가능한 지원 Non‑Vision LLM의 Provider/API/model별 설정과 downstream 반영, 설치형은 Upstage Solar 설정. 분석 Provider 및 N:N 연결 보존. 구현 계획 `docs/superpowers/plans/2026-09-22-llm-reasoning-effort.md` 작성 완료, 구현·Task 2 nullable DB migration은 계획 검토 및 별도 명시 승인을 기다림
+작업계획: 배포형은 실행 가능한 지원 Non‑Vision LLM의 Provider/API/model별 설정과 downstream 반영, 설치형은 Upstage Solar 설정. 분석 Provider 및 N:N 연결 보존. 계획 구현은 `codex/manual-integrated-revision`에서만 진행하며 다른 branch/worktree는 생성하지 않음. 신산님은 nullable Provider DB column 및 migration 추가를 승인했으나, ysna-server DB 적용은 별도 승인 대상
 Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-integrated-revision` / 추가 branch 생성 금지
 최근 완료 증거: `media_bridge_gateway/entrypoints.py`에서 기동 시 DB의 `upstage-solar`를 직접 읽어 Solar backend를 만들고, `GatewayTransactionFactory`에 같은 고정 downstream을 전달하는 것을 확인함. `media_bridge_control/configuration.py`의 snapshot에는 Provider 목록이 있지만 이 entrypoint는 snapshot Provider 목록으로 LLM downstream을 선택하지 않음.
-현재 변경: 공통 `media_bridge/reasoning.py` capability resolver와 Provider별 payload mapper, 43개 회귀 테스트를 추가함. OpenAI Responses/Chat, Solar Pro3/4, Gemini 2.5/활성 Gemini 3 모델별 thinking control, Anthropic adaptive effort를 명시 allowlist로 제한함. 분석 Provider·N:N 연결, DB, Secret, 배포 설정은 수정하지 않음.
-실행·검증 결과: `tests/unit/test_reasoning.py` 43 passed; Ruff 대상 파일 통과; `git diff --check` 통과. 기본 `uv run`은 사용자 uv cache ACL 오류, worktree 내부 cache 재시도는 PyPI 네트워크 차단으로 실행 불가하여 사전 설치된 `D:\Project\Media-Bridge\.venv`의 pytest/ruff 실행 파일로 동일 테스트를 수행함. 외부 Provider 호출·migration·배포 미수행.
-오류와 조치: 저장소 내 `AGENTS.md`와 `docs/DEVELOPMENT_ENVIRONMENT.md`는 현재 worktree에서 발견되지 않음. PMO 공통 지침과 확인 가능한 DESIGN/WORK_PLAN/WORK_STATUS를 적용. 기본 uv cache ACL/PyPI 네트워크 제한으로 기존 저장소 가상환경의 pytest/Ruff를 사용. packaged `task-done` helper는 Windows checkout에서 실행 비트가 없는 `sdd-workspace`를 직접 실행하려다 실패했으며, 동일 검증을 직접 재실행하고 SDD ledger를 수동 기록함.
-미검증·승인 경계: resolver 단위 계약은 검증됐지만 Control DB/API/UI와 실제 downstream 연결은 미구현·미검증. nullable `providers.reasoning_effort`와 Alembic migration 추가는 다음 Task 진입 전 별도 승인 필요, ysna-server DB 적용은 배포 전 별도 승인 필요. Provider sandbox/E2E, 전체 테스트, build, 실제 배포 미수행.
-정확한 다음 조치: migration을 추가하기 위한 nullable `providers.reasoning_effort` DB schema 변경을 승인받으면 Task 2를 진행한다. 승인 전에는 DB/API/UI 작업을 시작하지 않는다.
+현재 변경: 공통 resolver, Provider nullable `reasoning_effort`/`0009` migration, Control API·snapshot 및 Provider LLM 등록/수정 UI, Gateway의 DB Provider/model별 LLM dispatch, 설치형 Upstage Solar 선택 및 downstream 전달을 같은 feature로 구현 중. API key credential은 snapshot/file이 아니라 기존 암호화 DB를 Provider UUID로 조회한다. 분석 Provider와 N:N 라우팅은 변경하지 않는다.
+실행·검증 결과: Task 1 resolver 43 tests와 Ruff 통과. Task 2 unit 4 tests, API/snapshot/schema checks 및 offline Alembic SQL 통과; PostgreSQL 통합 fixture 미검증. Task 3 Operations UI 12 tests, 변경 파일 ESLint, typecheck/build 통과; 전체 lint는 수정하지 않은 TestLab 파일에서 기존 오류 15개. Task 4 mock/unit/snapshot 72 passed. Task 5 adapters 15 passed; Task 6 personal/package suites 58 passed; 합산 관련 회귀 suite 88 passed. 설치형 작업 대상 Ruff, mypy, compileall 통과.
+오류와 조치: Windows 기본 pytest 임시 경로 ACL 오류는 worktree 내 `.pytest-tmp-task4` 경로로 우회. `127.0.0.1:55432` PostgreSQL fixture는 `connect_timeout=1` 기준 connection timeout; Docker CLI와 WSL 접근은 불가하고 운영 DB는 테스트에 사용하지 않음. Task 4 전체 지정 Gateway suite는 `test_responses_transaction.py`의 기존 Vision fixture 기대값 2건(`red terminal`을 기대하나 실제 sanitization 입력은 OCR `ERROR 104`만 포함)에서 실패했으며 관련 test/gate/service/sanitizer는 이 branch에서 수정하지 않음. Gateway DB credential 통합 테스트는 PostgreSQL 연결 시간초과로 시작 불가.
+미검증·승인 경계: Task 2 PostgreSQL API/migration/snapshot 통합 및 Task 4 DB credential fixture는 PostgreSQL fixture가 없어 미검증. Task 4 Gateway transaction suite의 기존 Vision 입력 기대값 2건은 현 구현 응답과 불일치. Task 3 전체 lint gate는 수정되지 않은 TestLab 파일의 baseline 오류. Full pytest/npm suite, DOCX visual render, 외부 Provider 호출, ysna의 실제 commit/image/health, 운영 DB migration 적용 및 배포는 미수행. 운영 DB 적용·배포 권한을 새로 넓히지 않는다.
+오류 횟수·조치: PostgreSQL fixture unavailable 1회; 전체 lint baseline 1회; Gateway transaction Vision assertion 불일치 2건; DOCX render가 번들 LibreOffice 미탑재로 중단. 설치형 설정/API/downstream 회귀는 테스트 우선 RED→GREEN, 관련 personal/package suite 58 passed.
+정확한 다음 조치: DOCX 렌더 runtime 경로를 확보해 visual QA를 완료하고, DB 통합·기존 Gateway assertion 판정 경계를 해결한 뒤 전체 Task 7 검증을 수행한다. ysna DB에 migration을 적용하거나 배포하지 않는다.
+
+## 2026-09-22 — 배포형 reasoning migration gate 보완
+
+- 배포 기동 migration 스크립트의 지원/목표 revision이 `0008_model_provider`로 고정되어 있어 `0009_provider_reasoning_effort`가 있는 이미지도 새 schema에서 시작하지 못하는 원인을 확인했다.
+- `deploy/scripts/migrate.py`의 지원 revision, 구 schema에서의 forward 허용 목록, apply 목표 및 사후 검증을 `0009_provider_reasoning_effort`로 정렬했다. Provider DB의 nullable reasoning 설정만 추가하며, 기존 credential 저장 경로·설치형 runtime·Provider Secret은 변경하지 않았다.
+- 회귀 검증: migration/package/control/gateway/provider backend 지정 테스트 44 passed; 배포형 관련 Ruff passed; Web 9 files/36 tests passed; typecheck/build passed.
+- 테스트를 위해 별도 `.venv-deploy-verification`를 생성했다. WSL-server 운영 DB revision과 backup은 아직 미확인이다. 이 이미지를 기동하면 entrypoint가 migration을 자동 apply하므로 운영 DB 적용 승인 전에는 container를 시작하지 않는다.
+- 다음: 지정 branch의 변경을 검토·checkpoint한 뒤 배포 서버의 compose·DB revision·backup 및 host bind 경로를 비밀값 없이 확인한다. `0009`는 `providers.reasoning_effort VARCHAR(16) NULL` 추가이며 rollback은 column drop이므로, DB 적용 직전 신산님께 대상 DB·revision·backup·rollback을 제시해 승인을 확인한다.
+
+## 2026-09-22 — WSL-server deployment checkpoint
+
+- 신산님 지시로 WSL 접속은 `WSL-server` SSH alias를 사용한다. 최초 확인에서 로컬 WSL distro를 잘못 대상으로 삼았으나, SSH alias 설정을 확인한 뒤 권한 승인 방식으로 접속했다.
+- 원격 `/home/daon/deploy/media-bridge`는 `main` HEAD `be56d404af24966ac53f22e0804dbff3e32d91fa`, `origin/main` 대비 ahead 324 / behind 253이며 `docs/install/linux.md` 수정과 `docs/design/` untracked 상태다. 신산님은 이것이 이전 개발 내용이므로 제거 가능하다고 지시했으나 아직 정리하지 않았다.
+- 원격 8642는 설치형 런타임이 이미 실행 중이다. `/home/daon/.local/bin/mb status`=`running 127.0.0.1:8642`, `mb health --json`=`healthy=true,status=200`; `172.17.0.1:8642` relay도 HTTP 200이다. 실행 바이너리는 `/home/daon/.media-bridge/runtime/bin/media-bridge-runtime`; config 및 credential 원문은 읽지 않았다.
+- 요청 URL의 호스트 IP `172.27.253.53:8642`는 원격에서 HTTP 연결 실패했다. 현재 listener는 `127.0.0.1:8642`와 Docker relay `172.17.0.1:8642`뿐이라 WSL bind 주소 설정/서비스 재기동이 필요하다. 아직 설정이나 프로세스를 변경하지 않았다.
+- 신산님은 WSL에 배포해 `http://172.27.253.53:8642`에서 확인하도록 지시했다. 현 시점 source 변경 배포는 미수행이며, source branch 변경은 미커밋 상태다. Provider·onboarding focused tests 15 passed, 전체 Web tests 36 passed, typecheck/build 및 설치형 회귀 27 passed, 관련 personal Python 파일 Ruff 통과.
+- 전체 gate는 미통과/미완료: repository Ruff 10 errors (`media_bridge_control/api.py`의 `connections` 미정의 참조 포함), Web lint 15 errors (`TestLabPage*`), 전체 pytest는 71개 진행 후 장시간 무출력으로 중단. WSL DB migration 필요 여부·대상은 아직 판별/적용하지 않았다.
+- WSL runtime 교체, `/home/daon/deploy/media-bridge` 정리, DB migration, commit/push는 미수행. 다음은 branch 전체 gate 문제 원인을 분리하고, 사용자가 승인한 이전 checkout 정리 범위와 설치형 runtime 업데이트/rollback 절차를 확인한 뒤 exact commit 배포 여부를 결정하는 것이다.
 
 ## 2026-09-19 — Provider catalog schema checkpoint
 

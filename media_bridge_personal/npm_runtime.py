@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -33,6 +33,11 @@ from media_bridge.openai_chat import (
     chat_request_to_responses,
     chat_response_from_responses,
     chat_stream_from_responses,
+)
+from media_bridge.reasoning import (
+    ReasoningEffort,
+    reasoning_capability,
+    reasoning_payload_fields,
 )
 from media_bridge_local.core.acquisition import MediaAcquirer
 from media_bridge_local.core.assets import AssetStore
@@ -248,8 +253,9 @@ def _normalize_npm_config(config: dict[str, Any]) -> dict[str, Any]:
         ),
         "model": legacy_llm.get("model", "solar-pro4"),
         "credentialRef": "text-llm",
-        "credentialEnv": legacy_llm.get("apiKeyEnv", "SOLAR_API_KEY"),
-        **_section(result, "textLlm"),
+        "credentialEnv": "",
+        "reasoningEffort": "provider_default",
+        **{key: value for key, value in _section(result, "textLlm").items() if key != "credentialEnv"},
     }
     result["mediaProcessor"] = {
         "preset": "upstage-document-parse",
@@ -259,8 +265,8 @@ def _normalize_npm_config(config: dict[str, Any]) -> dict[str, Any]:
         ),
         "model": legacy_media.get("model", "document-parse"),
         "credentialRef": "media-processor",
-        "credentialEnv": legacy_media.get("apiKeyEnv", "SOLAR_API_KEY"),
-        **_section(result, "mediaProcessor"),
+        "credentialEnv": "",
+        **{key: value for key, value in _section(result, "mediaProcessor").items() if key != "credentialEnv"},
     }
     return result
 
@@ -309,8 +315,8 @@ def _validated_generic_settings(payload: object, current: dict[str, Any]) -> dic
         str(text_llm.get("endpoint", "")).strip(), loopback_allowed=True
     )
     llm_model = str(text_llm.get("model", "")).strip()
+    llm_effort = str(text_llm.get("reasoningEffort", "provider_default"))
     llm_reference = str(text_llm.get("credentialRef", "")).strip()
-    llm_environment = str(text_llm.get("credentialEnv", "")).strip()
     media_preset = str(media_processor.get("preset", "")).strip()
     media_protocol = str(media_processor.get("protocol", "")).strip()
     media_endpoint = _validate_endpoint(
@@ -318,7 +324,6 @@ def _validated_generic_settings(payload: object, current: dict[str, Any]) -> dic
     )
     media_model = str(media_processor.get("model", "")).strip()
     media_reference = str(media_processor.get("credentialRef", "")).strip()
-    media_environment = str(media_processor.get("credentialEnv", "")).strip()
     if (
         agent_preset not in _CODING_AGENT_PRESETS
         or agent_protocol != "openai-responses"
@@ -326,12 +331,10 @@ def _validated_generic_settings(payload: object, current: dict[str, Any]) -> dic
         or llm_protocol not in _TEXT_PROTOCOLS
         or not llm_model
         or _CREDENTIAL_REFERENCE.fullmatch(llm_reference) is None
-        or _ENV_REFERENCE.fullmatch(llm_environment) is None
         or media_preset != "upstage-document-parse"
         or media_protocol != "upstage-document-parse"
         or media_model != "document-parse"
         or _CREDENTIAL_REFERENCE.fullmatch(media_reference) is None
-        or _ENV_REFERENCE.fullmatch(media_environment) is None
         or (
             llm_protocol == "openai-chat-completions"
             and not urlsplit(llm_endpoint).path.endswith("/v1/chat/completions")
@@ -343,6 +346,15 @@ def _validated_generic_settings(payload: object, current: dict[str, Any]) -> dic
         or not urlsplit(media_endpoint).path.endswith("/v1/document-digitization")
     ):
         raise PersonalRuntimeConfigurationError("settings are invalid")
+    capability = reasoning_capability(
+        "upstage-solar" if llm_preset == "upstage-solar" else None,
+        llm_protocol,
+        llm_model,
+    )
+    if llm_effort != "provider_default" and (
+        capability is None or llm_effort not in capability.efforts
+    ):
+        raise PersonalRuntimeConfigurationError("reasoning effort is unsupported")
     result = _normalize_npm_config(current)
     result.update({"runtimeMode": "personal", "host": "127.0.0.1", "port": port})
     result["codingAgent"] = {
@@ -355,8 +367,9 @@ def _validated_generic_settings(payload: object, current: dict[str, Any]) -> dic
         "protocol": llm_protocol,
         "endpoint": llm_endpoint,
         "model": llm_model,
+        "reasoningEffort": llm_effort,
         "credentialRef": llm_reference,
-        "credentialEnv": llm_environment,
+        "credentialEnv": "",
     }
     result["mediaProcessor"] = {
         "preset": media_preset,
@@ -364,7 +377,7 @@ def _validated_generic_settings(payload: object, current: dict[str, Any]) -> dic
         "endpoint": media_endpoint,
         "model": media_model,
         "credentialRef": media_reference,
-        "credentialEnv": media_environment,
+        "credentialEnv": "",
     }
     result["conversion"] = {
         "maxBytes": max_bytes,
@@ -382,12 +395,12 @@ def _validated_generic_settings(payload: object, current: dict[str, Any]) -> dic
     result["solar"] = {
         "model": llm_model,
         "endpoint": llm_endpoint,
-        "apiKeyEnv": llm_environment,
+        "apiKeyEnv": "",
     }
     result["ocr"] = {
         "model": media_model,
         "endpoint": media_endpoint,
-        "apiKeyEnv": media_environment,
+        "apiKeyEnv": "",
     }
     return result
 
@@ -413,10 +426,9 @@ def _validated_settings(payload: dict[str, str], current: dict[str, Any]) -> dic
         max_bytes = int(payload["max_bytes"])
         opencodex_base_url = payload["opencodex_base_url"].strip()
         solar_model = payload["solar_model"].strip()
+        solar_effort = payload.get("reasoning_effort", "provider_default").strip()
         solar_endpoint = payload["solar_endpoint"].strip()
-        solar_api_key_env = payload["solar_api_key_env"].strip()
         ocr_endpoint = payload["ocr_endpoint"].strip()
-        ocr_api_key_env = payload["ocr_api_key_env"].strip()
     except (KeyError, TypeError, ValueError) as error:
         raise PersonalRuntimeConfigurationError("settings are invalid") from error
     if not 1 <= port <= 65_535 or max_bytes < 1:
@@ -442,22 +454,27 @@ def _validated_settings(payload: dict[str, str], current: dict[str, Any]) -> dic
             raise PersonalRuntimeConfigurationError("settings endpoint is invalid")
     if (
         not solar_model
-        or _ENV_REFERENCE.fullmatch(solar_api_key_env) is None
-        or _ENV_REFERENCE.fullmatch(ocr_api_key_env) is None
     ):
         raise PersonalRuntimeConfigurationError("settings are invalid")
+    solar_capability = reasoning_capability(
+        "upstage-solar", "openai-chat-completions", solar_model
+    )
+    if solar_effort != "provider_default" and (
+        solar_capability is None or solar_effort not in solar_capability.efforts
+    ):
+        raise PersonalRuntimeConfigurationError("reasoning effort is unsupported")
     result = dict(current)
     result.update({"runtimeMode": "personal", "host": "127.0.0.1", "port": port})
     result["opencodex"] = {"baseUrl": opencodex_base_url}
     result["solar"] = {
         "model": solar_model,
         "endpoint": solar_endpoint,
-        "apiKeyEnv": solar_api_key_env,
+        "apiKeyEnv": "",
     }
     result["ocr"] = {
         "model": "document-parse",
         "endpoint": ocr_endpoint,
-        "apiKeyEnv": ocr_api_key_env,
+        "apiKeyEnv": "",
     }
     result["conversion"] = {
         "maxBytes": max_bytes,
@@ -478,8 +495,9 @@ def _validated_settings(payload: dict[str, str], current: dict[str, Any]) -> dic
         "protocol": "openai-chat-completions",
         "endpoint": solar_endpoint,
         "model": solar_model,
+        "reasoningEffort": solar_effort,
         "credentialRef": "text-llm",
-        "credentialEnv": solar_api_key_env,
+        "credentialEnv": "",
     }
     normalized["mediaProcessor"] = {
         "preset": "upstage-document-parse",
@@ -487,7 +505,7 @@ def _validated_settings(payload: dict[str, str], current: dict[str, Any]) -> dic
         "endpoint": ocr_endpoint,
         "model": "document-parse",
         "credentialRef": "media-processor",
-        "credentialEnv": ocr_api_key_env,
+        "credentialEnv": "",
     }
     return normalized
 
@@ -572,15 +590,14 @@ input[type=checkbox]{{display:inline;width:auto;margin-right:8px}} button{{borde
 <label>API 방식<select name="text_llm_protocol"><option value="openai-chat-completions"{selected(text_llm.get('protocol'),'openai-chat-completions')}>Chat Completions</option><option value="openai-responses"{selected(text_llm.get('protocol'),'openai-responses')}>Responses</option></select></label>
 <label>Endpoint<input name="solar_endpoint" type="url" required value="{value(text_llm.get('endpoint','https://api.upstage.ai/v1/chat/completions'))}"></label>
 <label>모델<input name="solar_model" required value="{value(text_llm.get('model','solar-pro4'))}"></label>
+<label data-reasoning-setting>추론 등급<select name="reasoning_effort"><option value="provider_default"{selected(text_llm.get('reasoningEffort','provider_default'),'provider_default')}>Provider 기본값</option><option value="low"{selected(text_llm.get('reasoningEffort'),'low')}>낮음</option><option value="medium"{selected(text_llm.get('reasoningEffort'),'medium')}>중간</option><option value="high"{selected(text_llm.get('reasoningEffort'),'high')}>높음</option></select></label>
 <label>API Key<input name="text_llm_api_key" type="password" autocomplete="new-password" placeholder="저장된 키는 다시 표시하지 않습니다"></label>
-<label>환경변수 대체 입력<input name="solar_api_key_env" required value="{value(text_llm.get('credentialEnv','SOLAR_API_KEY'))}"></label>
 <p class="secret-state" data-secret="text-llm">저장 상태를 확인하는 중…</p><button class="secondary" type="button" data-action="text-llm">LLM 연결 시험</button><div id="text-llm-result" class="result" aria-live="polite"></div></section>
 <section><h2>Vision / OCR 처리 엔진</h2>
 <label>엔진<select name="media_processor_preset"><option value="upstage-document-parse">Upstage Document Parse</option></select></label>
 <label>Endpoint<input name="ocr_endpoint" type="url" required value="{value(media.get('endpoint','https://api.upstage.ai/v1/document-digitization'))}"></label>
 <label>모델<input name="media_processor_model" required value="{value(media.get('model','document-parse'))}"></label>
 <label>API Key<input name="media_processor_api_key" type="password" autocomplete="new-password" placeholder="Solar와 같은 키라면 동일하게 입력"></label>
-<label>환경변수 대체 입력<input name="ocr_api_key_env" required value="{value(media.get('credentialEnv','SOLAR_API_KEY'))}"></label>
 <label>시험 이미지/PDF<input name="media_test_file" type="file" accept="image/*,application/pdf"></label>
 <p class="secret-state" data-secret="media-processor">저장 상태를 확인하는 중…</p><button class="secondary" type="button" data-action="media-processor">OCR 연결 시험</button><div id="media-processor-result" class="result" aria-live="polite"></div></section>
 <section class="wide"><h2>전체 흐름 시험</h2><p>선택한 파일을 OCR 처리하고 원본 미디어를 제거한 텍스트만 Non-Vision LLM에 보냅니다.</p>
@@ -600,16 +617,17 @@ const show=(id,value)=>{document.querySelector(`#${id}`).textContent=typeof valu
 const payload=()=>({
  port:Number(field('port').value),
  codingAgent:{preset:field('coding_agent_preset').value,protocol:field('coding_agent_protocol').value,baseUrl:field('opencodex_base_url').value},
- textLlm:{preset:field('text_llm_preset').value,protocol:field('text_llm_protocol').value,endpoint:field('solar_endpoint').value,model:field('solar_model').value,credentialRef:'text-llm',credentialEnv:field('solar_api_key_env').value,apiKey:field('text_llm_api_key').value},
- mediaProcessor:{preset:field('media_processor_preset').value,protocol:'upstage-document-parse',endpoint:field('ocr_endpoint').value,model:field('media_processor_model').value,credentialRef:'media-processor',credentialEnv:field('ocr_api_key_env').value,apiKey:field('media_processor_api_key').value},
+ textLlm:{preset:field('text_llm_preset').value,protocol:field('text_llm_protocol').value,endpoint:field('solar_endpoint').value,model:field('solar_model').value,reasoningEffort:field('reasoning_effort').value,credentialRef:'text-llm',apiKey:field('text_llm_api_key').value},
+ mediaProcessor:{preset:field('media_processor_preset').value,protocol:'upstage-document-parse',endpoint:field('ocr_endpoint').value,model:field('media_processor_model').value,credentialRef:'media-processor',apiKey:field('media_processor_api_key').value},
  conversion:{maxBytes:Number(field('max_bytes').value),ocrEnabled:field('ocr_enabled').checked,visionEnabled:field('vision_enabled').checked},
  failurePolicy:{blockSolarOnPreparationFailure:field('block_solar_on_failure').checked}
 });
 async function call(url,body){const response=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw new Error(data.message||data.error||`HTTP ${response.status}`);return data}
+async function syncReasoning(){const select=field('reasoning_effort');const label=document.querySelector('[data-reasoning-setting]');const eligible=field('text_llm_preset').value==='upstage-solar'&&field('text_llm_protocol').value==='openai-chat-completions';const prior=select.value;select.setCustomValidity('');if(!eligible){if(prior==='provider_default'){label.hidden=true;return}label.hidden=false;select.replaceChildren();const fallback=document.createElement('option');fallback.value='provider_default';fallback.textContent='Provider 기본값';select.add(fallback);const stale=document.createElement('option');stale.value=prior;stale.textContent=`지원되지 않는 기존 값 (${prior})`;stale.disabled=true;select.add(stale);select.value=prior;select.setCustomValidity('현재 Provider/프로토콜에서는 추론 등급을 사용할 수 없습니다. Provider 기본값을 명시적으로 선택하세요.');return}label.hidden=false;const query=new URLSearchParams({preset:'upstage-solar',protocol:field('text_llm_protocol').value,model:field('solar_model').value});const response=await fetch(`/api/reasoning-options?${query}`);if(!response.ok)return;const data=await response.json();const options=['provider_default',...data.options];select.replaceChildren(...options.map(value=>{const option=document.createElement('option');option.value=value;option.textContent=value==='provider_default'?'Provider 기본값':({low:'낮음',medium:'중간',high:'높음'}[value]||value);return option}));if(options.includes(prior))select.value=prior;else{const stale=document.createElement('option');stale.value=prior;stale.textContent=`지원되지 않는 기존 값 (${prior})`;stale.disabled=true;select.add(stale);select.value=prior;select.setCustomValidity('지원되는 추론 등급을 명시적으로 선택하세요.')}}
 async function filePayload(name){const file=field(name).files[0];if(!file)throw new Error('시험 이미지 또는 PDF를 선택하세요.');const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));return {filename:file.name,mimeType:file.type||'application/octet-stream',dataBase64:btoa(binary)}}
-form.addEventListener('submit',async(event)=>{event.preventDefault();try{const saved=await call('/api/settings',payload());field('text_llm_api_key').value='';field('media_processor_api_key').value='';show('agent-result',saved.restartRequired?'설정을 저장했습니다. 포트 변경을 적용하려면 mb service restart를 실행하세요.':'설정을 저장했습니다. 현재 실행에 적용했으며 Provider 연결 시험을 실행할 수 있습니다.');await load()}catch(error){show('agent-result',`저장 실패: ${error.message}`)}});
+form.addEventListener('submit',async(event)=>{event.preventDefault();try{await syncReasoning();if(!form.reportValidity())return;const saved=await call('/api/settings',payload());field('text_llm_api_key').value='';field('media_processor_api_key').value='';show('agent-result',saved.restartRequired?'설정을 저장했습니다. 포트 변경을 적용하려면 mb service restart를 실행하세요.':'설정을 저장했습니다. 현재 실행에 적용했으며 Provider 연결 시험을 실행할 수 있습니다.');await load()}catch(error){show('agent-result',`저장 실패: ${error.message}`)}});
 document.querySelectorAll('[data-action]').forEach(button=>button.addEventListener('click',async()=>{const action=button.dataset.action;const id=`${action}-result`;try{if(action==='agent'){const response=await fetch('/api/coding-agent');show(id,await response.json());return}if(action==='text-llm'){show(id,await call('/api/test/text-llm',{prompt:'Media Bridge 연결 시험입니다. 한국어로 짧게 응답해 주세요.'}));return}const file=await filePayload(action==='pipeline'?'pipeline_test_file':'media_test_file');if(action==='media-processor'){show(id,await call('/api/test/media-processor',file));return}show(id,await call('/api/test/pipeline',{...file,question:field('pipeline_question').value}))}catch(error){show(id,`시험 실패: ${error.message}`)}}));
-async function load(){const response=await fetch('/api/settings');const data=await response.json();document.querySelectorAll('[data-secret]').forEach(node=>{node.textContent=data.credentials[node.dataset.secret]?'API Key 저장됨':'API Key 미저장 (환경변수 대체 가능)'})}load();
+async function load(){const response=await fetch('/api/settings');const data=await response.json();document.querySelectorAll('[data-secret]').forEach(node=>{node.textContent=data.credentials[node.dataset.secret]?'API Key 저장됨':'API Key 미저장'})}load();['text_llm_preset','text_llm_protocol','solar_model'].forEach(name=>field(name).addEventListener('change',syncReasoning));field('reasoning_effort').addEventListener('change',()=>{if(field('reasoning_effort').value==='provider_default'){field('reasoning_effort').setCustomValidity('');const eligible=field('text_llm_preset').value==='upstage-solar'&&field('text_llm_protocol').value==='openai-chat-completions';if(!eligible)document.querySelector('[data-reasoning-setting]').hidden=true}});syncReasoning();
 """
 
 
@@ -627,9 +645,7 @@ class ProviderTester:
 
     def _secret(self, profile: dict[str, Any]) -> str:
         try:
-            return self._credential_store.resolve(
-                str(profile["credentialRef"]), str(profile.get("credentialEnv", ""))
-            )
+            return self._credential_store.resolve(str(profile["credentialRef"]))
         except (KeyError, CredentialStoreError) as error:
             raise PersonalRuntimeConfigurationError("provider credential is not configured") from error
 
@@ -641,12 +657,24 @@ class ProviderTester:
         protocol = str(profile.get("protocol", ""))
         model = str(profile.get("model", ""))
         endpoint = str(profile.get("endpoint", ""))
+        effort = str(profile.get("reasoningEffort", "provider_default"))
+        capability = reasoning_capability(
+            "upstage-solar" if profile.get("preset") == "upstage-solar" else None,
+            protocol,
+            model,
+        )
+        if effort != "provider_default" and (capability is None or effort not in capability.efforts):
+            raise PersonalRuntimeConfigurationError("reasoning effort is unsupported")
         if protocol == "openai-chat-completions":
             request_payload: dict[str, Any] = {
                 "model": model,
                 "messages": [{"role": "user", "content": text}],
                 "stream": False,
             }
+            if profile.get("preset") == "upstage-solar":
+                request_payload.update(
+                    reasoning_payload_fields(capability, cast(ReasoningEffort, effort))
+                )
         elif protocol == "openai-responses":
             request_payload = {"model": model, "input": text, "stream": False}
         else:
@@ -711,7 +739,7 @@ class ProviderTester:
         ) as client:
             backend = UpstageDocumentParseBackend(
                 endpoint=str(profile.get("endpoint", "")),
-                api_key_env=str(profile.get("credentialEnv", "")),
+                api_key_env="",
                 client=client,
                 secret_loader=lambda: self._secret(profile),
             )
@@ -953,6 +981,19 @@ def build_personal_app(
         except (PersonalRuntimeConfigurationError, CredentialStoreError) as error:
             return JSONResponse({"message": str(error)}, status_code=400)
 
+    async def reasoning_options(request: Request) -> JSONResponse:
+        if request.headers.get("origin") and not same_origin(request):
+            return JSONResponse({"message": "forbidden"}, status_code=403)
+        preset = request.query_params.get("preset", "")
+        protocol = request.query_params.get("protocol", "")
+        model = request.query_params.get("model", "")
+        capability = reasoning_capability(
+            "upstage-solar" if preset == "upstage-solar" else None,
+            protocol,
+            model,
+        )
+        return JSONResponse({"options": list(capability.efforts) if capability else []})
+
     async def save_api_settings(request: Request) -> JSONResponse:
         if config_file is None or credential_store is None:
             return JSONResponse({"message": "settings are unavailable"}, status_code=404)
@@ -1156,6 +1197,7 @@ def build_personal_app(
             Route("/assets/settings.js", settings_script, methods=["GET"]),
             Route("/settings", save_settings, methods=["POST"]),
             Route("/api/settings", get_settings, methods=["GET"]),
+            Route("/api/reasoning-options", reasoning_options, methods=["GET"]),
             Route("/api/settings", save_api_settings, methods=["POST"]),
             Route("/api/coding-agent", coding_agent, methods=["GET"]),
             Route("/api/test/text-llm", run_provider_test, methods=["POST"]),
@@ -1261,6 +1303,9 @@ def build_personal_runtime_from_environment() -> PersonalRuntime:
                 text_credential_ref, credential_env
             ),
             protocol=text_protocol,
+            reasoning_effort=os.environ.get(
+                "MEDIA_BRIDGE_REASONING_EFFORT", "provider_default"
+            ),
             provider_name="Text LLM",
             error_prefix="text_llm",
         ),
@@ -1281,9 +1326,7 @@ def build_personal_runtime_from_config(
     if text_protocol not in _TEXT_PROTOCOLS or media_protocol != "upstage-document-parse":
         raise PersonalRuntimeConfigurationError("provider protocol is unsupported")
     text_reference = str(text_llm.get("credentialRef", ""))
-    text_environment = str(text_llm.get("credentialEnv", ""))
     media_reference = str(media.get("credentialRef", ""))
-    media_environment = str(media.get("credentialEnv", ""))
     client = httpx.AsyncClient(
         timeout=httpx.Timeout(60),
         follow_redirects=False,
@@ -1291,9 +1334,9 @@ def build_personal_runtime_from_config(
     )
     ocr = UpstageDocumentParseBackend(
         endpoint=str(media.get("endpoint", "")),
-        api_key_env=media_environment,
+        api_key_env="",
         client=client,
-        secret_loader=lambda: credential_store.resolve(media_reference, media_environment),
+        secret_loader=lambda: credential_store.resolve(media_reference),
     )
     return build_personal_runtime(
         model=model,
@@ -1304,11 +1347,10 @@ def build_personal_runtime_from_config(
             endpoint=str(text_llm.get("endpoint", "")),
             model=model,
             receipt_signer=signer,
-            api_key_env=text_environment,
-            credential_loader=lambda: credential_store.resolve(
-                text_reference, text_environment
-            ),
+            api_key_env="",
+            credential_loader=lambda: credential_store.resolve(text_reference),
             protocol=text_protocol,
+            reasoning_effort=str(text_llm.get("reasoningEffort", "provider_default")),
             provider_name=(
                 "Solar" if text_llm.get("preset") == "upstage-solar" else "Text LLM"
             ),

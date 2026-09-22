@@ -7,7 +7,7 @@ from pathlib import Path
 def test_local_namespace_does_not_import_enterprise_namespaces() -> None:
     root = Path(__file__).parents[2] / "media_bridge_personal"
     forbidden = {"media_bridge", "media_bridge_gateway", "media_bridge_control"}
-    allowed_shared_modules = {"media_bridge.openai_chat"}
+    allowed_shared_modules = {"media_bridge.openai_chat", "media_bridge.reasoning"}
 
     violations: list[str] = []
     for path in sorted(root.glob("*.py")):

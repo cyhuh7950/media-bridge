@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from media_bridge.reasoning import reasoning_capability
 from media_bridge_control.db import Database
 from media_bridge_control.models import (
     ClientCredential,
@@ -94,6 +95,7 @@ class ConfigurationService:
                         "endpoint": row.endpoint,
                         "protocol": row.protocol,
                         "capabilities": set(row.capabilities or []),
+                        "reasoning_effort": row.reasoning_effort or "provider_default",
                         "secret_ref": {
                             "kind": row.secret_ref_kind,
                             "identifier": row.secret_ref_identifier,
@@ -118,6 +120,7 @@ class ConfigurationService:
     def _provider_values(request: ProviderCreate) -> dict[str, Any]:
         protocol = request.protocol
         capabilities = request.capabilities
+        effective_model_id = request.model_id
         if request.catalog_id is not None:
             try:
                 entry = get_provider_catalog_entry(request.catalog_id)
@@ -128,6 +131,12 @@ class ConfigurationService:
                 raise ConfigurationError("provider_catalog_kind_mismatch")
             protocol = protocol or entry.protocol
             capabilities = capabilities or set(entry.capabilities)
+            effective_model_id = effective_model_id or entry.default_model_id
+        effort = request.reasoning_effort or "provider_default"
+        if effort != "provider_default":
+            capability = reasoning_capability(request.catalog_id, protocol, effective_model_id)
+            if request.kind != "llm" or capability is None or effort not in capability.efforts:
+                raise ConfigurationError("reasoning_effort_unsupported")
         return {
             "name": request.name,
             "kind": request.kind,
@@ -136,6 +145,7 @@ class ConfigurationService:
             "endpoint": request.endpoint,
             "protocol": protocol,
             "capabilities": sorted(capabilities),
+            "reasoning_effort": None if effort == "provider_default" else effort,
             "secret_ref_kind": "db" if request.api_key is not None else request.secret_ref.kind,
             "secret_ref_identifier": (
                 "provider_api_key"
@@ -174,6 +184,7 @@ class ConfigurationService:
                 "identifier": row.secret_ref_identifier,
             },
             "has_api_key": row.encrypted_api_key is not None,
+            "reasoning_effort": row.reasoning_effort or "provider_default",
             "enabled": row.enabled,
         }
 
@@ -426,6 +437,9 @@ class ConfigurationService:
             self._provider(row)
             for row in session.scalars(select(Provider).order_by(Provider.name))
         ]
+        for provider in providers:
+            if provider["reasoning_effort"] == "provider_default":
+                provider["reasoning_effort"] = None
         models = [
             self._model(row)
             for row in session.scalars(
@@ -435,8 +449,12 @@ class ConfigurationService:
         if not models:
             models = [
                 {
+                    "provider_id": item["id"],
                     "model_id": item["model_id"],
-                    "input_modalities": ["text"] if item["kind"] == "llm" else ["image", "pdf"],
+                    "aliases": [],
+                    "input_modalities": (
+                        ["text"] if item["kind"] == "llm" else ["image", "pdf"]
+                    ),
                     "expires_at": datetime.max.replace(tzinfo=UTC).isoformat(),
                     "pdf_passthrough_verified": False,
                 }
@@ -455,6 +473,8 @@ class ConfigurationService:
                 "models": [
                     {
                         "id": item["model_id"],
+                        "provider_id": item.get("provider_id"),
+                        "aliases": item.get("aliases", []),
                         "input_modalities": item["input_modalities"],
                         "expires_at": item["expires_at"],
                         "pdf_passthrough_verified": item["pdf_passthrough_verified"],

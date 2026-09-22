@@ -120,6 +120,47 @@ async def test_translates_text_only_responses_to_solar_chat_and_back(
 
 
 @pytest.mark.asyncio
+async def test_forwards_selected_solar_reasoning_effort_only_to_chat_protocol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TEST_SOLAR_API_KEY", "test-secret-not-logged")
+    recorded: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded.append(json.loads(request.content))
+        return httpx.Response(200, headers={"content-type": "application/json"}, json={
+            "choices": [{"message": {"content": "answer"}}]
+        })
+
+    signer = GateReceiptSigner(secret=b"r" * 32)
+    downstream = SolarResponsesDownstream(
+        endpoint="https://api.example.test/v1/chat/completions",
+        model="solar-pro4",
+        receipt_signer=signer,
+        api_key_env="TEST_SOLAR_API_KEY",
+        transport=httpx.MockTransport(handler),
+        reasoning_effort="high",
+    )
+    try:
+        await downstream.invoke(_sealed(signer, {"model": "solar-pro4", "input": "hello"}))
+    finally:
+        await downstream.close()
+
+    assert recorded[0]["reasoning_effort"] == "high"
+
+
+def test_rejects_nondefault_solar_reasoning_for_responses_protocol() -> None:
+    with pytest.raises(ValueError, match="reasoning"):
+        SolarResponsesDownstream(
+            endpoint="https://api.example.test/v1/responses",
+            model="solar-pro4",
+            receipt_signer=GateReceiptSigner(secret=b"r" * 32),
+            protocol="openai-responses",
+            reasoning_effort="high",
+        )
+
+
+@pytest.mark.asyncio
 async def test_forwards_responses_tools_to_solar_chat(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

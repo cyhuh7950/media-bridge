@@ -153,6 +153,7 @@ class Provider(Base):
     secret_ref_kind: Mapped[str] = mapped_column(String(32))
     secret_ref_identifier: Mapped[str] = mapped_column(String(255))
     encrypted_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reasoning_effort: Mapped[str | None] = mapped_column(String(16), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
