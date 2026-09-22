@@ -1,15 +1,15 @@
 # Media Bridge 작업현황
 
-판정: RUNNING — LLM 추론 등급 설계 수정 및 사용자 검토 대기
+판정: RUNNING — LLM 추론 등급 구현 계획 작성 및 사용자 승인 대기
 정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, `docs/WORK_STATUS.md`, `docs/superpowers/specs/2026-09-22-llm-reasoning-levels-design.md`
-작업계획: 배포형은 실행 가능한 지원 Non‑Vision LLM의 Provider/API/model별 설정과 downstream 반영, 설치형은 Upstage Solar 설정. 분석 Provider 및 N:N 연결 보존. 구현 계획은 수정 설계 명세 사용자 검토·승인 뒤 작성
+작업계획: 배포형은 실행 가능한 지원 Non‑Vision LLM의 Provider/API/model별 설정과 downstream 반영, 설치형은 Upstage Solar 설정. 분석 Provider 및 N:N 연결 보존. 구현 계획 `docs/superpowers/plans/2026-09-22-llm-reasoning-effort.md` 작성 완료, 구현·Task 2 nullable DB migration은 계획 검토 및 별도 명시 승인을 기다림
 Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-integrated-revision` / 추가 branch 생성 금지
 최근 완료 증거: `media_bridge_gateway/entrypoints.py`에서 기동 시 DB의 `upstage-solar`를 직접 읽어 Solar backend를 만들고, `GatewayTransactionFactory`에 같은 고정 downstream을 전달하는 것을 확인함. `media_bridge_control/configuration.py`의 snapshot에는 Provider 목록이 있지만 이 entrypoint는 snapshot Provider 목록으로 LLM downstream을 선택하지 않음.
-현재 변경: 지원 Non‑Vision LLM을 Solar로 제한하지 않도록 설계 초안을 수정하고, 설치형 Solar 범위 및 분석 Provider/N:N 보존을 명시함. 배포 Gateway의 현 고정 Solar 실행 경로와 타 Provider 지원 시 실제 downstream 연결 필요성을 기록. 소스 코드, DB, Secret, 배포 설정은 수정하지 않음.
-실행·검증 결과: 설계 문서 `git diff --check` 통과. feature code/test 및 실제 Provider 호출은 미수행.
+현재 변경: 지원 Non‑Vision LLM을 Solar로 제한하지 않도록 설계 명세와 단계별 test-first 구현 계획을 작성함. 계획은 capability resolver → DB/API/snapshot → Control UI → DB 기반 Gateway Chat/Responses → native Gemini/Anthropic → 설치형 Solar → 전체 회귀/통합 매뉴얼 순으로 분리함. 분석 Provider 및 N:N 연결 보존, DB credential 경로 유지, 사용자 지정 branch 외 추가 branch 금지를 명시. 제품 소스, DB, Secret, 배포 설정은 수정하지 않음.
+실행·검증 결과: 계획·현황 문서 `git diff --check` 수행 예정. feature code/test, 실제 Provider 호출, migration 적용 및 배포는 미수행.
 오류와 조치: 저장소 내 `AGENTS.md`와 `docs/DEVELOPMENT_ENVIRONMENT.md`는 현재 worktree에서 발견되지 않음. PMO 공통 지침과 확인 가능한 DESIGN/WORK_PLAN/WORK_STATUS를 적용.
-미검증·승인 경계: Provider/API/model별 지원 조합·추론 필드 조사, 동적 downstream 연결 범위, DB migration 필요성은 구현 계획에서 구체화해야 함. DB migration·실제 유료 Provider 호출·배포는 수행하지 않음.
-정확한 다음 조치: 수정된 설계 명세를 신산님이 검토·승인한 뒤 구현 계획을 작성하고, DB migration 등 승인 경계를 분리해 보고한다.
+미검증·승인 경계: 계획에 열거한 Provider/API/model별 세부 capability 계약은 구현 시 공식 문서와 다시 대조해야 함. nullable `providers.reasoning_effort` 및 Alembic migration 추가는 Task 2 진입 전 별도 승인, ysna-server DB 적용은 배포 전 별도 승인 필요. 실제 유료 Provider 호출과 배포는 아직 수행하지 않음.
+정확한 다음 조치: 신산님이 구현 계획의 범위·단계와 실행 방식(Native 또는 Subagent-driven)을 검토한다. 구현 승인을 받은 뒤에도 Task 2 migration 추가 승인은 별도로 확인한다.
 
 ## 2026-09-19 — Provider catalog schema checkpoint
 
