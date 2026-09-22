@@ -1,15 +1,15 @@
 # Media Bridge 작업현황
 
-판정: RUNNING — LLM 추론 등급 설정 범위 재확인
+판정: RUNNING — LLM 추론 등급 설계 수정 및 사용자 검토 대기
 정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, `docs/WORK_STATUS.md`, `docs/superpowers/specs/2026-09-22-llm-reasoning-levels-design.md`
-작업계획: 배포형·설치형 Provider/모델별 추론 등급 설정; 구현 계획은 설계 명세 사용자 검토·승인 뒤 작성
+작업계획: 배포형은 실행 가능한 지원 Non‑Vision LLM의 Provider/API/model별 설정과 downstream 반영, 설치형은 Upstage Solar 설정. 분석 Provider 및 N:N 연결 보존. 구현 계획은 수정 설계 명세 사용자 검토·승인 뒤 작성
 Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-integrated-revision` / 추가 branch 생성 금지
 최근 완료 증거: `media_bridge_gateway/entrypoints.py`에서 기동 시 DB의 `upstage-solar`를 직접 읽어 Solar backend를 만들고, `GatewayTransactionFactory`에 같은 고정 downstream을 전달하는 것을 확인함. `media_bridge_control/configuration.py`의 snapshot에는 Provider 목록이 있지만 이 entrypoint는 snapshot Provider 목록으로 LLM downstream을 선택하지 않음.
-현재 변경: 구현 전 설계 초안과 작업현황만 변경. 기존 설계의 배포형 실행 경로 설명은 실제 entrypoint와 불일치해 범위 재확인 전 사용하지 않음. 소스 코드, DB, Secret, 배포 설정은 수정하지 않음.
-실행·검증 결과: 읽기 전용 코드 조사. feature code/test 및 실제 Provider 호출은 미수행.
+현재 변경: 지원 Non‑Vision LLM을 Solar로 제한하지 않도록 설계 초안을 수정하고, 설치형 Solar 범위 및 분석 Provider/N:N 보존을 명시함. 배포 Gateway의 현 고정 Solar 실행 경로와 타 Provider 지원 시 실제 downstream 연결 필요성을 기록. 소스 코드, DB, Secret, 배포 설정은 수정하지 않음.
+실행·검증 결과: 설계 문서 `git diff --check` 통과. feature code/test 및 실제 Provider 호출은 미수행.
 오류와 조치: 저장소 내 `AGENTS.md`와 `docs/DEVELOPMENT_ENVIRONMENT.md`는 현재 worktree에서 발견되지 않음. PMO 공통 지침과 확인 가능한 DESIGN/WORK_PLAN/WORK_STATUS를 적용.
-미검증·승인 경계: UI에 설정을 추가하는 범위와 DB catalog 전체의 Provider 실행을 동적으로 연결하는 범위가 분리되지 않음. DB migration, provider별 model-capability registry, adapter/API 계약, 실제 Provider 호출은 미구현. 배포 및 실제 유료 Provider 검증도 수행하지 않음.
-정확한 다음 조치: 실제 실행 중인 Upstage Solar에 한정할지, 배포형의 모든 catalog Provider를 동적 선택·실행하는 기반까지 포함할지 신산님 결정 후 명세를 수정하고 구현 계획을 작성한다.
+미검증·승인 경계: Provider/API/model별 지원 조합·추론 필드 조사, 동적 downstream 연결 범위, DB migration 필요성은 구현 계획에서 구체화해야 함. DB migration·실제 유료 Provider 호출·배포는 수행하지 않음.
+정확한 다음 조치: 수정된 설계 명세를 신산님이 검토·승인한 뒤 구현 계획을 작성하고, DB migration 등 승인 경계를 분리해 보고한다.
 
 ## 2026-09-19 — Provider catalog schema checkpoint
 
