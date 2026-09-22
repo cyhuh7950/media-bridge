@@ -1,15 +1,15 @@
 # Media Bridge 작업현황
 
-판정: RUNNING
-정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, 현재 worktree `D:/Project/Media-Bridge/.worktree/auth-totp-recovery-email`
-작업계획: S3 Provider catalog — 카탈로그·관리 API·DB 스키마·Console 선택 UI·N:N routing 연결 완료, 운영 통합 검증은 다음 작업
-Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-body.md` untracked 보존 / 단일 writer 어울
-최근 완료 증거: TOTP QR·Provider 선택 우회 흐름의 기존 구현과 배포형 Control Plane 문서를 확인함. 2026-09-19 OmniRoute 공급자 화면에서 API 키 호환 1/1, API 키 Provider 5/230, Image Providers 0/8, Local Providers 0/14 및 OpenAI/Anthropic 호환 추가 기능을 확인함.
-현재 변경: Provider catalog, Provider schema/migration, onboarding/operations 선택 UI, N:N routing profile API·UI, fail-closed Provider selection primitive와 `/v1/models` runtime endpoint 구현 완료. 기존 `.pr-body.md`는 삭제하지 않음.
-실행·검증 결과: control/gateway unit·packaging 79 passed, web lint 0 errors, web tests 27 passed, web build·ruff·compileall·git diff --check 통과. snapshot model discovery 회귀 포함 관련 63 passed. WSL-server disposable PostgreSQL에서 migration/connection 4 passed, configuration API 2 passed. Provider selection의 실제 downstream 다중 endpoint wiring·DB 등록·배포 검증은 미실행.
-오류와 조치: 없음.
-미검증·승인 경계: 공개 OpenAI/Anthropic 계약, API key·tenant, DB migration, N:N routing, 비용·모니터링, OmniRoute 배포형 연결은 설계 승인 전 미구현·미검증. 인증·권한·Secret·비용·지속 schema 변경은 별도 승인 대상.
-정확한 다음 조치: Provider selection을 Gateway transaction/downstream에 연결하고, WSL-server에서 routing profile 통합 테스트와 Provider sandbox를 실행한다.
+판정: RUNNING — LLM 추론 등급 설정 기능 설계 검토
+정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, `docs/WORK_STATUS.md`, `docs/superpowers/specs/2026-09-22-llm-reasoning-levels-design.md`
+작업계획: 배포형·설치형 Provider/모델별 추론 등급 설정; 구현 계획은 설계 명세 사용자 검토·승인 뒤 작성
+Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-integrated-revision` / 추가 branch 생성 금지
+최근 완료 증거: 두 실행 경로의 설정/요청 구성을 읽기 전용으로 조사했고, 제공사 공식 API 문서와 대조해 추론 필드 및 모델별 기본·지원 차이를 확인함.
+현재 변경: 구현 전 설계 초안과 이 작업현황 기록만 변경. 소스 코드, DB, Secret, 배포 설정은 수정하지 않음.
+실행·검증 결과: 설계 초안 자체 검토 및 `git diff --check` 수행. feature code/test 및 실제 Provider 호출은 아직 미수행.
+오류와 조치: 저장소 내 `AGENTS.md`와 `docs/DEVELOPMENT_ENVIRONMENT.md`는 현재 worktree에서 발견되지 않음. PMO 공통 지침과 확인 가능한 DESIGN/WORK_PLAN/WORK_STATUS를 적용.
+미검증·승인 경계: DB migration, provider별 model-capability registry, adapter/API 계약 구현은 미승인·미구현. 배포 및 실제 유료 Provider 검증도 수행하지 않음.
+정확한 다음 조치: 신산님이 설계 초안을 검토·승인하면 구현 계획서를 작성하고 다음 검토를 요청한다. 명세 승인 전 코드 변경은 하지 않는다.
 
 ## 2026-09-19 — Provider catalog schema checkpoint
 
