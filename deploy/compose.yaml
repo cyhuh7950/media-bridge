@@ -32,6 +32,8 @@ services:
 
   media-bridge-control:
     <<: *runtime-security
+    ports:
+      - "${MEDIA_BRIDGE_CONTROL_BIND_ADDRESS:-127.0.0.1}:${MEDIA_BRIDGE_CONTROL_HOST_PORT:-18642}:8081"
     image: ${MEDIA_BRIDGE_CONTROL_IMAGE:-media-bridge-control:0.1.0}
     build:
       context: ..

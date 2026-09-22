@@ -21,6 +21,15 @@ def test_compose_has_three_isolated_services() -> None:
     assert set(services["media-bridge-control"]["networks"]) == {"database", "product"}
 
 
+def test_control_publishes_a_configurable_host_port() -> None:
+    control = _compose()["services"]["media-bridge-control"]
+
+    assert control["ports"] == [
+        "${MEDIA_BRIDGE_CONTROL_BIND_ADDRESS:-127.0.0.1}"
+        ":${MEDIA_BRIDGE_CONTROL_HOST_PORT:-18642}:8081"
+    ]
+
+
 def test_compose_applies_runtime_confinement() -> None:
     services = _compose()["services"]
     for name, service in services.items():
