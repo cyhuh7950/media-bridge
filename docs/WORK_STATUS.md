@@ -4,15 +4,16 @@
 
 - 신산님 지시를 최신 기준으로 적용한다: WSL 배포형 Media Bridge의 이전 리소스는 정리하고 기존 `/home/daon/deploy/media-bridge/.env`만 보존한다. 기존 WSL DB/볼륨은 재사용하지 않고 새 DB로 시작한다. 개인 설치형 런타임과 다른 프로젝트 리소스는 범위 밖이다.
 - 최초 배포에서 DB 볼륨이 없을 때 시스템 Secret 6개를 생성하고 재배포 시 유효한 기존 파일을 보존하며, 일부 누락 또는 기존 DB만 존재하면 중단하는 `deploy/scripts/secret_bootstrap.py`를 추가했다. Provider credential 정본은 계속 DB다.
-- 이전 배포형 전용 DB/asset/snapshot volumes 6개와 이미지 2개를 제거했고 기존 `/home/daon/deploy/media-bridge`에는 `.env`만 남겼다. 개인 설치형 런타임과 타 프로젝트 리소스는 보존했다. 이전 DB 백업은 임시로 `/home/daon/deploy/backups/media-bridge-pre-redeploy-20260922/`에 남아 있다.
+- 이전 배포형 전용 DB/asset/snapshot volumes 6개와 이미지 2개를 제거했고 기존 `/home/daon/deploy/media-bridge`에는 `.env`만 남겼다. 신규 DB/Control health 확인 후 임시 보관했던 이전 DB backup도 제거했다. 개인 설치형 런타임과 타 프로젝트 리소스는 보존했다.
 - ysna-server에서 현재 운영 Control이 참조하는 pepper(메타데이터만 확인)를 사용자가 제안해 새 WSL Secret으로 원문 노출 없이 전송했다. 새 DB의 bootstrap 재검증은 `deployment_secrets_preserved`; 전체 Secret 파일 권한·소유자 기준을 통과했다.
-- 지정 branch `codex/manual-integrated-revision`의 배포 commit은 `a78c179febdbae70a3a90266482e231c691e66ea`. 신규 DB에 migration `0009_provider_reasoning_effort`까지 적용됐다. 단, Control 시작 검사는 아직 `0008_model_provider`를 요구해 컨테이너가 재시작했고, 원인을 확인해 migration head 일치 회귀 테스트(RED 재현)를 추가했다.
-- 이 수정의 unit 결과: 새 회귀 테스트 RED에서 `control_plane_migration_required` 확인 후 상수만 `0009_provider_reasoning_effort`로 맞춰 GREEN. `tests/control/unit`: 56 passed, Ruff와 `git diff --check` 통과. 신규 Control image는 아직 수정 전이며, 새 수정은 미커밋이다.
-- 다음: 최소 수정 commit/push를 같은 지정 branch에 반영하고 새 image를 빌드해 Control health 및 `0009`를 확인한다. HTTPS 외부 진입·브라우저 검증은 미확인이다.
+- 최소 수정 commit `0da6282158d129c02f40dcd50ccee3090c3c6a0e`를 기존 원격 branch에 push하고 WSL checkout도 fast-forward했다. 수정 image `media-bridge-control:0.1.0`, image ID `sha256:321a95691cc2bce84afbb740fcf4a4823405379dbc383c7480812d9dbff56564`; Control과 신규 DB 모두 healthy, DB revision은 `0009_provider_reasoning_effort`다.
+- 이 수정의 unit 결과: 회귀 테스트는 수정 전 `control_plane_migration_required`로 RED, `0009_provider_reasoning_effort`를 허용한 뒤 GREEN. `tests/control/unit` 및 migration rollback 검사 합계 70 passed, 변경 파일 Ruff와 `git diff --check` 통과.
+- 브라우저 진입은 막혀 있다. 요청 주소 `172.27.253.53:8642`는 기존 개인 설치형 런타임이 이미 점유 중이며, 배포형 Control은 HTTPS 전용으로 내부 `8081`에만 연결돼 host port가 없다. 설치형 런타임 중지·8642 점유 변경이나 HTTPS 우회는 하지 않았다. Data service 및 Provider/Snapshot 기반 Gateway 기능 확인은 아직 미수행이다.
+- 다음: 브라우저 인수 전에는 배포형에 쓸 수 있는 별도 승인된 HTTPS 진입점/주소가 필요하다. 포트 8642를 배포형에 넘기려면 설치형 중단이 필요하므로, 기존 설치형을 보존하는 현재 지시와 충돌한다.
 
-판정: RUNNING — 새 WSL 배포형 Control migration-head 회귀 복구 및 health 확인 중
+판정: PARTIAL — 수정 branch/image/DB migration/Control health 완료; 사용자 브라우저 인수와 Data/Gateway 검증은 포트·HTTPS 진입 경로 미확정으로 대기
 정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, `docs/WORK_STATUS.md`, `docs/superpowers/specs/2026-09-22-llm-reasoning-levels-design.md`
-작업계획: 배포형은 실행 가능한 지원 Non‑Vision LLM의 Provider/API/model별 설정과 downstream 반영, 설치형은 Upstage Solar 설정. 분석 Provider 및 N:N 연결 보존. 계획 구현은 `codex/manual-integrated-revision`에서만 진행하며 다른 branch/worktree는 생성하지 않음. 신산님은 nullable Provider DB column 및 migration 추가를 승인했으나, ysna-server DB 적용은 별도 승인 대상
+작업계획: 배포형은 실행 가능한 지원 Non‑Vision LLM의 Provider/API/model별 설정과 downstream 반영, 설치형은 Upstage Solar 설정. 분석 Provider 및 N:N 연결 보존. 계획 구현은 `codex/manual-integrated-revision`에서만 진행하며 다른 branch/worktree는 생성하지 않음. 신산님은 nullable Provider DB column 및 migration을 승인했고 신규 WSL DB에 `0009_provider_reasoning_effort`를 적용했다. ysna-server DB에는 migration을 적용하지 않았다.
 Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-integrated-revision` / 추가 branch 생성 금지
 최근 완료 증거: `media_bridge_gateway/entrypoints.py`에서 기동 시 DB의 `upstage-solar`를 직접 읽어 Solar backend를 만들고, `GatewayTransactionFactory`에 같은 고정 downstream을 전달하는 것을 확인함. `media_bridge_control/configuration.py`의 snapshot에는 Provider 목록이 있지만 이 entrypoint는 snapshot Provider 목록으로 LLM downstream을 선택하지 않음.
 현재 변경: 공통 resolver, Provider nullable `reasoning_effort`/`0009` migration, Control API·snapshot 및 Provider LLM 등록/수정 UI, Gateway의 DB Provider/model별 LLM dispatch, 설치형 Upstage Solar 선택 및 downstream 전달을 같은 feature로 구현 중. API key credential은 snapshot/file이 아니라 기존 암호화 DB를 Provider UUID로 조회한다. 분석 Provider와 N:N 라우팅은 변경하지 않는다.
