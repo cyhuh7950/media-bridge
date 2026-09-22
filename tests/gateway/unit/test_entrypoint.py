@@ -91,6 +91,14 @@ def _install_valid_gateway_environment(
                     encrypted_api_key="encrypted-ocr",
                 ),
                 SimpleNamespace(
+                    id="00000000-0000-0000-0000-000000000003",
+                    catalog_id="openai-vision",
+                    endpoint="https://vision-from-db.test/v1/chat/completions",
+                    model_id="vision-model-from-db",
+                    enabled=True,
+                    encrypted_api_key="encrypted-vision",
+                ),
+                SimpleNamespace(
                     id="00000000-0000-0000-0000-000000000002",
                     catalog_id="upstage-solar",
                     endpoint="https://api.upstage.ai/v1",
@@ -197,6 +205,22 @@ def test_gateway_process_factory_builds_from_strict_environment(
     assert downstream._provider_for_target("public/text-alias")["id"] == provider["id"]
     asyncio.run(process.close())
     assert list((tmp_path / "assets").iterdir()) == []
+
+
+def test_vision_provider_details_come_from_database_not_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_valid_gateway_environment(tmp_path, monkeypatch)
+    monkeypatch.delenv("MEDIA_BRIDGE_VISION_ENDPOINT")
+    monkeypatch.delenv("MEDIA_BRIDGE_VISION_MODEL")
+
+    process = build_gateway_process_from_environment()
+
+    vision = process.runtime.current().gate._vision_backend
+    assert vision._endpoint == "https://vision-from-db.test/v1/chat/completions"
+    assert vision._model == "vision-model-from-db"
+    asyncio.run(process.close())
 
 
 def test_invalid_gateway_port_fails_before_process_resources_are_built(

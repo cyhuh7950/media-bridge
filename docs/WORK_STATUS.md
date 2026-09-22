@@ -20,6 +20,16 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 - 테스트를 위해 별도 `.venv-deploy-verification`를 생성했다. WSL-server 운영 DB revision과 backup은 아직 미확인이다. 이 이미지를 기동하면 entrypoint가 migration을 자동 apply하므로 운영 DB 적용 승인 전에는 container를 시작하지 않는다.
 - 다음: 지정 branch의 변경을 검토·checkpoint한 뒤 배포 서버의 compose·DB revision·backup 및 host bind 경로를 비밀값 없이 확인한다. `0009`는 `providers.reasoning_effort VARCHAR(16) NULL` 추가이며 rollback은 column drop이므로, DB 적용 직전 신산님께 대상 DB·revision·backup·rollback을 제시해 승인을 확인한다.
 
+## 2026-09-22 — Provider 정본 및 WSL 배포 차단점
+
+- Compose가 DB Provider credential을 이미 읽는 Gateway와 별도로 OCR/Vision/Solar API-key Secret 파일을 필수 선언하고 Vision endpoint/model도 환경변수로 요구하는 회귀를 확인했다. 배포형은 DB Provider의 endpoint/model/encrypted credential만 사용하도록 해당 3종 파일 Secret과 Provider endpoint/model 환경변수를 제거하고, Vision Provider를 DB에서 resolve하도록 수정했다. 설치형 generic backend 동작은 유지했다.
+- WSL의 실제 설치형 프로세스는 `127.0.0.1:8642`와 Docker relay `172.17.0.1:8642`에서 응답 중이며 중단·재설치하지 않았다. 요청 IP `172.27.253.53:8642`는 현재 연결 불가다. 배포 컨테이너는 없고, `/home/daon/media-bridge` checkout은 없다.
+- `/home/daon/deploy/media-bridge`는 dirty `main`이며 `origin/main` 대비 ahead 324/behind 253이므로 변경하지 않았다. 기존 Docker DB volumes `media-bridge_database`, `media-bridge-wsl_database`가 별도 compose project 소유로 존재하지만 대상 DB와 revision은 확인되지 않았다. 두 볼륨 모두 보존한다.
+- 현재 Control API와 settings는 HTTPS 전용이며 평문 요청은 `https_required` 400으로 거부한다. 요청받은 `http://172.27.253.53:8642` 바인딩·HTTP 보안 우회는 적용하지 않았다. 안전한 HTTPS 진입 경로가 필요하다.
+- Compose의 비-Provider 시스템 Secret 6개(db password, DB URL, security pepper, snapshot key pair, receipt secret)는 서버 기본 경로에 모두 없다. Provider API-key Secret 파일은 제거 대상이며 새로 만들지 않았다. Compose 기동 시 migration이 자동 apply되므로 확인되지 않은 기존 볼륨으로 기동하지 않았다.
+- 추가 검증: migration + gateway/provider/backend + 신규 compose contract 선택 테스트 46 passed, 변경 Python Ruff passed. 전체 packaging suite는 68 passed/7 skipped/6 failed; 실패는 Windows 전용 `os.fchmod`, 기존 compose-network assertion, public docs tree assertion, PowerShell subprocess encoding 등이며 상세는 실행 결과 참조. 앞서 Web 36 tests/typecheck/build도 통과.
+- 배포 재개 조건: HTTPS URL/인증서 진입 방식 확정, 새 격리 DB 사용 또는 기존 DB 중 정확한 대상 선택, 6개 시스템 Secret 생성·보관 승인, migration 대상·backup 승인. 설치형 runtime과 이전 volume 정리는 별도 지시 없이는 하지 않는다.
+
 ## 2026-09-22 — WSL-server deployment checkpoint
 
 - 신산님 지시로 WSL 접속은 `WSL-server` SSH alias를 사용한다. 최초 확인에서 로컬 WSL distro를 잘못 대상으로 삼았으나, SSH alias 설정을 확인한 뒤 권한 승인 방식으로 접속했다.

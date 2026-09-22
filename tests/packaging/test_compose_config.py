@@ -63,6 +63,19 @@ def test_compose_uses_secret_files_not_literal_values() -> None:
     assert ":latest" not in serialized
 
 
+def test_provider_credentials_and_endpoints_are_database_managed() -> None:
+    config = _compose()
+    data = config["services"]["media-bridge-data"]
+    environment = data["environment"]
+
+    assert "MEDIA_BRIDGE_OCR_ENDPOINT" not in environment
+    assert "MEDIA_BRIDGE_VISION_ENDPOINT" not in environment
+    assert "MEDIA_BRIDGE_VISION_MODEL" not in environment
+    assert not any(name.endswith("_API_KEY_FILE") for name in environment)
+    assert not {"ocr_api_key", "vision_api_key", "solar_api_key"} & set(config["secrets"])
+    assert not {"ocr_api_key", "vision_api_key", "solar_api_key"} & set(data["secrets"])
+
+
 def test_default_downstream_endpoint_satisfies_gateway_transport_policy() -> None:
     data = _compose()["services"]["media-bridge-data"]
     endpoint = data["environment"]["MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL"]

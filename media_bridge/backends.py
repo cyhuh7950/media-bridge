@@ -91,6 +91,18 @@ def load_secret(value_env: str, file_env: str | None = None) -> str:
     return file_value
 
 
+def _load_backend_secret(
+    credential_loader: Callable[[], str] | None,
+    value_env: str | None,
+    file_env: str | None,
+) -> str:
+    if credential_loader is not None:
+        return credential_loader()
+    if value_env is None:
+        raise SecretConfigurationError("provider credential is not configured")
+    return load_secret(value_env, file_env)
+
+
 def _validate_endpoint(endpoint: str) -> None:
     parsed = urlsplit(endpoint)
     if (
@@ -135,7 +147,7 @@ class UpstageOcrBackend:
         self,
         *,
         endpoint: str,
-        api_key_env: str = "UPSTAGE_API_KEY",
+        api_key_env: str | None = "UPSTAGE_API_KEY",
         api_key_file_env: str | None = None,
         credential_loader: Callable[[], str] | None = None,
         client: httpx.AsyncClient,
@@ -155,10 +167,10 @@ class UpstageOcrBackend:
         filename: str | None,
     ) -> OcrResult:
         try:
-            secret = (
-                self._credential_loader()
-                if self._credential_loader is not None
-                else load_secret(self._api_key_env, self._api_key_file_env)
+            secret = _load_backend_secret(
+                self._credential_loader,
+                self._api_key_env,
+                self._api_key_file_env,
             )
         except (SecretConfigurationError, ValueError):
             return OcrResult(BackendStatus.FAILURE, error_code="configuration")
@@ -228,7 +240,7 @@ class OpenAICompatibleVisionBackend:
         *,
         endpoint: str,
         model: str,
-        api_key_env: str,
+        api_key_env: str | None,
         api_key_file_env: str | None = None,
         credential_loader: Callable[[], str] | None = None,
         client: httpx.AsyncClient,
@@ -251,10 +263,10 @@ class OpenAICompatibleVisionBackend:
         if mime_type not in {"image/png", "image/jpeg", "image/webp"}:
             return VisionResult(BackendStatus.FAILURE, error_code="unsupported_media")
         try:
-            secret = (
-                self._credential_loader()
-                if self._credential_loader is not None
-                else load_secret(self._api_key_env, self._api_key_file_env)
+            secret = _load_backend_secret(
+                self._credential_loader,
+                self._api_key_env,
+                self._api_key_file_env,
             )
         except (SecretConfigurationError, ValueError):
             return VisionResult(BackendStatus.FAILURE, error_code="configuration")
@@ -309,7 +321,7 @@ class SolarAnalysisBackend:
         *,
         endpoint: str,
         model: str,
-        api_key_env: str = "SOLAR_API_KEY",
+        api_key_env: str | None = "SOLAR_API_KEY",
         api_key_file_env: str | None = None,
         credential_loader: Callable[[], str] | None = None,
         client: httpx.AsyncClient,
@@ -324,10 +336,10 @@ class SolarAnalysisBackend:
 
     async def analyze(self, *, context: str, user_request: str) -> AnalysisResult:
         try:
-            secret = (
-                self._credential_loader()
-                if self._credential_loader is not None
-                else load_secret(self._api_key_env, self._api_key_file_env)
+            secret = _load_backend_secret(
+                self._credential_loader,
+                self._api_key_env,
+                self._api_key_file_env,
             )
         except (SecretConfigurationError, ValueError):
             return AnalysisResult(BackendStatus.FAILURE, error_code="configuration")

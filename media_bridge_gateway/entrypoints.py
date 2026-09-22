@@ -222,6 +222,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
             return security.decrypt_secret(provider.encrypted_api_key)
 
         ocr_provider = db_provider("upstage-document-parse")
+        vision_provider = db_provider("openai-vision")
         solar_provider = db_provider("upstage-solar")
         solar_endpoint = solar_provider.endpoint.rstrip("/")
         if not solar_endpoint.endswith("/chat/completions"):
@@ -229,19 +230,23 @@ def build_gateway_process_from_environment() -> GatewayProcess:
         solar_model = solar_provider.model_id or "solar-pro4"
         ocr = UpstageOcrBackend(
             endpoint=ocr_provider.endpoint,
+            api_key_env=None,
             credential_loader=lambda: db_provider_credential(str(ocr_provider.id)),
             client=client,
         )
+        if not vision_provider.model_id:
+            raise GatewayConfigurationError("vision Provider model is not configured")
         vision = OpenAICompatibleVisionBackend(
-            endpoint=_required("MEDIA_BRIDGE_VISION_ENDPOINT"),
-            model=_required("MEDIA_BRIDGE_VISION_MODEL"),
-            api_key_env="MEDIA_BRIDGE_VISION_API_KEY",
-            credential_loader=lambda: db_provider_credential(str(db_provider("openai-vision").id)),
+            endpoint=vision_provider.endpoint,
+            model=vision_provider.model_id,
+            api_key_env=None,
+            credential_loader=lambda: db_provider_credential(str(vision_provider.id)),
             client=client,
         )
         solar = SolarAnalysisBackend(
             endpoint=solar_endpoint,
             model=solar_model,
+            api_key_env=None,
             credential_loader=lambda: db_provider_credential(str(solar_provider.id)),
             client=client,
         )
