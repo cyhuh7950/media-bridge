@@ -44,9 +44,9 @@
 - `reasoning_capability(catalog_id: str | None, protocol: str | None, model_id: str | None) -> ReasoningCapability | None`.
 - `reasoning_payload_fields(capability: ReasoningCapability | None, effort: ReasoningEffort | None) -> dict[str, object]`; default/absent returns `{}`; unsupported value raises `UnsupportedReasoningEffort`.
 
-- [ ] **Step 1: Add failing capability and payload tests**
+- [x] **Step 1: Add failing capability and payload tests**
 
-Test OpenAI `gpt-5.1`, `gpt-5-pro`, `o3`, and `o4-mini` on Responses and Chat mappings; Upstage `solar-pro3`/`solar-pro4` Chat `low|medium|high`; Gemini 2.5 `low=1024`, `medium=8192`, `high=24576` budgets and Gemini 3 `minimal|low|medium|high` levels; Anthropic adaptive-thinking models `claude-opus-4-6`, `claude-opus-4-7`, `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-opus-5`, `claude-sonnet-5`, and `claude-fable-5` at `low|medium|high`. OpenAI tests must pin GPT-5.1 to `none|low|medium|high`, `gpt-5-pro` to `high`, pre-GPT-5.1 models must reject `none`, and `xhigh` is restricted to model versions documented to support it. Gemini 2.5 `none=0` is allowed only for Flash and Flash-Lite contracts that permit disabling thinking; Gemini 2.5 Pro and Gemini 3 reject it. Non-reasoning models and unverified providers return `None`. Assert default produces no payload fields and invalid level raises.
+Test OpenAI `gpt-5.1`, `gpt-5-pro`, `o3`, and `o4-mini` on Responses and Chat mappings; Upstage `solar-pro3`/`solar-pro4` Chat `low|medium|high`; Gemini 2.5 `low=1024`, `medium=8192`, `high=24576` budgets and exact active Gemini 3 model-specific level sets (`gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-pro-preview`, and `gemini-3.1-flash-lite`); Anthropic adaptive-thinking models `claude-opus-4-6`, `claude-opus-4-7`, `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-opus-5`, `claude-sonnet-5`, and `claude-fable-5` at `low|medium|high`. OpenAI tests must pin GPT-5.1 to `none|low|medium|high`, `gpt-5-pro` to `high`, pre-GPT-5.1 models must reject `none`, and `xhigh` is restricted to model versions documented to support it. Gemini 2.5 `none=0` is allowed only for Flash and Flash-Lite contracts that permit disabling thinking; Gemini 2.5 Pro and Gemini 3 reject it. Non-reasoning models and unverified providers return `None`. Assert default produces no payload fields and invalid level raises.
 
 ```python
 def test_provider_default_adds_no_reasoning_fields() -> None:
@@ -55,12 +55,12 @@ def test_provider_default_adds_no_reasoning_fields() -> None:
     assert reasoning_payload_fields(capability, "provider_default") == {}
 ```
 
-- [ ] **Step 2: Run the focused test and verify it fails**
+- [x] **Step 2: Run the focused test and verify it fails**
 
 Run: `uv run pytest tests/unit/test_reasoning.py -q`
 Expected: collection or assertions fail because resolver and mapper are not implemented.
 
-- [ ] **Step 3: Implement the immutable resolver and mapper**
+- [x] **Step 3: Implement the immutable resolver and mapper**
 
 Implement explicit catalog/protocol/model-family matching. Emit only these verified forms: OpenAI Responses `{"reasoning":{"effort":"high"}}` with the selected canonical value; OpenAI-compatible Chat/Upstage `{"reasoning_effort":"high"}`; Gemini GenerateContent `{"generationConfig":{"thinkingConfig":{"thinkingLevel":"high"}}}` for Gemini 3 and the documented integer `thinkingBudget` mapping for Gemini 2.5; Anthropic Messages `{"thinking":{"type":"adaptive"},"output_config":{"effort":"high"}}` for eligible models. Implement the canonical-to-provider conversion as an explicit table, not guessed ordinal conversion:
 
@@ -82,12 +82,12 @@ def reasoning_payload_fields(capability: ReasoningCapability, effort: ReasoningE
     return {"thinking": {"type": "adaptive"}, "output_config": {"effort": wire_value}}
 ```
 
-Do not mutate caller payloads. Other catalog/custom providers remain default-only until their exact API/model contract is verified.
+The mapper accepts no request payload; it returns a fresh field mapping on each call, which the adapter merges into its own request body. Other catalog/custom providers remain default-only until their exact API/model contract is verified.
 
-- [ ] **Step 4: Run focused tests and lint**
+- [x] **Step 4: Run focused tests and lint**
 
 Run: `uv run pytest tests/unit/test_reasoning.py -q` and `uv run ruff check media_bridge/reasoning.py tests/unit/test_reasoning.py`
-Expected: all mapping, default omission, unsupported model, and immutable-payload tests pass.
+Expected: all mapping, default omission, unsupported model, and independently constructed result-mapping tests pass.
 
 ### Task 2: DB persistence, Control API validation, and signed snapshot
 
@@ -362,3 +362,4 @@ After all gates pass and migration application is explicitly approved, deploy th
 - Anthropic adaptive thinking and effort: https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/prompt-templates-and-variables
 - Upstage Solar reasoning example: https://console.upstage.ai/api-keys?api=chat-reasoning
 - Upstage Solar Pro 4 effort behavior: https://www.upstage.ai/blog/ko/solar-pro-4
+- Gemini GenerateContent model-specific thinking controls and active model IDs: https://ai.google.dev/gemini-api/docs/generate-content/thinking and https://ai.google.dev/gemini-api/docs/models

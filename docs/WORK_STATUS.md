@@ -1,15 +1,15 @@
 # Media Bridge 작업현황
 
-판정: RUNNING — LLM 추론 등급 구현 계획 작성 및 사용자 승인 대기
+판정: RUNNING — Task 1 완료, Task 2 DB migration 승인 대기
 정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, `docs/WORK_STATUS.md`, `docs/superpowers/specs/2026-09-22-llm-reasoning-levels-design.md`
 작업계획: 배포형은 실행 가능한 지원 Non‑Vision LLM의 Provider/API/model별 설정과 downstream 반영, 설치형은 Upstage Solar 설정. 분석 Provider 및 N:N 연결 보존. 구현 계획 `docs/superpowers/plans/2026-09-22-llm-reasoning-effort.md` 작성 완료, 구현·Task 2 nullable DB migration은 계획 검토 및 별도 명시 승인을 기다림
 Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-integrated-revision` / 추가 branch 생성 금지
 최근 완료 증거: `media_bridge_gateway/entrypoints.py`에서 기동 시 DB의 `upstage-solar`를 직접 읽어 Solar backend를 만들고, `GatewayTransactionFactory`에 같은 고정 downstream을 전달하는 것을 확인함. `media_bridge_control/configuration.py`의 snapshot에는 Provider 목록이 있지만 이 entrypoint는 snapshot Provider 목록으로 LLM downstream을 선택하지 않음.
-현재 변경: 지원 Non‑Vision LLM을 Solar로 제한하지 않도록 설계 명세와 단계별 test-first 구현 계획을 작성함. 계획은 capability resolver → DB/API/snapshot → Control UI → DB 기반 Gateway Chat/Responses → native Gemini/Anthropic → 설치형 Solar → 전체 회귀/통합 매뉴얼 순으로 분리함. 분석 Provider 및 N:N 연결 보존, DB credential 경로 유지, 사용자 지정 branch 외 추가 branch 금지를 명시. 제품 소스, DB, Secret, 배포 설정은 수정하지 않음.
-실행·검증 결과: 계획·현황 문서 `git diff --check` 수행 예정. feature code/test, 실제 Provider 호출, migration 적용 및 배포는 미수행.
+현재 변경: 공통 `media_bridge/reasoning.py` capability resolver와 Provider별 payload mapper, 43개 회귀 테스트를 추가함. OpenAI Responses/Chat, Solar Pro3/4, Gemini 2.5/활성 Gemini 3 모델별 thinking control, Anthropic adaptive effort를 명시 allowlist로 제한함. 분석 Provider·N:N 연결, DB, Secret, 배포 설정은 수정하지 않음.
+실행·검증 결과: `tests/unit/test_reasoning.py` 43 passed; Ruff 대상 파일 통과; `git diff --check` 통과. 기본 `uv run`은 사용자 uv cache ACL 오류, worktree 내부 cache 재시도는 PyPI 네트워크 차단으로 실행 불가하여 사전 설치된 `D:\Project\Media-Bridge\.venv`의 pytest/ruff 실행 파일로 동일 테스트를 수행함. 외부 Provider 호출·migration·배포 미수행.
 오류와 조치: 저장소 내 `AGENTS.md`와 `docs/DEVELOPMENT_ENVIRONMENT.md`는 현재 worktree에서 발견되지 않음. PMO 공통 지침과 확인 가능한 DESIGN/WORK_PLAN/WORK_STATUS를 적용.
-미검증·승인 경계: 계획에 열거한 Provider/API/model별 세부 capability 계약은 구현 시 공식 문서와 다시 대조해야 함. nullable `providers.reasoning_effort` 및 Alembic migration 추가는 Task 2 진입 전 별도 승인, ysna-server DB 적용은 배포 전 별도 승인 필요. 실제 유료 Provider 호출과 배포는 아직 수행하지 않음.
-정확한 다음 조치: 신산님이 구현 계획의 범위·단계와 실행 방식(Native 또는 Subagent-driven)을 검토한다. 구현 승인을 받은 뒤에도 Task 2 migration 추가 승인은 별도로 확인한다.
+미검증·승인 경계: resolver 단위 계약은 검증됐지만 Control DB/API/UI와 실제 downstream 연결은 미구현·미검증. nullable `providers.reasoning_effort`와 Alembic migration 추가는 다음 Task 진입 전 별도 승인 필요, ysna-server DB 적용은 배포 전 별도 승인 필요. Provider sandbox/E2E, 전체 테스트, build, 실제 배포 미수행.
+정확한 다음 조치: migration을 추가하기 위한 nullable `providers.reasoning_effort` DB schema 변경을 승인받으면 Task 2를 진행한다. 승인 전에는 DB/API/UI 작업을 시작하지 않는다.
 
 ## 2026-09-19 — Provider catalog schema checkpoint
 
