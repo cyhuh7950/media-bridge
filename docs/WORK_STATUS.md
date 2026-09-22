@@ -7,7 +7,7 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 최근 완료 증거: `media_bridge_gateway/entrypoints.py`에서 기동 시 DB의 `upstage-solar`를 직접 읽어 Solar backend를 만들고, `GatewayTransactionFactory`에 같은 고정 downstream을 전달하는 것을 확인함. `media_bridge_control/configuration.py`의 snapshot에는 Provider 목록이 있지만 이 entrypoint는 snapshot Provider 목록으로 LLM downstream을 선택하지 않음.
 현재 변경: 공통 `media_bridge/reasoning.py` capability resolver와 Provider별 payload mapper, 43개 회귀 테스트를 추가함. OpenAI Responses/Chat, Solar Pro3/4, Gemini 2.5/활성 Gemini 3 모델별 thinking control, Anthropic adaptive effort를 명시 allowlist로 제한함. 분석 Provider·N:N 연결, DB, Secret, 배포 설정은 수정하지 않음.
 실행·검증 결과: `tests/unit/test_reasoning.py` 43 passed; Ruff 대상 파일 통과; `git diff --check` 통과. 기본 `uv run`은 사용자 uv cache ACL 오류, worktree 내부 cache 재시도는 PyPI 네트워크 차단으로 실행 불가하여 사전 설치된 `D:\Project\Media-Bridge\.venv`의 pytest/ruff 실행 파일로 동일 테스트를 수행함. 외부 Provider 호출·migration·배포 미수행.
-오류와 조치: 저장소 내 `AGENTS.md`와 `docs/DEVELOPMENT_ENVIRONMENT.md`는 현재 worktree에서 발견되지 않음. PMO 공통 지침과 확인 가능한 DESIGN/WORK_PLAN/WORK_STATUS를 적용.
+오류와 조치: 저장소 내 `AGENTS.md`와 `docs/DEVELOPMENT_ENVIRONMENT.md`는 현재 worktree에서 발견되지 않음. PMO 공통 지침과 확인 가능한 DESIGN/WORK_PLAN/WORK_STATUS를 적용. 기본 uv cache ACL/PyPI 네트워크 제한으로 기존 저장소 가상환경의 pytest/Ruff를 사용. packaged `task-done` helper는 Windows checkout에서 실행 비트가 없는 `sdd-workspace`를 직접 실행하려다 실패했으며, 동일 검증을 직접 재실행하고 SDD ledger를 수동 기록함.
 미검증·승인 경계: resolver 단위 계약은 검증됐지만 Control DB/API/UI와 실제 downstream 연결은 미구현·미검증. nullable `providers.reasoning_effort`와 Alembic migration 추가는 다음 Task 진입 전 별도 승인 필요, ysna-server DB 적용은 배포 전 별도 승인 필요. Provider sandbox/E2E, 전체 테스트, build, 실제 배포 미수행.
 정확한 다음 조치: migration을 추가하기 위한 nullable `providers.reasoning_effort` DB schema 변경을 승인받으면 Task 2를 진행한다. 승인 전에는 DB/API/UI 작업을 시작하지 않는다.
 
