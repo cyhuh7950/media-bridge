@@ -82,6 +82,37 @@ def test_login_requires_totp_then_session_cookie_csrf_and_logout(migrated_postgr
     database.close()
 
 
+def test_http_control_endpoint_can_login_when_explicitly_enabled(
+    migrated_postgres: str,
+) -> None:
+    database = Database(migrated_postgres)
+    service = ControlPlaneService(
+        database=database,
+        security=SecurityContext(pepper=b"s" * 32),
+        now=lambda: datetime(2026, 8, 24, 1, 0, tzinfo=UTC),
+    )
+    service.ensure_default_admin()
+    client = TestClient(
+        build_control_app(
+            service=service,
+            allowed_origin="http://control.test",
+            allowed_host="control.test",
+            allow_insecure_http=True,
+        ),
+        base_url="http://control.test",
+    )
+
+    response = client.post(
+        "/admin/v1/auth/login",
+        headers={"origin": "http://control.test"},
+        json={"username": "admin", "password": "admin"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"error": {"code": "totp_required"}}
+    database.close()
+
+
 def test_password_recovery_endpoint_is_disabled(migrated_postgres: str) -> None:
     client, _, database = _client(migrated_postgres)
     response = client.post(

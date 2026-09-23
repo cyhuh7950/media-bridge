@@ -69,6 +69,7 @@ def build_control_runtime(
         service=service,
         allowed_origin=settings.allowed_origin,
         allowed_host=settings.allowed_host,
+        allow_insecure_http=settings.allow_insecure_http,
         snapshot_publisher=publisher,
         gateway_client=gateway_client,
         secret_resolver=secret_resolver,

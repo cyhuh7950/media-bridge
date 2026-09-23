@@ -91,6 +91,7 @@ def build_control_app(
     service: ControlPlaneService,
     allowed_origin: str,
     allowed_host: str,
+    allow_insecure_http: bool = False,
     snapshot_publisher: SnapshotPublisher | None = None,
     gateway_client: GatewayClient | None = None,
     secret_resolver: GatewaySecretResolver | None = None,
@@ -116,7 +117,7 @@ def build_control_app(
 
     def secure_request(request: Request) -> Response | None:
         host = request.headers.get("host", "").partition(":")[0].lower()
-        if request.url.scheme != "https":
+        if request.url.scheme != "https" and not allow_insecure_http:
             return _error("https_required", 400)
         if host != allowed_host.lower() or request.headers.get("origin") != allowed_origin:
             return _error("origin_rejected", 403)
