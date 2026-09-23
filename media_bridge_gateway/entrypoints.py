@@ -24,6 +24,7 @@ from media_bridge.backends import (
     OpenAICompatibleVisionBackend,
     SolarAnalysisBackend,
     UpstageOcrBackend,
+    VisionBackend,
     VisionResult,
     load_secret,
 )
@@ -256,6 +257,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
             credential_loader=lambda: db_provider_credential(str(ocr_provider.id)),
             client=client,
         )
+        vision: VisionBackend
         if vision_provider is None:
             vision = _UnavailableVisionBackend()
         else:

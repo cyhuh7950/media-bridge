@@ -465,7 +465,7 @@ def build_control_app(
         if rejected is not None:
             return rejected
         kind = request.query_params.get("kind", "analysis")
-        if kind not in {"analysis", "llm"}:
+        if kind not in ("analysis", "llm"):
             return _error("invalid_provider_catalog_kind", 400)
         return JSONResponse(provider_catalog_payload(kind))
 
@@ -554,6 +554,8 @@ def build_control_app(
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         try:
             if request.method == "DELETE":
                 await run_in_threadpool(
@@ -613,6 +615,8 @@ def build_control_app(
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         model_id = request.path_params["item_id"]
         try:
             if request.method == "PATCH":

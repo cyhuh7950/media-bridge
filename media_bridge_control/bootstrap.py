@@ -237,6 +237,7 @@ class ControlPlaneService:
                 stored is None
                 or initialized
                 or stored.used_at is not None
+                or stored.expires_at is None
                 or stored.expires_at <= now
                 or not self.security.matches(
                     token,

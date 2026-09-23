@@ -18,10 +18,10 @@ class ProviderCatalogEntry:
     display_name: str
     kind: ProviderKind
     protocol: str
-    capabilities: tuple[str, ...]
+    capabilities: tuple[Literal["text", "image", "pdf", "ocr"], ...]
     default_endpoint: str | None
     secret_env: str | None
-    default_model_id: str
+    default_model_id: str | None
 
 
 _CATALOG: tuple[ProviderCatalogEntry, ...] = (

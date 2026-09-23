@@ -124,8 +124,8 @@ class TestLabService:
             profile = session.get(RoutingProfile, profile_id)
             if profile is None or not profile.enabled:
                 raise TestLabError("routing_profile_unavailable")
-            analysis_id = (profile.analysis_provider_ids or [None])[0]
-            llm_id = (profile.llm_provider_ids or [None])[0]
+            analysis_id = profile.analysis_provider_ids[0] if profile.analysis_provider_ids else None
+            llm_id = profile.llm_provider_ids[0] if profile.llm_provider_ids else None
             analysis = session.get(Provider, analysis_id) if analysis_id else None
             llm = session.get(Provider, llm_id) if llm_id else None
             if analysis is None or llm is None or not analysis.enabled or not llm.enabled:
@@ -137,7 +137,13 @@ class TestLabService:
             return self._security.decrypt_secret(provider.encrypted_api_key)
         return self._secret_resolver.resolve(
             SecretReference(
-                kind=provider.secret_ref_kind, identifier=provider.secret_ref_identifier
+                kind=SecretReference.model_validate(
+                    {
+                        "kind": provider.secret_ref_kind,
+                        "identifier": provider.secret_ref_identifier,
+                    }
+                ).kind,
+                identifier=provider.secret_ref_identifier,
             )
         )
 
@@ -162,7 +168,7 @@ class TestLabService:
         response.raise_for_status()
         body = response.json()
         if isinstance(body, dict) and isinstance(body.get("text"), str):
-            return body["text"].strip()
+            return str(body["text"]).strip()
         pages = body.get("pages") if isinstance(body, dict) else None
         if isinstance(pages, list):
             page_text = "\n".join(
