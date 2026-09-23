@@ -29,9 +29,9 @@ class RecordingGateway:
 
 @pytest.mark.parametrize(
     ("selected_model", "expected_model"),
-    [(None, None), ("auto", "auto"), ("vendor/public-model", "vendor/public-model")],
+    [(None, "auto"), ("auto", "auto"), ("vendor/public-model", "vendor/public-model")],
 )
-async def test_external_flow_preserves_selected_model_semantics_for_gateway(
+async def test_external_flow_sends_gateway_auto_for_default_model_selection(
     selected_model: str | None,
     expected_model: str | None,
 ) -> None:

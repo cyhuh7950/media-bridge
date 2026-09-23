@@ -234,12 +234,10 @@ class TestLabService:
     async def run(self, request: TestLabRunRequest) -> dict[str, object]:
         if request.gateway_url is None or request.api_key is None:
             raise TestLabError("downstream_credentials_required")
-        # Preserve the caller's model selection exactly. In particular, an
-        # omitted model is the Gateway's configured default, while ``auto``
-        # and an explicit public model are separate OpenAI-compatible inputs.
-        # Keep model choice intact; only the Gateway can resolve its default
-        # or ``auto`` against the snapshot it actually serves.
-        target_model = request.target_model
+        # Use the OpenAI-compatible ``auto`` model for the UI's unspecified
+        # choice. The target Gateway resolves it against its own active
+        # snapshot; Control must not guess from its local model catalog.
+        target_model = request.target_model or "auto"
         data = self._decode(request.media_base64)
         asset_id: str | None = None
         primary_error: TestLabError | None = None
