@@ -325,3 +325,4 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 - `0013_management_audit_fields` migration으로 네 관리 테이블에 감사 필드를 추가했다. 기존 행은 과거 수정자를 복원할 수 없으므로 값이 없을 때 `—`로 표시하며, 신규 등록·수정부터 실제 관리자 계정을 기록한다.
 - 모델 Capability의 근거 메모는 선택 입력이며, 화면의 30일 만료를 모델 정책으로 강제하지 않는다. 파일·영수증 등의 보안 TTL과는 별개다.
 - Web typecheck, Operations 14개, production build, Control unit 62개, migration packaging 14개 통과. PostgreSQL fixture 기반 migration integration은 로컬 실행이 정체되어 미검증이다.
+- WSL-server에 `0d4b16f`를 배포했다. Control/Data/DB 컨테이너는 running, `http://172.27.253.53:18642/health`는 `ok`, DB head는 `0014_model_no_expiry`다.
