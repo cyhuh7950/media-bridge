@@ -8,7 +8,11 @@
 - 외부 모델 선택은 미지정(기본 모델), `auto`(Media Bridge 내부 선택), 명시적 `provider/model`로 구분했다. 요청 추론 등급 → 공개 모델 설정 → Provider 설정 → Media Bridge 정책 기본값 순으로 적용하며 공개 표준값은 `low|medium|high`이다.
 - Test Lab의 전체 파이프라인과 외부 클라이언트 흐름 시험 모두 공개 모델·추론 등급을 선택한다. Provider 화면의 Secret 환경변수 입력·표시 경로는 제거하고 Provider API key는 DB 보관 경로만 사용한다.
 - 검증: 변경 Python Ruff 통과, control unit/packaging 74 passed, Web build 및 Operations/Test Lab 16 passed. Gateway unit은 33 passed, 3 failed이며 실패 중 downstream capability fixture는 수정 후 해당 테스트가 통과했고, 나머지는 기존 FakeDownstream 계약 assertion 및 만료일 fixture 문제로 미수정·미해결이다.
-- 아직 commit/push, WSL-server 배포, DB migration 적용, 브라우저 운영 smoke는 수행하지 않았다. 다음은 변경 diff 검토 후 checkpoint commit/push와 배포 전 재검증이다.
+- checkpoint `5c5adad` 및 Data Plane 기동 보완 `9fe2f9c`를 `github-cyhuh7950` SSH alias 원격 branch에 push했다. WSL-server의 기존 배포형 디렉터리는 `.env`만 보존하고 `9fe2f9c` checkout으로 교체했다.
+- WSL-server 기존 DB `0010_previous_csrf_digest`에 승인된 `0011_public_model_routing` migration을 적용했고, 기존 Secret은 서버의 보존된 `media-bridge-runtime/deploy/secrets`에서 새 배포 디렉터리로 복구·검증했다. Secret 원문은 출력하지 않았다.
+- 배포형 Control/Data/DB를 새 이미지로 재기동했다. Control `172.27.253.53:18642` 및 Data Plane health가 healthy이고 Control `/`, `/login`, `/health`는 HTTP 200이다. Data Plane `/v1/models`는 인증 없이 HTTP 401로 차단된다. 설치형은 건드리지 않았다.
+- Data Plane 최초 기동에서 `openai-vision` 하드코딩으로 실패한 문제를 확인해, 등록된 분석 Provider를 사용하고 Vision Provider가 없으면 optional backend로 기동하도록 `9fe2f9c`에서 수정했다. 현재 DB에는 분석 Provider `upstage-document-parse`, LLM Provider `upstage-solar`가 있고 공개 모델은 아직 0개이므로 `/v1/models` 공개 목록과 실제 LLM 호출은 Provider/라우팅/모델 등록 후 확인해야 한다.
+- 남은 미검증: 브라우저 admin 로그인·Provider/라우팅/모델 등록 smoke 및 외부 Upstage 호출. 로컬 Gateway entrypoint 테스트 1건은 fixture 만료일이 현재 날짜와 겹친 기존 시간 의존 실패이며, 이번 변경 경로와 무관하다.
 
 ## 2026-09-22 — WSL 배포형 clean redeploy 및 초기 Control 기동 복구
 
