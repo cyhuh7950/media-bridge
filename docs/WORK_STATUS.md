@@ -1,5 +1,11 @@
 # Media Bridge 작업현황
 
+## 2026-09-23 — OmniRoute 흐름 시험의 모델·추론 등급 분리 설정
+
+- Test Lab의 `OmniRoute → Media Bridge 전체 흐름 시험`에 독립적인 공개 모델과 추론 등급 선택을 추가했다.
+- 위의 전체 파이프라인 시험 선택값과 분리하며, OmniRoute 실행 시 아래 설정값을 `/test-lab/run` 요청에 전달한다.
+- 검증: Test Lab 5 passed, Web typecheck/build passed. 배포형 Control 이미지 재빌드·재기동은 커밋 push 후 수행한다.
+
 ## 2026-09-23 — 모델과 내부 라우팅 책임 분리
 
 - 모델 생성 화면에서 `내부 실행 라우팅`을 필수 입력·조회 항목으로 제거했다. 모델은 공개 `provider/model`, 기준 Non‑Vision LLM Provider, 모델별 추론 등급·capability만 관리한다.
