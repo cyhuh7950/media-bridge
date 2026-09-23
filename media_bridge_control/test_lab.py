@@ -124,7 +124,11 @@ class TestLabService:
             profile = session.get(RoutingProfile, profile_id)
             if profile is None or not profile.enabled:
                 raise TestLabError("routing_profile_unavailable")
-            analysis_id = profile.analysis_provider_ids[0] if profile.analysis_provider_ids else None
+            analysis_id = (
+                profile.analysis_provider_ids[0]
+                if profile.analysis_provider_ids
+                else None
+            )
             llm_id = profile.llm_provider_ids[0] if profile.llm_provider_ids else None
             analysis = session.get(Provider, analysis_id) if analysis_id else None
             llm = session.get(Provider, llm_id) if llm_id else None
