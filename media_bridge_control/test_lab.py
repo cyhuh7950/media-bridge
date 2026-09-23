@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from media_bridge_control.db import Database
 from media_bridge_control.gateway_client import GatewayClient, GatewayClientError
-from media_bridge_control.models import ModelCapability, Provider, RoutingProfile
+from media_bridge_control.models import Provider, RoutingProfile
 from media_bridge_control.schemas import SecretReference, TestLabPreviewRequest, TestLabRunRequest
 from media_bridge_control.secrets import GatewaySecretResolver, SecretResolutionError
 from media_bridge_control.security import SecurityContext
@@ -234,7 +234,12 @@ class TestLabService:
     async def run(self, request: TestLabRunRequest) -> dict[str, object]:
         if request.gateway_url is None or request.api_key is None:
             raise TestLabError("downstream_credentials_required")
-        target_model = self._run_target_model(request)
+        # Preserve the caller's model selection exactly. In particular, an
+        # omitted model is the Gateway's configured default, while ``auto``
+        # and an explicit public model are separate OpenAI-compatible inputs.
+        # Keep model choice intact; only the Gateway can resolve its default
+        # or ``auto`` against the snapshot it actually serves.
+        target_model = request.target_model
         data = self._decode(request.media_base64)
         asset_id: str | None = None
         primary_error: TestLabError | None = None
@@ -270,25 +275,6 @@ class TestLabService:
         if result is None:
             raise TestLabError("gateway_unavailable")
         return result
-
-    def _run_target_model(self, request: TestLabRunRequest) -> str:
-        """Resolve the selected route's downstream model for the external hop.
-
-        The UI deliberately sends ``auto`` so the OmniRoute test exercises the
-        same routing profile selected in the existing whole-pipeline test.
-        """
-        with self._database.session() as session:
-            if request.target_model and request.target_model != "auto":
-                model = session.scalar(
-                    select(ModelCapability).where(ModelCapability.model_id == request.target_model)
-                )
-                if model is None:
-                    raise TestLabError("model_not_found")
-                return model.model_id
-            model = session.scalar(select(ModelCapability).order_by(ModelCapability.model_id))
-            if model is None:
-                raise TestLabError("model_unavailable")
-            return model.model_id
 
     @staticmethod
     def _decode(value: str) -> bytes:
@@ -327,7 +313,7 @@ class TestLabService:
     def _responses_payload(
         request: TestLabRunRequest,
         asset_id: str,
-        target_model: str,
+        target_model: str | None,
     ) -> dict[str, Any]:
         media_part: dict[str, object]
         if request.media_type == "image":
@@ -339,7 +325,7 @@ class TestLabService:
                 "filename": request.filename,
             }
         return {
-            "model": target_model,
+            **({"model": target_model} if target_model is not None else {}),
             **(
                 {"reasoning_effort": request.reasoning_effort}
                 if request.reasoning_effort != "provider_default"

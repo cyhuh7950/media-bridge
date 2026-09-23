@@ -17,8 +17,9 @@ it("sends the selected public model and standard reasoning effort", async () => 
     : Promise.resolve(jsonResponse({ action: "preview", status: "validated" })));
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="operator" csrfToken="csrf-value" />);
-  await user.selectOptions(await screen.findByLabelText("공개 모델"), "upstage/solar-pro4");
-  await user.selectOptions(screen.getByLabelText("추론 등급"), "high");
+  await screen.findAllByRole("option", { name: "upstage/solar-pro4" });
+  await user.selectOptions(screen.getAllByLabelText("공개 모델")[0]!, "upstage/solar-pro4");
+  await user.selectOptions(screen.getAllByLabelText("추론 등급")[0]!, "high");
   await user.type(screen.getByLabelText("질문"), "이 이미지의 내용을 설명해줘");
   await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image());
   fireEvent.submit(screen.getByRole("button", { name: "전체 파이프라인 시험" }).closest("form")!);
@@ -30,37 +31,48 @@ it("sends the selected public model and standard reasoning effort", async () => 
   expect(body.reasoning_effort).toBe("high");
 });
 
-it("sends OmniRoute-specific model and reasoning settings", async () => {
+it("sends external-client model and reasoning settings", async () => {
   const user = userEvent.setup();
   const fetchMock = vi.fn<typeof fetch>((input) => requestUrl(input).endsWith("/models")
     ? Promise.resolve(jsonResponse([{ model_id: "upstage/solar-pro4" }, { model_id: "openai/gpt-5" }]))
-    : Promise.resolve(jsonResponse({ action: "omniroute", status: "validated" })));
+    : Promise.resolve(jsonResponse({ action: "external", status: "validated" })));
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="operator" csrfToken="csrf-value" />);
-  await user.selectOptions(await screen.findByLabelText("OmniRoute 공개 모델"), "openai/gpt-5");
-  await user.selectOptions(screen.getByLabelText("OmniRoute 추론 등급"), "high");
-  await user.type(screen.getByLabelText("질문"), "OmniRoute 설정 시험");
+  await screen.findAllByRole("option", { name: "openai/gpt-5" });
+  await user.selectOptions(screen.getAllByLabelText("공개 모델")[1]!, "openai/gpt-5");
+  await user.selectOptions(screen.getAllByLabelText("추론 등급")[1]!, "high");
+  await user.type(screen.getByLabelText("질문"), "외부 클라이언트 설정 시험");
   await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image());
   await user.type(screen.getByLabelText("Media Bridge 접근 키 원문"), "mbc-test-key");
-  fireEvent.submit(screen.getByRole("button", { name: "OmniRoute 전체 흐름 시험" }).closest("form")!);
-  expect(await screen.findByText(/omniroute/)).toBeInTheDocument();
+  fireEvent.submit(screen.getByRole("button", { name: "외부 클라이언트 전체 흐름 시험" }).closest("form")!);
+  expect(await screen.findByText(/external/)).toBeInTheDocument();
   const call = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/run");
   const body = JSON.parse(String((call?.[1] as RequestInit).body));
   expect(body.target_model).toBe("openai/gpt-5");
   expect(body.reasoning_effort).toBe("high");
 });
 
-it("keeps omitted model distinct from auto", async () => {
+it.each([
+  { name: "미지정 모델은 Gateway 기본값을 그대로 사용한다", selected: "", expected: undefined },
+  { name: "auto는 Gateway 자동 선택 값으로 전달한다", selected: "auto", expected: "auto" },
+])("$name", async ({ selected, expected }) => {
   const user = userEvent.setup();
   const fetchMock = vi.fn<typeof fetch>((input) => requestUrl(input).endsWith("/models")
-    ? Promise.resolve(jsonResponse([]))
+    ? Promise.resolve(jsonResponse([{ model_id: "vendor/public-model" }]))
     : Promise.resolve(jsonResponse({ result: "ok" })));
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="operator" csrfToken="csrf-value" />);
-  expect(await screen.findByLabelText("공개 모델")).toBeInTheDocument();
-  expect(screen.getByLabelText("공개 모델")).toHaveValue("");
-  await user.selectOptions(screen.getByLabelText("공개 모델"), "auto");
-  expect(screen.getByLabelText("공개 모델")).toHaveValue("auto");
+  const modelSelect = screen.getAllByLabelText("공개 모델")[1]!;
+  await screen.findAllByRole("option", { name: "vendor/public-model" });
+  if (selected) await user.selectOptions(modelSelect, selected);
+  await user.type(screen.getByLabelText("질문"), "모델 라우팅 시험");
+  await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image());
+  await user.type(screen.getByLabelText("Media Bridge 접근 키 원문"), "mbc-test-key");
+  fireEvent.submit(screen.getByRole("button", { name: "외부 클라이언트 전체 흐름 시험" }).closest("form")!);
+  await screen.findByText(/시험 결과/);
+  const call = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/run");
+  const body = JSON.parse(String((call?.[1] as RequestInit).body));
+  expect(body.target_model).toBe(expected);
 });
 
 it("clears the result after its TTL", async () => {

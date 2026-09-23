@@ -1,5 +1,20 @@
 # Media Bridge 작업현황
 
+## 2026-09-23 — 외부 클라이언트 흐름 시험 일반화 및 기본 모델 전달 수정
+
+- 테스트 랩의 `OmniRoute → Media Bridge` 전용 제목·안내·결과명을 `외부 클라이언트 → Media Bridge`로 일반화하고 OmniRoute는 예시 중 하나로 표기했다. 외부 endpoint·접근 키·공개 모델·추론 등급 입력은 유지한다.
+- `capability_unknown`의 원인이 될 수 있는 결함을 코드에서 확인했다. 기존 Test Lab은 미지정 또는 `auto`를 Control DB에서 정렬상 첫 모델로 치환했지만, 호출 대상 Media Bridge는 자신이 발행한 snapshot으로 모델을 해석한다. Control DB와 해당 Gateway snapshot이 다르면 다른 모델 ID가 전달된다. 다만 캡처된 실제 `capability_unknown` 요청/서버 로그는 없어 그 화면 오류와의 직접 인과는 미확정이다.
+- 수정: 외부 흐름 시험은 모델 미지정을 요청에서 생략하고 `auto` 및 명시적 `provider/model`은 그대로 전달한다. 모델 선택·자동 라우팅의 주체를 요청 대상 Gateway로 일원화했다. UI도 특정 route 제품명이 아닌 외부 클라이언트 일반 흐름으로 표시한다.
+- RED→GREEN: 미지정·`auto`·명시 모델 전달 회귀시험은 기존 DB 선조회 동작에서 미지정 및 `auto` 두 건이 실패했고, 수정 후 세 케이스 모두 통과했다. Test Lab UI 6 passed, Control handoff 및 Gateway HTTP 회귀시험 10 passed, Web typecheck/build, 변경 Python Ruff 및 `git diff --check` 통과.
+- 미검증: 배포된 브라우저가 여전히 OmniRoute 전용 화면을 보이는지 여부는 현 환경에 반영되지 않은 번들일 수 있다. 실제 `capability_unknown` 요청의 서버측 재현, 원격 Gateway snapshot 정합성 및 실제 endpoint smoke는 미수행이다. 설치형·배포형 runtime은 변경하지 않았다.
+
+## 2026-09-24 — 외부 클라이언트 흐름 수정 배포 시도
+
+- 신산님 배포 지시에 따라 현재 사용자 브라우저의 `http://172.27.253.53:18642/test-lab` 화면을 직접 확인했다. 서비스는 접근 가능하지만 화면은 아직 `OmniRoute → Media Bridge` 구버전이다.
+- 정식 배포 절차의 SSH 별칭 `WSL-server` 접속은 `wsl-server` 이름 해석 실패, Git 원격 별칭 `github-cyhuh7950` 접속도 이름 해석 실패로 push 전 단계에서 중단됐다. SSH 설정·인증정보·대체 접속 주소는 변경하지 않았다.
+- 검증 재실행: Windows 기본 임시 경로 접근 거부로 첫 pytest가 `3 passed, 7 errors`였으나, worktree 내부의 신규 격리 basetemp로 재실행해 Control handoff 및 Gateway HTTP 회귀시험 `10 passed`.
+- 상태: 로컬 수정은 준비됐으나 안전한 remote checkpoint, WSL exact-commit 배포와 실제 화면 확인은 미완료. SSH 별칭 이름 해석이 복구되면 현재 branch의 검증 commit을 push하고 WSL 정식 checkout에서 배포를 재개한다.
+
 ## 2026-09-23 — 모델 Capability 설정 추가
 
 - 모델 생성·수정 화면에 `text`, `image`, `pdf` Capability 선택을 추가하고 선택값을 `input_modalities`로 저장한다. 모델 Capability 계약이 지원하지 않는 `ocr`는 모델 입력 Capability 목록에 노출하지 않는다.
