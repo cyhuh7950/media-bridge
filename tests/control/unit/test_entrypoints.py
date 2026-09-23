@@ -6,7 +6,7 @@ from media_bridge_control import entrypoints
 def test_control_entrypoint_accepts_latest_alembic_revision(monkeypatch) -> None:
     database = MagicMock()
     database.engine.connect.return_value.__enter__.return_value.scalar.return_value = (
-        "0009_provider_reasoning_effort"
+        "0010_previous_csrf_digest"
     )
     monkeypatch.setattr(entrypoints, "Database", lambda _url: database)
 
