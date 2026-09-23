@@ -85,9 +85,7 @@ class AdminSession(Base):
     csrf_digest: Mapped[str] = mapped_column(String(128))
     previous_csrf_digest: Mapped[str | None] = mapped_column(String(128))
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -204,7 +202,9 @@ class ModelCapability(Base):
     input_modalities: Mapped[list[str]] = mapped_column(JSONB)
     evidence: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     pdf_passthrough_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     reasoning_effort: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

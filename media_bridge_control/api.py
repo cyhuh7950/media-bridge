@@ -467,7 +467,8 @@ def build_control_app(
         kind = request.query_params.get("kind", "analysis")
         if kind not in ("analysis", "llm"):
             return _error("invalid_provider_catalog_kind", 400)
-        return JSONResponse(provider_catalog_payload(kind))
+        catalog_kind = "llm" if kind == "llm" else "analysis"
+        return JSONResponse(provider_catalog_payload(catalog_kind))
 
     async def provider_reasoning_options(request: Request) -> Response:
         _, rejected = await authorize(
