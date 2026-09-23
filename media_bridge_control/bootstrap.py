@@ -52,7 +52,7 @@ class LoginResult:
 
 @dataclass(frozen=True, slots=True)
 class SessionResult:
-    principal: "Principal"
+    principal: Principal
     csrf_token: str
 
 

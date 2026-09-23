@@ -65,7 +65,12 @@ class ConfigurationService:
                 for row in rows
             ]
 
-    def create_provider(self, request: ProviderCreate, *, updated_by: str | None = None) -> dict[str, Any]:
+    def create_provider(
+        self,
+        request: ProviderCreate,
+        *,
+        updated_by: str | None = None,
+    ) -> dict[str, Any]:
         try:
             values = self._provider_values(request)
             if request.api_key is not None:
@@ -86,7 +91,13 @@ class ConfigurationService:
             rows = list(session.scalars(select(Provider).order_by(Provider.name)))
             return [self._provider(row) for row in rows]
 
-    def update_provider(self, provider_id: UUID, request: ProviderUpdate, *, updated_by: str | None = None) -> dict[str, Any]:
+    def update_provider(
+        self,
+        provider_id: UUID,
+        request: ProviderUpdate,
+        *,
+        updated_by: str | None = None,
+    ) -> dict[str, Any]:
         try:
             with self._database.session() as session:
                 row = session.get(Provider, provider_id)
@@ -200,7 +211,12 @@ class ConfigurationService:
             "updated_by": row.updated_by,
         }
 
-    def create_routing_profile(self, request: RoutingProfileCreate, *, updated_by: str | None = None) -> dict[str, Any]:
+    def create_routing_profile(
+        self,
+        request: RoutingProfileCreate,
+        *,
+        updated_by: str | None = None,
+    ) -> dict[str, Any]:
         try:
             with self._database.session() as session:
                 analysis_ids, llm_ids = self._routing_provider_ids(session, request)
@@ -300,7 +316,12 @@ class ConfigurationService:
             "updated_by": row.updated_by,
         }
 
-    def create_model(self, request: ModelCapabilityCreate, *, updated_by: str | None = None) -> dict[str, Any]:
+    def create_model(
+        self,
+        request: ModelCapabilityCreate,
+        *,
+        updated_by: str | None = None,
+    ) -> dict[str, Any]:
         try:
             with self._database.session() as session:
                 profile = (
@@ -443,7 +464,12 @@ class ConfigurationService:
             "updated_by": row.updated_by,
         }
 
-    def create_policy(self, request: PolicyCreate, *, updated_by: str | None = None) -> dict[str, Any]:
+    def create_policy(
+        self,
+        request: PolicyCreate,
+        *,
+        updated_by: str | None = None,
+    ) -> dict[str, Any]:
         body = request.model_dump(exclude={"name"})
         try:
             with self._database.session() as session:
@@ -459,7 +485,13 @@ class ConfigurationService:
             rows = list(session.scalars(select(Policy).order_by(Policy.name)))
             return [self._policy(row) for row in rows]
 
-    def update_policy(self, policy_id: UUID, request: PolicyUpdate, *, updated_by: str | None = None) -> dict[str, Any]:
+    def update_policy(
+        self,
+        policy_id: UUID,
+        request: PolicyUpdate,
+        *,
+        updated_by: str | None = None,
+    ) -> dict[str, Any]:
         try:
             with self._database.session() as session:
                 row = session.get(Policy, policy_id)
@@ -491,7 +523,13 @@ class ConfigurationService:
 
     @staticmethod
     def _policy(row: Policy) -> dict[str, Any]:
-        return {"id": str(row.id), "name": row.name, **row.body, "updated_at": row.updated_at.isoformat() if row.updated_at else None, "updated_by": row.updated_by}
+        return {
+            "id": str(row.id),
+            "name": row.name,
+            **row.body,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "updated_by": row.updated_by,
+        }
 
     def snapshot_body(self) -> dict[str, Any]:
         with self._database.session() as session:

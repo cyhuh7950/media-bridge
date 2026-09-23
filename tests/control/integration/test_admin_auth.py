@@ -86,7 +86,7 @@ def test_previous_csrf_token_survives_one_refresh(migrated_postgres: str) -> Non
     client, service, database = _client(migrated_postgres)
     origin = {"origin": "https://control.test"}
     enrollment = service.begin_totp_enrollment_with_password(
-        username="admin", password="admin"
+        username="admin", password="admin"  # noqa: S106
     )
     counter = int(datetime(2026, 8, 24, 1, 0, tzinfo=UTC).timestamp()) // 30
     code = _hotp(base64.b32decode(enrollment.secret + "=" * (-len(enrollment.secret) % 8)), counter)
@@ -102,7 +102,8 @@ def test_previous_csrf_token_survives_one_refresh(migrated_postgres: str) -> Non
     assert client.post("/admin/v1/auth/logout", headers=origin).status_code == 403
     assert (
         client.post(
-            "/admin/v1/auth/logout", headers={"origin": "https://control.test", "x-csrf-token": first_csrf}
+            "/admin/v1/auth/logout",
+            headers={"origin": "https://control.test", "x-csrf-token": first_csrf},
         ).status_code
         == 204
     )
@@ -151,7 +152,7 @@ def test_http_totp_login_sets_cookie_usable_without_tls(migrated_postgres: str) 
     service.ensure_default_admin()
     enrollment = service.begin_totp_enrollment_with_password(
         username="admin",
-        password="admin",
+        password="admin",  # noqa: S106
     )
     counter = int(now.timestamp()) // 30
     code = _hotp(base64.b32decode(enrollment.secret + "=" * (-len(enrollment.secret) % 8)), counter)

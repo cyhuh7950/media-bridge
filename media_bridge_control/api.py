@@ -446,7 +446,11 @@ def build_control_app(
             return JSONResponse(await run_in_threadpool(configuration.list_providers))
         try:
             body = await _json(request, ProviderCreate)
-            result = await run_in_threadpool(configuration.create_provider, body, updated_by=principal.username)
+            result = await run_in_threadpool(
+                configuration.create_provider,
+                body,
+                updated_by=principal.username,
+            )
         except ControlPlaneError as error:
             return _error(error.code, 400)
         except ConfigurationError as error:
@@ -531,7 +535,11 @@ def build_control_app(
             return JSONResponse(await run_in_threadpool(configuration.list_routing_profiles))
         try:
             body = await _json(request, RoutingProfileCreate)
-            result = await run_in_threadpool(configuration.create_routing_profile, body, updated_by=principal.username)
+            result = await run_in_threadpool(
+                configuration.create_routing_profile,
+                body,
+                updated_by=principal.username,
+            )
         except ControlPlaneError as error:
             return _error(error.code, 400)
         except ConfigurationError as error:
@@ -586,7 +594,11 @@ def build_control_app(
             return JSONResponse(await run_in_threadpool(configuration.list_models))
         try:
             body = await _json(request, ModelCapabilityCreate)
-            result = await run_in_threadpool(configuration.create_model, body, updated_by=principal.username)
+            result = await run_in_threadpool(
+                configuration.create_model,
+                body,
+                updated_by=principal.username,
+            )
         except ControlPlaneError as error:
             return _error(error.code, 400)
         except ConfigurationError as error:
@@ -639,7 +651,11 @@ def build_control_app(
             return JSONResponse(await run_in_threadpool(configuration.list_policies))
         try:
             body = await _json(request, PolicyCreate)
-            result = await run_in_threadpool(configuration.create_policy, body, updated_by=principal.username)
+            result = await run_in_threadpool(
+                configuration.create_policy,
+                body,
+                updated_by=principal.username,
+            )
         except ControlPlaneError as error:
             return _error(error.code, 400)
         except ConfigurationError as error:

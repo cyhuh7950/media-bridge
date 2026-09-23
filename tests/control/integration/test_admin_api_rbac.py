@@ -236,6 +236,6 @@ def test_provider_api_encrypts_raw_secret_and_persists_reference_only(
             ]
         )
         assert raw_value not in persisted
-        assert provider.secret_ref_kind == "db"
-        assert provider.secret_ref_identifier == "provider_api_key"
+        assert provider.secret_ref_kind == "db"  # noqa: S105
+        assert provider.secret_ref_identifier == "provider_api_key"  # noqa: S105
     database.close()
