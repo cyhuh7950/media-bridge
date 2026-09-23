@@ -1,5 +1,11 @@
 # Media Bridge 작업현황
 
+## 2026-09-23 — Provider 약어 저장 오류 수정
+
+- Provider 수정 화면에서 기존 약어 `US`가 서버 계약의 소문자 형식과 맞지 않아 저장 요청이 422로 거부되던 문제를 확인했다.
+- 편집 화면 초기화·입력·저장 요청 모두 Provider 약어를 소문자로 정규화했다. Provider 선택 목록과 API 키 저장 경로는 변경하지 않았다.
+- 검증: Operations 14 passed, Web typecheck/build passed, `git diff --check` passed. 배포형 Control 재빌드·재기동 후 브라우저 Provider 저장 smoke를 수행한다.
+
 ## 2026-09-23 — OmniRoute 흐름 시험의 모델·추론 등급 분리 설정
 
 - Test Lab의 `OmniRoute → Media Bridge 전체 흐름 시험`에 독립적인 공개 모델과 추론 등급 선택을 추가했다.

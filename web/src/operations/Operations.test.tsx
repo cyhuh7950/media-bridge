@@ -178,6 +178,43 @@ it("uses the standard provider list actions with register/edit dialog and bulk d
   expect(calls).toContain("DELETE /admin/v1/providers/provider-2");
 });
 
+it("normalizes provider aliases to lowercase before saving", async () => {
+  const calls: Array<{ path: string; method: string; body?: Record<string, unknown> }> = [];
+  const provider = {
+    id: "provider-1",
+    name: "upstage-solar",
+    alias: "US",
+    kind: "llm",
+    catalog_id: "upstage-solar",
+    model_id: "solar-pro4",
+    protocol: "openai-chat-completions",
+    endpoint: "https://api.upstage.ai/v1",
+    capabilities: ["text"],
+    reasoning_effort: "provider_default",
+    enabled: true,
+  };
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>((input, init) => {
+    const path = requestPath(input);
+    const method = init?.method ?? "GET";
+    const body = parseRequestBody(init?.body);
+    calls.push({ path, method, body });
+    if (path === "/admin/v1/providers" && method === "GET") return Promise.resolve(jsonResponse([provider]));
+    if (path.startsWith("/admin/v1/provider-reasoning-options?")) return Promise.resolve(jsonResponse({ efforts: ["provider_default", "low", "medium", "high"] }));
+    if (path === "/admin/v1/providers/provider-1" && method === "PATCH") return Promise.resolve(jsonResponse(provider));
+    return Promise.reject(new Error(`unexpected request: ${method} ${path}`));
+  }));
+  const user = userEvent.setup();
+
+  render(<ProvidersPage role="admin" csrfToken="csrf" />);
+  const row = await screen.findByRole("row", { name: /upstage-solar/ });
+  await user.click(within(row).getByRole("button", { name: "수정" }));
+  fireEvent.change(screen.getByLabelText("Provider 약어"), { target: { value: "US" } });
+  await user.click(screen.getByRole("button", { name: "저장" }));
+
+  const saved = calls.find((call) => call.method === "PATCH");
+  expect(saved?.body?.alias).toBe("us");
+});
+
 it("registers an LLM with only server-supported reasoning choices", async () => {
   const calls: Array<{ path: string; method: string; body?: Record<string, unknown> }> = [];
   const fetchMock = vi.fn<typeof fetch>((input, init) => {
