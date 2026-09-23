@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -29,7 +29,7 @@ from media_bridge_control.gateway_client import (
     GatewayClientError,
     HttpGatewayClient,
 )
-from media_bridge_control.provider_catalog import provider_catalog_payload
+from media_bridge_control.provider_catalog import ProviderKind, provider_catalog_payload
 from media_bridge_control.schemas import (
     ConnectionCreate,
     ConnectionUpdate,
@@ -467,7 +467,7 @@ def build_control_app(
         kind = request.query_params.get("kind", "analysis")
         if kind not in ("analysis", "llm"):
             return _error("invalid_provider_catalog_kind", 400)
-        catalog_kind = "llm" if kind == "llm" else "analysis"
+        catalog_kind = cast(ProviderKind, "llm" if kind == "llm" else "analysis")
         return JSONResponse(provider_catalog_payload(catalog_kind))
 
     async def provider_reasoning_options(request: Request) -> Response:
