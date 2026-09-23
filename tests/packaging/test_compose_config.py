@@ -17,8 +17,16 @@ def test_compose_has_three_isolated_services() -> None:
     assert "ports" not in services["media-bridge-db"]
     assert config["networks"]["database"]["internal"] is True
     assert set(services["media-bridge-db"]["networks"]) == {"database"}
-    assert set(services["media-bridge-data"]["networks"]) == {"product", "egress"}
-    assert set(services["media-bridge-control"]["networks"]) == {"database", "product"}
+    assert set(services["media-bridge-data"]["networks"]) == {
+        "database",
+        "product",
+        "egress",
+    }
+    assert set(services["media-bridge-control"]["networks"]) == {
+        "database",
+        "product",
+        "egress",
+    }
 
 
 def test_control_publishes_a_configurable_host_port() -> None:

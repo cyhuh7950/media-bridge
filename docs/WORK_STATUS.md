@@ -2,6 +2,9 @@
 
 ## 2026-09-24 — main 병합·ysna-server 배포 게이트 재확인
 
+- 후속 전체 테스트에서 `540 passed, 6 skipped, 7 failed, 42 errors`를 확인했다. 격리 DB 부재(42), MCP 테스트의 error_screenshot와 generic Vision 기대 불일치, 0400 Secret 권한 fixture 누락, 현 Compose 네트워크 및 내부 docs 정본과 어긋난 기존 packaging assertion, A1 staging overlay에서 제거된 mock Secret 선언 누락으로 분류했다.
+- 테스트 보정: MCP 회귀 입력을 Vision 허용 generic으로 맞추고 Secret fixture에 실제 운영 요구 권한 0400을 적용했다. Compose 네트워크 계약을 현재 구성과 맞추고 staging overlay가 mock 전용 Secret 선언을 소유하도록 보완했다. docs packaging 검사는 기존 정본인 `design`, `superpowers`, `WORK_PLAN.md`, `WORK_STATUS.md`를 내부 문서로 허용한다.
+- 통합 테스트용 임시 자원 예정: ysna-server의 `media-bridge-merge-qa-20260924-db` Docker 컨테이너, host port 55432, ephemeral container layer only(no named volume), 테스트 전용 DB/user `media_bridge_test`; 이유는 PostgreSQL integration suite, 사용 시간은 suite 수행 동안, 정리 방법은 해당 컨테이너만 stop/remove 후 port·container 잔류 확인이다. 운영 `media-bridge-db` 및 데이터 volume은 대상에서 제외한다.
 - 신산님이 기존 서버 실행본 폐기를 허용했다. 정식 서버 Git checkout은 `codex/manual-integrated-revision` exact commit `b0d7107f9d411a48ba6f5904fd2f40528592f211`로 전환했다. 실행 중 Control/Data 컨테이너는 아직 기존 이미지로 유지되어 앱 실행본은 교체되지 않았다.
 - 서버 Control 컨테이너에서 Secret 원문을 출력하지 않고 DB revision을 조회했다. 현재 `0014_model_no_expiry`이며 브랜치 migration target과 같아 migration은 no-op이다. 따라서 DB 변경 및 backup은 수행하지 않았다.
 - 브랜치 Gateway 회귀를 프로젝트 `pyproject.toml` 버전 범위로 일회성·읽기전용 source container에서 실행: `54 passed, 16 failed`. 첫 버전 범위 밖 실행도 동일 16개 실패였으며 병합 gate는 미통과다. 주요 관찰: Gateway auth 응답 401, capability stale/zero-call, 미디어 변환 결과, downstream Protocol 테스트 실패. 실패 원인은 아직 분류 중이고 main baseline 비교는 하지 않았다.

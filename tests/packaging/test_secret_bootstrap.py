@@ -84,7 +84,9 @@ def test_invalid_complete_secret_set_is_not_overwritten(tmp_path: Path) -> None:
         "receipt-secret.secret",
     }
     for name in expected:
-        (tmp_path / name).write_text("invalid\n")
+        path = tmp_path / name
+        path.write_text("invalid\n")
+        path.chmod(0o400)
     before = {path.name: path.read_bytes() for path in tmp_path.iterdir()}
 
     with pytest.raises(secret_bootstrap.SecretBootstrapError, match="secret_set_invalid"):
