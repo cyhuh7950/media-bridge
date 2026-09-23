@@ -12,6 +12,7 @@
 - 두 번째 test checkpoint `855834d`에서 gateway 정상 fixture의 capability/credential expiry를 null로 두고 만료 검증 사례만 명시적 과거 expiry로 유지했다. `ResponsesDownstream.close()` 누락 test fake를 보완하고 fail-closed Vision 검증은 generic profile로 분리했다.
 - 두 번째 원격 회귀 후 `79 passed, 8 failed`. fixture expiry 수정으로 401 및 stale 실패가 해소됐다. 남은 원인은 generic Vision 호출 누락(비전 성공/실패 경로), `/v1/chat/completions`가 route security에서 404 처리되는 누락, 이미지/PDF 응답의 기대 Vision description 미포함이다.
 - 구현: generic 변환에서 페이지별 Vision 분석을 실행해 OCR+Vision 문맥을 downstream에 전달하고 Vision FAILURE 시 fail-closed한다. `error_screenshot`·`document` profile은 기존대로 OCR만 수행한다. Chat Completions route에 `responses:invoke` scope gate를 연결했다. 원격 targeted/full 회귀 재실행 대기.
+- 수정본 `0360b4a`에서 동일 87개 Gateway/Router 테스트 중 `86 passed, 1 failed`. 유일한 잔여는 PDF 요청이 자동으로 `document` profile(OCR-only)을 사용함에도 테스트가 Vision description을 기대한 계약 불일치다. assertion을 profile 의도에 맞게 정정하고 재검증한다. generic image Vision, fail-closed, chat route 테스트는 통과했다.
 
 ## 2026-09-24 — Test Lab auto의 분석 모델 선택 결함 수정
 

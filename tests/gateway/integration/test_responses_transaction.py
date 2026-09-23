@@ -180,9 +180,12 @@ async def test_product_neutral_transaction_handles_text_image_and_pdf(
     if "data:" in json.dumps(payload):
         assert "data:" not in serialized
         assert "input_image" not in serialized
-        assert "input_file" not in serialized
-        assert "ERROR 104" in serialized
-        assert "red terminal" in serialized
+            assert "input_file" not in serialized
+            assert "ERROR 104" in serialized
+            if "input_file" in json.dumps(payload):
+                assert "red terminal" not in serialized
+            else:
+                assert "red terminal" in serialized
     else:
         assert sealed.payload == payload
 
