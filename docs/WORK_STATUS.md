@@ -326,3 +326,10 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 - 모델 Capability의 근거 메모는 선택 입력이며, 화면의 30일 만료를 모델 정책으로 강제하지 않는다. 파일·영수증 등의 보안 TTL과는 별개다.
 - Web typecheck, Operations 14개, production build, Control unit 62개, migration packaging 14개 통과. PostgreSQL fixture 기반 migration integration은 로컬 실행이 정체되어 미검증이다.
 - WSL-server에 `0d4b16f`를 배포했다. Control/Data/DB 컨테이너는 running, `http://172.27.253.53:18642/health`는 `ok`, DB head는 `0014_model_no_expiry`다.
+
+## 2026-09-23 — 한글 접근 키 이름 발급 오류 수정
+
+- 원인: `CredentialCreate.name`이 ASCII 영숫자만 허용해 화면에서 입력한 `임시`를 422로 거부했고, Web은 이를 `접근 키 작업을 완료하지 못했습니다.`로만 표시했다.
+- 접근 키 이름은 Unicode 영숫자와 기존 구분자(`_`, `.`, `-`)를 허용하도록 검증을 수정하고, 한글 표시 이름 회귀 테스트를 추가했다.
+- 수정 전 회귀 테스트는 정규식 불일치로 실패했고, 수정 후 단위 테스트는 통과했다. PostgreSQL 통합 테스트는 로컬 fixture 기동이 정체되어 중단했으므로 미검증이다.
+- `952bacc`를 push하고 WSL-server에 재배포했다. Control/Data/DB 컨테이너는 running, DB head는 `0014_model_no_expiry`, 배포 컨테이너에서 `임시` 모델 검증 통과를 확인했다.
