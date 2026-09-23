@@ -1,5 +1,14 @@
 # Media Bridge 작업현황
 
+## 2026-09-24 — Test Lab auto의 분석 모델 선택 결함 수정
+
+- 실패 재확인: `auto`가 snapshot의 첫 registry 모델을 선택하는 기존 구현은 활성 snapshot에서 LLM 생성 모델이 아니라 분석 전용 Provider `document-parse`를 선택했다. 따라서 auto 경로가 최종 Non-Vision LLM 대상으로 이어지지 않는 확정 결함이다.
+- 수정: auto 대상은 같은 활성 snapshot 내 공개 모델 중 활성 `kind=llm` Provider에 직접 연결되거나 해당 routing profile의 `llm_provider_ids`에 속한 첫 모델로 한정한다. 후보가 없으면 분석 모델을 임의 선택하지 않고 `model_unavailable`로 실패한다. 명시 모델, 공개 `/v1/models` 목록, snapshot 데이터는 변경하지 않는다.
+- RED→GREEN: `auto`가 첫 분석 모델 대신 `solar-pro4`를 선택하고 해당 ID가 capability registry에서 `non_vision`으로 확인되는 통합 테스트를 추가했다. 수정 전 실패(기대 `solar-pro4`, 실제 `document-parse`), 수정 후 Gateway snapshot-generation + Responses HTTP 관련 12 passed. 변경 Python Ruff 및 `git diff --check` 통과.
+- 전체 Gateway + Responses HTTP 회귀는 61 passed / 16 failed. 실패는 `test_http_network`, `test_mcp_gateway_shared_core`, `test_p2b_gateway_lifecycle`, `test_responses_transaction`, Gateway zero-call/redaction, downstream contract 및 entrypoint 테스트에 분포한다. 이번 자동 선택 코드와 직접 관련 없는 것으로 보이나 baseline 대조는 하지 않아 원인 귀속은 미확정이다. Starlette `BlockingPortal` deprecation 경고도 남는다.
+- 화면의 `capability_unknown`은 안전한 synthetic test로 직접 재현되지 않았다. 현재 WSL 활성 snapshot에는 `document-parse`와 `solar-pro4`가 capability registry에 함께 있고 auto의 잘못된 후보 선택을 고쳤다. 따라서 이를 해당 화면 오류의 직접 원인으로 단정하지 않는다. Data service 배포 뒤에도 오류가 지속되면 public Gateway domain의 실제 upstream/snapshot과 WSL Data Plane 간 차이를 추가 추적한다. 실제 Provider 호출은 수행하지 않는다.
+- 배포 전 상태: 검증한 Data Plane 코드의 checkpoint·WSL Data service 재배포·Control UI 재확인이 남아 있다.
+
 ## 2026-09-24 — Test Lab 중복 auto 선택 제거 및 capability_unknown 확인
 
 - 전체 파이프라인 및 외부 클라이언트 시험 공개 모델 선택에서 동작이 같은 `auto(자동 선택)` 옵션을 제거했다. 두 화면 모두 단일 `미지정(auto)` 선택만 보여주며, 명시 공개 모델 선택은 유지한다. 서버의 미지정→`auto` 변환과 실제 자동 라우팅 동작은 변경하지 않았다.

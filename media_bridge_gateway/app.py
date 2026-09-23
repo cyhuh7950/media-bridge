@@ -92,12 +92,11 @@ def _resolve_public_request(
     resolved = dict(payload)
     requested = resolved.get("model")
     if requested is None or requested == "auto":
-        if not generation.models:
+        if generation.auto_model is None:
             raise LookupError("model_unavailable")
-        # `auto` is deliberately resolved inside Media Bridge, not forwarded
-        # to an upstream Provider. The published order is the first stable
-        # policy result until health/cost scoring is available in the snapshot.
-        resolved["model"] = generation.models[0]
+        # Resolve only to a public model backed by an enabled LLM Provider.
+        # Analysis-only targets are not valid downstream generation models.
+        resolved["model"] = generation.auto_model
     elif not isinstance(requested, str) or requested not in generation.models:
         raise LookupError("model_not_found")
     effort = resolved.get("reasoning_effort")
