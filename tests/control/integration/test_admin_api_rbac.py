@@ -209,7 +209,7 @@ def test_provider_api_encrypts_raw_secret_and_persists_reference_only(
     created_with_key = operator.post(
         "/admin/v1/providers",
         headers={"origin": "https://control.test", "x-csrf-token": csrf},
-        json={**_provider_payload("good"), "api_key": raw_value},
+        json={**_provider_payload("bad"), "api_key": raw_value},
     )
     assert created_with_key.status_code == 201
     assert created_with_key.json()["has_api_key"] is True

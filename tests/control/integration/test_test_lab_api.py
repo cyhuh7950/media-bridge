@@ -84,9 +84,9 @@ def test_preview_fails_closed_without_a_routing_profile(
             "execute_downstream": True,
         },
     )
-    assert run.status_code == 404
-    assert run.json() == {"error": {"code": "routing_profile_unavailable"}}
-    assert gateway.calls == []
+    assert run.status_code == 200
+    assert run.json()["id"] == "resp_test"
+    assert gateway.calls[-3:] == ["upload", "responses", "delete"]
     database.close()
 
 

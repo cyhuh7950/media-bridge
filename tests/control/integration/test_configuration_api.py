@@ -186,9 +186,10 @@ def test_configuration_items_support_guarded_patch_and_delete(
     assert policy_patch.json()["max_files"] == 8
 
     for collection, item_id in (
-        ("providers", created_provider["id"]),
         ("models", created_model["id"]),
         ("policies", created_policy["id"]),
+        ("providers", created_provider["id"]),
+        ("providers", llm_provider["id"]),
     ):
         deleted = client.delete(
             f"/admin/v1/{collection}/{item_id}",

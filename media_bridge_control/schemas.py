@@ -385,7 +385,7 @@ class PolicyCreate(AdminStrictModel):
     allow_base64: bool
     allow_asset: bool
     allow_local_path: bool
-    fail_closed: bool
+    fail_closed: Literal[True]
     reasoning_effort: Literal["provider_default", "low", "medium", "high"] = "provider_default"
 
 
@@ -401,7 +401,7 @@ class PolicyUpdate(NonEmptyUpdate):
     allow_base64: bool | None = None
     allow_asset: bool | None = None
     allow_local_path: bool | None = None
-    fail_closed: bool | None = None
+    fail_closed: Literal[True] | None = None
     reasoning_effort: Literal["provider_default", "low", "medium", "high"] | None = None
 
 
