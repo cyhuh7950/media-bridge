@@ -33,7 +33,7 @@ export function ModelsPage({ role, csrfToken }: OperationsProps) {
     event.preventDefault();
     if (!writable || !dialog || !providerId) return;
     try {
-      const body = { provider_id: providerId, model_id: modelId, aliases: [], input_modalities: capabilities, ...(evidence.trim() ? { evidence: evidence.trim() } : {}), reviewed_at: new Date().toISOString(), expires_at: null, pdf_passthrough_verified: false, reasoning_effort: reasoningEffort };
+      const body = { provider_id: providerId, model_id: modelId, aliases: [], input_modalities: capabilities, ...(evidence.trim() ? { evidence: evidence.trim() } : {}), reviewed_at: new Date().toISOString(), expires_at: dialog === "edit" ? undefined : null, pdf_passthrough_verified: false, reasoning_effort: reasoningEffort };
       if (dialog === "edit") await adminRequest(`/models/${editingId}`, { method: "PATCH", csrfToken, body });
       else await adminRequest("/models", { method: "POST", csrfToken, body });
       setDialog(null); await reload();

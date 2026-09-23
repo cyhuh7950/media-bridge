@@ -401,7 +401,7 @@ class ConfigurationService:
                 row.input_modalities = sorted(candidate.input_modalities)
                 row.evidence = candidate.evidence
                 row.reviewed_at = candidate.reviewed_at
-                row.expires_at = candidate.expires_at
+                row.expires_at = None
                 row.pdf_passthrough_verified = candidate.pdf_passthrough_verified
                 row.reasoning_effort = (
                     None

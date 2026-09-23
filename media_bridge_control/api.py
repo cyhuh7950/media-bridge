@@ -538,7 +538,7 @@ def build_control_app(
         return JSONResponse(result, status_code=201)
 
     async def routing_profile_item(request: Request) -> Response:
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}),
             require_csrf=True,
@@ -579,6 +579,8 @@ def build_control_app(
             return rejected
         if principal is None:
             return _error("unauthorized", 401)
+        if principal is None:
+            return _error("unauthorized", 401)
         if not writable:
             return JSONResponse(await run_in_threadpool(configuration.list_models))
         try:
@@ -591,7 +593,7 @@ def build_control_app(
         return JSONResponse(result, status_code=201)
 
     async def model_item(request: Request) -> Response:
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}),
             require_csrf=True,
@@ -630,6 +632,8 @@ def build_control_app(
             return rejected
         if principal is None:
             return _error("unauthorized", 401)
+        if principal is None:
+            return _error("unauthorized", 401)
         if not writable:
             return JSONResponse(await run_in_threadpool(configuration.list_policies))
         try:
@@ -642,13 +646,15 @@ def build_control_app(
         return JSONResponse(result, status_code=201)
 
     async def policy_item(request: Request) -> Response:
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}),
             require_csrf=True,
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         policy_id = request.path_params["item_id"]
         try:
             if request.method == "PATCH":
