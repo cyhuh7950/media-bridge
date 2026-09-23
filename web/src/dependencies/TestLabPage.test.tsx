@@ -8,6 +8,26 @@ function jsonResponse(body: unknown): Response {
 function requestUrl(input: RequestInfo | URL): string {
   return typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 }
+function selectAt<T extends HTMLElement>(items: T[], index: number): T {
+  const item = items[index];
+  if (!item) throw new Error(`Expected element at index ${String(index)}`);
+  return item;
+}
+function submit(button: HTMLElement | null): void {
+  const form = button?.closest("form");
+  if (!form) throw new Error("Expected submit button inside a form");
+  fireEvent.submit(form);
+}
+function requestBody(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>, url: string): Record<string, unknown> {
+  const call = fetchMock.mock.calls.find(([input]) => requestUrl(input) === url);
+  const body = call?.[1]?.body;
+  if (typeof body !== "string") throw new Error(`Expected JSON request body for ${url}`);
+  const value: unknown = JSON.parse(body);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`Expected object request body for ${url}`);
+  }
+  return value as Record<string, unknown>;
+}
 const image = () => new File([new Uint8Array([137, 80, 78, 71])], "error.png", { type: "image/png" });
 
 it("sends the selected public model and standard reasoning effort", async () => {
@@ -18,14 +38,13 @@ it("sends the selected public model and standard reasoning effort", async () => 
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="operator" csrfToken="csrf-value" />);
   await screen.findAllByRole("option", { name: "upstage/solar-pro4" });
-  await user.selectOptions(screen.getAllByLabelText("공개 모델")[0]!, "upstage/solar-pro4");
-  await user.selectOptions(screen.getAllByLabelText("추론 등급")[0]!, "high");
+  await user.selectOptions(selectAt(screen.getAllByLabelText("공개 모델"), 0), "upstage/solar-pro4");
+  await user.selectOptions(selectAt(screen.getAllByLabelText("추론 등급"), 0), "high");
   await user.type(screen.getByLabelText("질문"), "이 이미지의 내용을 설명해줘");
   await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image());
-  fireEvent.submit(screen.getByRole("button", { name: "전체 파이프라인 시험" }).closest("form")!);
+  submit(screen.getByRole("button", { name: "전체 파이프라인 시험" }));
   expect(await screen.findByText(/validated/)).toBeInTheDocument();
-  const call = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/preview");
-  const body = JSON.parse(String((call?.[1] as RequestInit).body));
+  const body = requestBody(fetchMock, "/admin/v1/test-lab/preview");
   expect(body.routing_profile_id).toBeUndefined();
   expect(body.target_model).toBe("upstage/solar-pro4");
   expect(body.reasoning_effort).toBe("high");
@@ -34,7 +53,7 @@ it("sends the selected public model and standard reasoning effort", async () => 
 it("labels an unspecified public model as auto in both test flows", async () => {
   vi.stubGlobal("fetch", vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse([]))));
   render(<TestLabPage role="operator" csrfToken="csrf-value" />);
-  await waitFor(() => expect(screen.getAllByRole("option", { name: "미지정(auto)" })).toHaveLength(2));
+  await waitFor(() => { expect(screen.getAllByRole("option", { name: "미지정(auto)" })).toHaveLength(2); });
   expect(screen.queryByRole("option", { name: "auto(자동 선택)" })).not.toBeInTheDocument();
 });
 
@@ -46,15 +65,14 @@ it("sends external-client model and reasoning settings", async () => {
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="operator" csrfToken="csrf-value" />);
   await screen.findAllByRole("option", { name: "openai/gpt-5" });
-  await user.selectOptions(screen.getAllByLabelText("공개 모델")[1]!, "openai/gpt-5");
-  await user.selectOptions(screen.getAllByLabelText("추론 등급")[1]!, "high");
+  await user.selectOptions(selectAt(screen.getAllByLabelText("공개 모델"), 1), "openai/gpt-5");
+  await user.selectOptions(selectAt(screen.getAllByLabelText("추론 등급"), 1), "high");
   await user.type(screen.getByLabelText("질문"), "외부 클라이언트 설정 시험");
   await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image());
   await user.type(screen.getByLabelText("Media Bridge 접근 키 원문"), "mbc-test-key");
-  fireEvent.submit(screen.getByRole("button", { name: "외부 클라이언트 전체 흐름 시험" }).closest("form")!);
+  submit(screen.getByRole("button", { name: "외부 클라이언트 전체 흐름 시험" }));
   expect(await screen.findByText(/external/)).toBeInTheDocument();
-  const call = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/run");
-  const body = JSON.parse(String((call?.[1] as RequestInit).body));
+  const body = requestBody(fetchMock, "/admin/v1/test-lab/run");
   expect(body.target_model).toBe("openai/gpt-5");
   expect(body.reasoning_effort).toBe("high");
 });
@@ -69,16 +87,15 @@ it.each([
     : Promise.resolve(jsonResponse({ result: "ok" })));
   vi.stubGlobal("fetch", fetchMock);
   render(<TestLabPage role="operator" csrfToken="csrf-value" />);
-  const modelSelect = screen.getAllByLabelText("공개 모델")[1]!;
+  const modelSelect = selectAt(screen.getAllByLabelText("공개 모델"), 1);
   await screen.findAllByRole("option", { name: "vendor/public-model" });
   if (selected) await user.selectOptions(modelSelect, selected);
   await user.type(screen.getByLabelText("질문"), "모델 라우팅 시험");
   await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image());
   await user.type(screen.getByLabelText("Media Bridge 접근 키 원문"), "mbc-test-key");
-  fireEvent.submit(screen.getByRole("button", { name: "외부 클라이언트 전체 흐름 시험" }).closest("form")!);
+  submit(screen.getByRole("button", { name: "외부 클라이언트 전체 흐름 시험" }));
   await screen.findByText(/시험 결과/);
-  const call = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/run");
-  const body = JSON.parse(String((call?.[1] as RequestInit).body));
+  const body = requestBody(fetchMock, "/admin/v1/test-lab/run");
   expect(body.target_model).toBe(expected);
 });
 
@@ -90,9 +107,9 @@ it("clears the result after its TTL", async () => {
   render(<TestLabPage role="operator" csrfToken="csrf-value" resultTtlMs={100} />);
   await user.type(screen.getByLabelText("질문"), "expire me");
   await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image());
-  fireEvent.submit(screen.getByRole("button", { name: "전체 파이프라인 시험" }).closest("form")!);
+  submit(screen.getByRole("button", { name: "전체 파이프라인 시험" }));
   expect(await screen.findByText(/TTL RESULT/)).toBeInTheDocument();
-  await waitFor(() => expect(screen.queryByText(/TTL RESULT/)).not.toBeInTheDocument(), { timeout: 1000 });
+  await waitFor(() => { expect(screen.queryByText(/TTL RESULT/)).not.toBeInTheDocument(); }, { timeout: 1000 });
 });
 
 it("hides test controls from viewer", () => {

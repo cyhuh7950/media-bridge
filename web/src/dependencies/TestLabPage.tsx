@@ -62,7 +62,7 @@ export function TestLabPage({ role, csrfToken, resultTtlMs = RESULT_TTL_MS }: Te
     if (!externalApiKey) missing.push("접근 키 원문");
     if (media !== null && (media.size < 1 || media.size > MAX_MEDIA_BYTES)) missing.push("파일 크기");
     if (missing.length > 0) { setError("입력값을 확인하세요: " + missing.join(", ")); return; }
-    if (!writable || csrfToken === null || media === null) return;
+    if (csrfToken === null || role === "viewer" || media === null) return;
     setError(null); setResult(null); setResultSource(null);
     try { const response = await adminRequest<unknown>("/test-lab/run", { method: "POST", csrfToken, body: { target_model: externalTargetModel || undefined, reasoning_effort: externalReasoningEffort, gateway_url: externalEndpoint, api_key: externalApiKey, conversion_profile: "generic", user_request: request, media_type: media.type === "application/pdf" ? "pdf" : "image", filename: media.name, declared_mime: media.type, media_base64: await toBase64(media), execute_downstream: true } }); setResult(resultRecord(response)); setResultSource("external"); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "external_media_bridge_failed"); }

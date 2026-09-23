@@ -111,7 +111,7 @@ it("does not expose provider secret references to a viewer", async () => {
   expect(screen.queryByLabelText("Provider Secret 원문")).not.toBeInTheDocument();
 });
 
-it("does not expose the internal DB provider secret identifier", async () => {
+it("does not expose the internal DB provider secret identifier", () => {
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>().mockResolvedValue(
