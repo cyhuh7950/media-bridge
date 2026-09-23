@@ -196,6 +196,7 @@ def test_configuration_items_support_guarded_patch_and_delete(
             headers=headers,
         )
         assert deleted.status_code == 204
+    for collection in ("models", "policies", "providers"):
         assert client.get(f"/admin/v1/{collection}").json() == []
     database.close()
 

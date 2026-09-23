@@ -223,7 +223,7 @@ def test_provider_api_encrypts_raw_secret_and_persists_reference_only(
     assert raw_value not in created.text
 
     with database.session() as session:
-        provider = session.scalar(select(Provider).where(Provider.name == "good"))
+        provider = session.scalar(select(Provider).where(Provider.name == "bad"))
         assert provider is not None
         assert provider.encrypted_api_key is not None
         assert raw_value not in provider.encrypted_api_key
@@ -236,5 +236,6 @@ def test_provider_api_encrypts_raw_secret_and_persists_reference_only(
             ]
         )
         assert raw_value not in persisted
-        assert provider.secret_ref_identifier == _reference_name()
+        assert provider.secret_ref_kind == "db"
+        assert provider.secret_ref_identifier == "provider_api_key"
     database.close()
