@@ -33,8 +33,7 @@ export function ModelsPage({ role, csrfToken }: OperationsProps) {
     event.preventDefault();
     if (!writable || !dialog || !providerId) return;
     try {
-      const now = new Date();
-      const body = { provider_id: providerId, model_id: modelId, aliases: [], input_modalities: capabilities, ...(evidence.trim() ? { evidence: evidence.trim() } : {}), reviewed_at: now.toISOString(), expires_at: new Date(now.getTime() + 30 * 86400000).toISOString(), pdf_passthrough_verified: false, reasoning_effort: reasoningEffort };
+      const body = { provider_id: providerId, model_id: modelId, aliases: [], input_modalities: capabilities, ...(evidence.trim() ? { evidence: evidence.trim() } : {}), reviewed_at: new Date().toISOString(), expires_at: null, pdf_passthrough_verified: false, reasoning_effort: reasoningEffort };
       if (dialog === "edit") await adminRequest(`/models/${editingId}`, { method: "PATCH", csrfToken, body });
       else await adminRequest("/models", { method: "POST", csrfToken, body });
       setDialog(null); await reload();
@@ -54,8 +53,8 @@ export function ModelsPage({ role, csrfToken }: OperationsProps) {
     {items?.length === 0 && !failed ? <p role="status">등록된 모델이 없습니다.</p> : null}
     {items && items.length > 0 ? <>
       {writable && selected.length ? <div className="inline-actions"><button type="button" className="danger-button" onClick={() => { void removeSelected(); }}>선택 삭제 ({selected.length})</button></div> : null}
-      <table><thead><tr>{writable ? <th><input aria-label="전체 모델 선택" type="checkbox" checked={allSelected} onChange={(e) => { setSelected(e.target.checked ? items.map((i) => textField(i, "id")) : []); }} /></th> : null}<th>공개 모델</th><th>Provider</th><th>추론 등급</th><th>만료</th>{writable ? <th>작업</th> : null}</tr></thead><tbody>
-        {items.map((item) => { const id = textField(item, "id"); return <tr key={id}>{writable ? <td><input aria-label={`${textField(item, "model_id")} 선택`} type="checkbox" checked={selected.includes(id)} onChange={(e) => { setSelected((current) => e.target.checked ? [...current, id] : current.filter((value) => value !== id)); }} /></td> : null}<td>{textField(item, "model_id")}</td><td>{providerName(item)}</td><td>{textField(item, "reasoning_effort") || "provider_default"}</td><td>{textField(item, "expires_at")}</td>{writable ? <td><button type="button" className="secondary-button" onClick={() => { openEdit(item); }}>수정</button></td> : null}</tr>; })}
+      <table><thead><tr>{writable ? <th><input aria-label="전체 모델 선택" type="checkbox" checked={allSelected} onChange={(e) => { setSelected(e.target.checked ? items.map((i) => textField(i, "id")) : []); }} /></th> : null}<th>공개 모델</th><th>Provider</th><th>추론 등급</th><th>수정자</th><th>수정일시</th>{writable ? <th>작업</th> : null}</tr></thead><tbody>
+        {items.map((item) => { const id = textField(item, "id"); return <tr key={id}>{writable ? <td><input aria-label={`${textField(item, "model_id")} 선택`} type="checkbox" checked={selected.includes(id)} onChange={(e) => { setSelected((current) => e.target.checked ? [...current, id] : current.filter((value) => value !== id)); }} /></td> : null}<td>{textField(item, "model_id")}</td><td>{providerName(item)}</td><td>{textField(item, "reasoning_effort") || "provider_default"}</td><td>{textField(item, "updated_by") || "—"}</td><td>{textField(item, "updated_at") || "—"}</td>{writable ? <td><button type="button" className="secondary-button" onClick={() => { openEdit(item); }}>수정</button></td> : null}</tr>; })}
       </tbody></table>
     </> : null}
     {!writable ? <p>viewer는 모델 설정을 읽기만 할 수 있습니다.</p> : null}

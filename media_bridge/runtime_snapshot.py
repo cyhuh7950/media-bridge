@@ -30,14 +30,14 @@ class SnapshotModelEntry(StrictModel):
         ]
     ] = Field(default_factory=list)
     input_modalities: set[Literal["text", "image", "pdf"]]
-    expires_at: datetime
+    expires_at: datetime | None = None
     pdf_passthrough_verified: bool = False
     reasoning_effort: str | None = None
 
     @field_validator("expires_at")
     @classmethod
-    def require_timezone(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
+    def require_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("capability expiry must be timezone-aware")
         return value
 

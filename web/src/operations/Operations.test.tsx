@@ -134,6 +134,8 @@ it("uses the standard provider list actions with register/edit dialog and bulk d
       endpoint: "https://provider.test/v1",
       secret_ref: { kind: "db", identifier: "provider_api_key" },
       enabled: true,
+      updated_by: "admin",
+      updated_at: "2026-09-23T10:00:00+00:00",
     },
     {
       id: "provider-2",
@@ -161,6 +163,8 @@ it("uses the standard provider list actions with register/edit dialog and bulk d
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   const firstRow = await screen.findByRole("row", { name: /vision-primary/ });
   expect(within(firstRow).getByRole("button", { name: "수정" })).toBeInTheDocument();
+  expect(within(firstRow).getByText("admin")).toBeInTheDocument();
+  expect(within(firstRow).getByText("2026-09-23T10:00:00+00:00")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Provider 등록" }));
   expect(screen.getByRole("dialog", { name: "Provider 등록" })).toBeInTheDocument();

@@ -328,20 +328,20 @@ class ModelCapabilityCreate(AdminStrictModel):
     ]
     evidence: Annotated[str, StringConstraints(min_length=1, max_length=1_024)] | None = None
     reviewed_at: datetime
-    expires_at: datetime
+    expires_at: datetime | None = None
     pdf_passthrough_verified: bool = False
     reasoning_effort: Literal["provider_default", "low", "medium", "high"] = "provider_default"
 
     @field_validator("reviewed_at", "expires_at")
     @classmethod
-    def require_timezone(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
+    def require_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("capability timestamps must be timezone-aware")
         return value
 
     @model_validator(mode="after")
     def require_future_expiry(self) -> "ModelCapabilityCreate":
-        if self.expires_at <= self.reviewed_at:
+        if self.expires_at is not None and self.expires_at <= self.reviewed_at:
             raise ValueError("capability expiry must follow review")
         if self.pdf_passthrough_verified and "pdf" not in self.input_modalities:
             raise ValueError("PDF verification requires PDF input modality")

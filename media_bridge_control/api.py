@@ -430,7 +430,7 @@ def build_control_app(
 
     async def providers(request: Request) -> Response:
         writable = request.method == "POST"
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}) if writable else frozenset(
                 {"admin", "operator", "viewer"}
@@ -439,11 +439,13 @@ def build_control_app(
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         if not writable:
             return JSONResponse(await run_in_threadpool(configuration.list_providers))
         try:
             body = await _json(request, ProviderCreate)
-            result = await run_in_threadpool(configuration.create_provider, body)
+            result = await run_in_threadpool(configuration.create_provider, body, updated_by=principal.username)
         except ControlPlaneError as error:
             return _error(error.code, 400)
         except ConfigurationError as error:
@@ -500,6 +502,7 @@ def build_control_app(
                     configuration.update_provider,
                     provider_id,
                     body,
+                    updated_by=principal.username,
                 )
                 return JSONResponse(result)
             await run_in_threadpool(configuration.delete_provider, provider_id)
@@ -512,7 +515,7 @@ def build_control_app(
 
     async def routing_profiles(request: Request) -> Response:
         writable = request.method == "POST"
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}) if writable else frozenset(
                 {"admin", "operator", "viewer"}
@@ -521,11 +524,13 @@ def build_control_app(
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         if not writable:
             return JSONResponse(await run_in_threadpool(configuration.list_routing_profiles))
         try:
             body = await _json(request, RoutingProfileCreate)
-            result = await run_in_threadpool(configuration.create_routing_profile, body)
+            result = await run_in_threadpool(configuration.create_routing_profile, body, updated_by=principal.username)
         except ControlPlaneError as error:
             return _error(error.code, 400)
         except ConfigurationError as error:
@@ -552,6 +557,7 @@ def build_control_app(
                 configuration.update_routing_profile,
                 request.path_params["item_id"],
                 body,
+                updated_by=principal.username,
             )
         except ControlPlaneError as error:
             return _error(error.code, 400)
@@ -562,7 +568,7 @@ def build_control_app(
 
     async def models(request: Request) -> Response:
         writable = request.method == "POST"
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}) if writable else frozenset(
                 {"admin", "operator", "viewer"}
@@ -571,11 +577,13 @@ def build_control_app(
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         if not writable:
             return JSONResponse(await run_in_threadpool(configuration.list_models))
         try:
             body = await _json(request, ModelCapabilityCreate)
-            result = await run_in_threadpool(configuration.create_model, body)
+            result = await run_in_threadpool(configuration.create_model, body, updated_by=principal.username)
         except ControlPlaneError as error:
             return _error(error.code, 400)
         except ConfigurationError as error:
@@ -598,6 +606,7 @@ def build_control_app(
                     configuration.update_model,
                     model_id,
                     body,
+                    updated_by=principal.username,
                 )
                 return JSONResponse(result)
             await run_in_threadpool(configuration.delete_model, model_id)
@@ -610,7 +619,7 @@ def build_control_app(
 
     async def policies(request: Request) -> Response:
         writable = request.method == "POST"
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}) if writable else frozenset(
                 {"admin", "operator", "viewer"}
@@ -619,11 +628,13 @@ def build_control_app(
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         if not writable:
             return JSONResponse(await run_in_threadpool(configuration.list_policies))
         try:
             body = await _json(request, PolicyCreate)
-            result = await run_in_threadpool(configuration.create_policy, body)
+            result = await run_in_threadpool(configuration.create_policy, body, updated_by=principal.username)
         except ControlPlaneError as error:
             return _error(error.code, 400)
         except ConfigurationError as error:
@@ -646,6 +657,7 @@ def build_control_app(
                     configuration.update_policy,
                     policy_id,
                     body,
+                    updated_by=principal.username,
                 )
                 return JSONResponse(result)
             await run_in_threadpool(configuration.delete_policy, policy_id)

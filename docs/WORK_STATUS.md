@@ -318,3 +318,10 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 - Media Bridge 접근 키 관리 목록 선택 상자는 호출에 사용되지 않는 식별자 표시였으므로 제거했다.
 - 오류 문구의 `OmniRoute endpoint/API key` 표현을 `Media Bridge endpoint/접근 키 원문`으로 수정했다.
 - TestLabPage 웹 테스트 4개와 TypeScript/build 통과. `36f96fa`를 ysna-server에 배포했고 `/test-lab` HTTP 200 및 Control `healthy`를 확인했다.
+
+## 2026-09-23 — 관리 화면 수정자·수정일시 표시
+
+- Provider, 라우팅 프로필, 모델, 정책의 등록·수정 시 로그인 사용자명을 `updated_by`에 기록하고 목록에 수정자와 수정일시를 표시한다.
+- `0013_management_audit_fields` migration으로 네 관리 테이블에 감사 필드를 추가했다. 기존 행은 과거 수정자를 복원할 수 없으므로 값이 없을 때 `—`로 표시하며, 신규 등록·수정부터 실제 관리자 계정을 기록한다.
+- 모델 Capability의 근거 메모는 선택 입력이며, 화면의 30일 만료를 모델 정책으로 강제하지 않는다. 파일·영수증 등의 보안 TTL과는 별개다.
+- Web typecheck, Operations 14개, production build, Control unit 62개, migration packaging 14개 통과. PostgreSQL fixture 기반 migration integration은 로컬 실행이 정체되어 미검증이다.

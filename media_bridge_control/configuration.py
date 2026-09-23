@@ -65,7 +65,7 @@ class ConfigurationService:
                 for row in rows
             ]
 
-    def create_provider(self, request: ProviderCreate) -> dict[str, Any]:
+    def create_provider(self, request: ProviderCreate, *, updated_by: str | None = None) -> dict[str, Any]:
         try:
             values = self._provider_values(request)
             if request.api_key is not None:
@@ -73,6 +73,7 @@ class ConfigurationService:
             with self._database.session() as session:
                 row = Provider(
                     **values,
+                    updated_by=updated_by,
                 )
                 session.add(row)
                 session.flush()
@@ -85,7 +86,7 @@ class ConfigurationService:
             rows = list(session.scalars(select(Provider).order_by(Provider.name)))
             return [self._provider(row) for row in rows]
 
-    def update_provider(self, provider_id: UUID, request: ProviderUpdate) -> dict[str, Any]:
+    def update_provider(self, provider_id: UUID, request: ProviderUpdate, *, updated_by: str | None = None) -> dict[str, Any]:
         try:
             with self._database.session() as session:
                 row = session.get(Provider, provider_id)
@@ -115,6 +116,7 @@ class ConfigurationService:
                     setattr(row, field, value)
                 if request.api_key is not None:
                     row.encrypted_api_key = self._security.encrypt_secret(request.api_key)
+                row.updated_by = updated_by
                 session.flush()
                 return self._provider(row)
         except IntegrityError as error:
@@ -194,9 +196,11 @@ class ConfigurationService:
             "has_api_key": row.encrypted_api_key is not None,
             "reasoning_effort": row.reasoning_effort or "provider_default",
             "enabled": row.enabled,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "updated_by": row.updated_by,
         }
 
-    def create_routing_profile(self, request: RoutingProfileCreate) -> dict[str, Any]:
+    def create_routing_profile(self, request: RoutingProfileCreate, *, updated_by: str | None = None) -> dict[str, Any]:
         try:
             with self._database.session() as session:
                 analysis_ids, llm_ids = self._routing_provider_ids(session, request)
@@ -206,6 +210,7 @@ class ConfigurationService:
                     llm_provider_ids=llm_ids,
                     strategy=request.strategy,
                     enabled=request.enabled,
+                    updated_by=updated_by,
                 )
                 session.add(row)
                 session.flush()
@@ -222,6 +227,8 @@ class ConfigurationService:
         self,
         profile_id: UUID,
         request: RoutingProfileUpdate,
+        *,
+        updated_by: str | None = None,
     ) -> dict[str, Any]:
         try:
             with self._database.session() as session:
@@ -243,6 +250,7 @@ class ConfigurationService:
                 row.llm_provider_ids = llm_ids
                 row.strategy = candidate.strategy
                 row.enabled = candidate.enabled
+                row.updated_by = updated_by
                 session.flush()
                 return self._routing_profile(row)
         except IntegrityError as error:
@@ -288,9 +296,11 @@ class ConfigurationService:
             "llm_provider_ids": list(row.llm_provider_ids or []),
             "strategy": row.strategy,
             "enabled": row.enabled,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "updated_by": row.updated_by,
         }
 
-    def create_model(self, request: ModelCapabilityCreate) -> dict[str, Any]:
+    def create_model(self, request: ModelCapabilityCreate, *, updated_by: str | None = None) -> dict[str, Any]:
         try:
             with self._database.session() as session:
                 profile = (
@@ -338,6 +348,7 @@ class ConfigurationService:
                         if request.reasoning_effort == "provider_default"
                         else request.reasoning_effort
                     ),
+                    updated_by=updated_by,
                 )
                 session.add(row)
                 session.flush()
@@ -354,6 +365,8 @@ class ConfigurationService:
         self,
         model_id: UUID,
         request: ModelCapabilityUpdate,
+        *,
+        updated_by: str | None = None,
     ) -> dict[str, Any]:
         try:
             with self._database.session() as session:
@@ -395,6 +408,7 @@ class ConfigurationService:
                     if candidate.reasoning_effort == "provider_default"
                     else candidate.reasoning_effort
                 )
+                row.updated_by = updated_by
                 session.flush()
                 return self._model(row)
         except IntegrityError as error:
@@ -422,16 +436,18 @@ class ConfigurationService:
             "input_modalities": row.input_modalities,
             "evidence": row.evidence,
             "reviewed_at": row.reviewed_at.isoformat(),
-            "expires_at": row.expires_at.isoformat(),
+            "expires_at": row.expires_at.isoformat() if row.expires_at else None,
             "pdf_passthrough_verified": row.pdf_passthrough_verified,
             "reasoning_effort": row.reasoning_effort or "provider_default",
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "updated_by": row.updated_by,
         }
 
-    def create_policy(self, request: PolicyCreate) -> dict[str, Any]:
+    def create_policy(self, request: PolicyCreate, *, updated_by: str | None = None) -> dict[str, Any]:
         body = request.model_dump(exclude={"name"})
         try:
             with self._database.session() as session:
-                row = Policy(name=request.name, body=body)
+                row = Policy(name=request.name, body=body, updated_by=updated_by)
                 session.add(row)
                 session.flush()
                 return self._policy(row)
@@ -443,7 +459,7 @@ class ConfigurationService:
             rows = list(session.scalars(select(Policy).order_by(Policy.name)))
             return [self._policy(row) for row in rows]
 
-    def update_policy(self, policy_id: UUID, request: PolicyUpdate) -> dict[str, Any]:
+    def update_policy(self, policy_id: UUID, request: PolicyUpdate, *, updated_by: str | None = None) -> dict[str, Any]:
         try:
             with self._database.session() as session:
                 row = session.get(Policy, policy_id)
@@ -458,6 +474,7 @@ class ConfigurationService:
                 )
                 row.name = candidate.name
                 row.body = candidate.model_dump(exclude={"name"})
+                row.updated_by = updated_by
                 session.flush()
                 return self._policy(row)
         except IntegrityError as error:
@@ -474,7 +491,7 @@ class ConfigurationService:
 
     @staticmethod
     def _policy(row: Policy) -> dict[str, Any]:
-        return {"id": str(row.id), "name": row.name, **row.body}
+        return {"id": str(row.id), "name": row.name, **row.body, "updated_at": row.updated_at.isoformat() if row.updated_at else None, "updated_by": row.updated_by}
 
     def snapshot_body(self) -> dict[str, Any]:
         with self._database.session() as session:

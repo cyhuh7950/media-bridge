@@ -27,6 +27,9 @@ SUPPORTED_REVISIONS = frozenset(
         "0009_provider_reasoning_effort",
         "0010_previous_csrf_digest",
         "0011_public_model_routing",
+        "0012_optional_model_capability_evidence",
+        "0013_management_audit_fields",
+        "0014_model_capability_no_expiry",
     }
 )
 
@@ -53,6 +56,9 @@ def run_migration(
         "0009_provider_reasoning_effort",
         "0010_previous_csrf_digest",
         "0011_public_model_routing",
+        "0012_optional_model_capability_evidence",
+        "0013_management_audit_fields",
+        "0014_model_capability_no_expiry",
     }:
         raise MigrationError("schema_revision_unsupported")
     if current_revision == "0005_routing_profiles" and target_revision not in {
@@ -63,6 +69,9 @@ def run_migration(
         "0009_provider_reasoning_effort",
         "0010_previous_csrf_digest",
         "0011_public_model_routing",
+        "0012_optional_model_capability_evidence",
+        "0013_management_audit_fields",
+        "0014_model_capability_no_expiry",
     }:
         raise MigrationError("schema_revision_unsupported")
     if current_revision == "0004_managed_provider_catalog" and target_revision not in {
@@ -74,6 +83,9 @@ def run_migration(
         "0009_provider_reasoning_effort",
         "0010_previous_csrf_digest",
         "0011_public_model_routing",
+        "0012_optional_model_capability_evidence",
+        "0013_management_audit_fields",
+        "0014_model_capability_no_expiry",
     }:
         raise MigrationError("schema_revision_unsupported")
     if current_revision == "0003_deployment_auth" and target_revision not in {
@@ -86,6 +98,9 @@ def run_migration(
         "0009_provider_reasoning_effort",
         "0010_previous_csrf_digest",
         "0011_public_model_routing",
+        "0012_optional_model_capability_evidence",
+        "0013_management_audit_fields",
+        "0014_model_capability_no_expiry",
     }:
         raise MigrationError("schema_revision_unsupported")
     if not apply:
@@ -131,11 +146,11 @@ def apply_database_migration(*, database_url: str, alembic_ini: Path, apply: boo
 
     result = run_migration(
         current_revision=current,
-        target_revision="0011_public_model_routing",
+        target_revision="0014_model_capability_no_expiry",
         apply=apply,
         upgrade=upgrade,
     )
-    if apply and current_revision(database_url) != "0011_public_model_routing":
+    if apply and current_revision(database_url) != "0014_model_capability_no_expiry":
         raise MigrationError("migration_verification_failed")
     return result
 

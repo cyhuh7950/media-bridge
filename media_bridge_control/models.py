@@ -70,7 +70,7 @@ class BootstrapToken(Base):
 
     selector: Mapped[str] = mapped_column(String(32), primary_key=True)
     token_digest: Mapped[str] = mapped_column(String(128))
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -163,6 +163,7 @@ class Provider(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class RoutingProfile(Base):
@@ -183,6 +184,7 @@ class RoutingProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class ModelCapability(Base):
@@ -209,6 +211,7 @@ class ModelCapability(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class Policy(Base):
@@ -223,6 +226,7 @@ class Policy(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class ConfigDraft(Base):
