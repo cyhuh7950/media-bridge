@@ -7,7 +7,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0012_optional_model_capability_evidence"
+revision: str = "0012_model_evidence"
 down_revision: str | None = "0011_public_model_routing"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
