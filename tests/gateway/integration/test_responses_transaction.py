@@ -80,6 +80,9 @@ class FakeDownstream:
             status_code=200,
         )
 
+    async def close(self) -> None:
+        return None
+
 
 def _transaction(
     tmp_path: Path,

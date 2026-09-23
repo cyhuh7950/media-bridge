@@ -21,6 +21,9 @@ class FakeDownstream:
             status_code=200,
         )
 
+    async def close(self) -> None:
+        return None
+
 
 def test_product_neutral_downstream_contract_has_no_router_dependency() -> None:
     downstream = FakeDownstream()
