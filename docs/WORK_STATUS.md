@@ -1,5 +1,13 @@
 # Media Bridge 작업현황
 
+## 2026-09-24 — Test Lab 중복 auto 선택 제거 및 capability_unknown 확인
+
+- 전체 파이프라인 및 외부 클라이언트 시험 공개 모델 선택에서 동작이 같은 `auto(자동 선택)` 옵션을 제거했다. 두 화면 모두 단일 `미지정(auto)` 선택만 보여주며, 명시 공개 모델 선택은 유지한다. 서버의 미지정→`auto` 변환과 실제 자동 라우팅 동작은 변경하지 않았다.
+- RED→GREEN: 중복 옵션 부재 회귀 검증은 수정 전 두 선택 목록에서 중복 `auto(자동 선택)`을 발견해 실패했고 수정 후 TestLabPage 7 passed. TypeScript `--noEmit`, Vite production build 및 `git diff --check` 통과.
+- `capability_unknown`의 유력 원인은 배포 Data Plane의 활성 capability snapshot이 Control의 공개 모델 목록보다 오래된 점이다. Control에 등록된 `us/solar-pro4`가 활성 snapshot에는 없으며 snapshot의 `solar-pro4` 항목 ID/alias와도 일치하지 않는다. 명시 모델 ID가 이 snapshot에 전달되면 capability 조회에서 거부될 수 있다.
+- 활성 snapshot을 검증·발행하면 운영 라우팅 설정에 지속 변경이 발생하므로 이 작업에서는 실행하지 않았다. 외부 Provider 호출도 하지 않았다. 따라서 중복 UI 옵션 수정으로 `capability_unknown`이 해결됐다고 간주하지 않으며, snapshot 발행 및 동일 요청 재시험은 별도 조치로 남긴다.
+- 배포 후 확인: exact commit, Control health 및 `/test-lab`의 두 선택 목록을 확인한다. 실제 Provider 요청 결과와 snapshot 재발행은 미검증이다.
+
 ## 2026-09-24 — Test Lab 공개 모델 기본 선택 라벨 명확화
 
 - 전체 파이프라인 및 외부 클라이언트 시험의 공개 모델 첫 선택 항목을 `미지정(기본 모델)`에서 `미지정(auto)`로 변경했다. 제출 값은 기존처럼 미지정 상태(`target_model` 생략)를 유지하며 서버가 `auto`로 변환한다. 별도 `auto(자동 선택)` 및 명시적 모델 항목은 유지했다.

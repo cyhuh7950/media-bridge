@@ -35,6 +35,7 @@ it("labels an unspecified public model as auto in both test flows", async () => 
   vi.stubGlobal("fetch", vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse([]))));
   render(<TestLabPage role="operator" csrfToken="csrf-value" />);
   await waitFor(() => expect(screen.getAllByRole("option", { name: "미지정(auto)" })).toHaveLength(2));
+  expect(screen.queryByRole("option", { name: "auto(자동 선택)" })).not.toBeInTheDocument();
 });
 
 it("sends external-client model and reasoning settings", async () => {
@@ -59,8 +60,8 @@ it("sends external-client model and reasoning settings", async () => {
 });
 
 it.each([
-  { name: "미지정 모델은 Gateway 기본값을 그대로 사용한다", selected: "", expected: undefined },
-  { name: "auto는 Gateway 자동 선택 값으로 전달한다", selected: "auto", expected: "auto" },
+  { name: "미지정(auto)는 Gateway 자동 선택으로 전달한다", selected: "", expected: undefined },
+  { name: "명시 모델은 선택한 ID로 전달한다", selected: "vendor/public-model", expected: "vendor/public-model" },
 ])("$name", async ({ selected, expected }) => {
   const user = userEvent.setup();
   const fetchMock = vi.fn<typeof fetch>((input) => requestUrl(input).endsWith("/models")
