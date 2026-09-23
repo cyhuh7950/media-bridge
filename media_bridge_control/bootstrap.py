@@ -593,10 +593,13 @@ class ControlPlaneService:
         principal = self.authenticate(session_token)
         with self.database.session() as session:
             stored = session.get(AdminSession, principal.session_selector)
-            if stored is None or not self.security.matches(
-                csrf_token,
-                stored.csrf_digest,
-                purpose="csrf",
+            if stored is None:
+                raise AuthenticationError("csrf_rejected")
+            valid_digests = (stored.csrf_digest, stored.previous_csrf_digest)
+            if not any(
+                digest is not None
+                and self.security.matches(csrf_token, digest, purpose="csrf")
+                for digest in valid_digests
             ):
                 raise AuthenticationError("csrf_rejected")
         return principal
@@ -613,6 +616,7 @@ class ControlPlaneService:
             )
             if stored is None:
                 raise AuthenticationError("unauthorized")
+            stored.previous_csrf_digest = stored.csrf_digest
             stored.csrf_digest = self.security.digest(csrf_token, purpose="csrf")
         return SessionResult(principal=principal, csrf_token=csrf_token)
 

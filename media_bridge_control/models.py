@@ -83,6 +83,7 @@ class AdminSession(Base):
     selector: Mapped[str] = mapped_column(String(32), primary_key=True)
     session_digest: Mapped[str] = mapped_column(String(128))
     csrf_digest: Mapped[str] = mapped_column(String(128))
+    previous_csrf_digest: Mapped[str | None] = mapped_column(String(128))
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

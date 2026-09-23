@@ -82,6 +82,33 @@ def test_login_requires_totp_then_session_cookie_csrf_and_logout(migrated_postgr
     database.close()
 
 
+def test_previous_csrf_token_survives_one_refresh(migrated_postgres: str) -> None:
+    client, service, database = _client(migrated_postgres)
+    origin = {"origin": "https://control.test"}
+    enrollment = service.begin_totp_enrollment_with_password(
+        username="admin", password="admin"
+    )
+    counter = int(datetime(2026, 8, 24, 1, 0, tzinfo=UTC).timestamp()) // 30
+    code = _hotp(base64.b32decode(enrollment.secret + "=" * (-len(enrollment.secret) % 8)), counter)
+    service.confirm_totp_enrollment(user_id=enrollment.user_id, code=code)
+    login = client.post(
+        "/admin/v1/auth/totp/login",
+        headers=origin,
+        json={"username": "admin", "password": "admin", "code": code},
+    )
+    assert login.status_code == 200
+    first_csrf = login.json()["csrf_token"]
+    assert client.get("/admin/v1/me").status_code == 200
+    assert client.post("/admin/v1/auth/logout", headers=origin).status_code == 403
+    assert (
+        client.post(
+            "/admin/v1/auth/logout", headers={"origin": "https://control.test", "x-csrf-token": first_csrf}
+        ).status_code
+        == 204
+    )
+    database.close()
+
+
 def test_http_control_endpoint_can_login_when_explicitly_enabled(
     migrated_postgres: str,
 ) -> None:
