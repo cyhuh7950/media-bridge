@@ -6,7 +6,7 @@ from media_bridge_control import entrypoints
 def test_control_entrypoint_accepts_latest_alembic_revision(monkeypatch) -> None:
     database = MagicMock()
     database.engine.connect.return_value.__enter__.return_value.scalar.return_value = (
-        "0011_public_model_routing"
+        "0014_model_no_expiry"
     )
     monkeypatch.setattr(entrypoints, "Database", lambda _url: database)
 
