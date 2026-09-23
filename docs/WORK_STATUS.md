@@ -5,7 +5,8 @@
 - Test Lab의 외부 클라이언트 흐름에서 모델 선택을 비워 둔 경우 `model` 필드 자체를 생략하던 동작을 확인했다. 미지정 입력은 Media Bridge가 OpenAI 호환 `auto`로 받도록 전달해, 요청 대상 Gateway가 현재 활성 snapshot을 기준으로 선택하게 수정했다. Control DB의 모델 목록으로 대체하지 않는다.
 - RED→GREEN 회귀 검증: 기존 미지정 전달 동작에서 신규 기대값 테스트 1건 실패, 수정 뒤 handoff 3 passed. Control unit 전체 65 passed, 변경 파일 Ruff 및 `git diff --check` 통과.
 - 제한: 캡처된 실제 Gateway `invalid_request` 상세와 Provider 응답은 없어 이 변경은 유력 원인 수정이며, 정확한 실제 요청에서의 해소는 아직 검증하지 않았다. 실제 Provider 호출은 하지 않았다.
-- 다음: 변경을 checkpoint/push하고 설정된 `WSL-server` 별칭을 통해 Control만 배포·health 확인한 뒤 사용자가 화면에서 재시험할 수 있도록 안내한다. 실제 Provider 호출 smoke 및 DB credential 회전은 별도 승인 전 수행하지 않는다.
+- checkpoint `3070f6d5cc47795d86f21c70b43deb917d56b392`를 origin task branch와 WSL 배포 checkout에 반영했다. Control 이미지만 재빌드·교체했으며 Control healthy, `/`와 `/health` HTTP 200, Data 및 DB healthy를 확인했다. 실제 Provider 호출은 수행하지 않았다.
+- Chrome의 `http://172.27.253.53:18642/test-lab`에서 배포 화면을 열었다. 외부 클라이언트 흐름 시험에서 공개 모델은 계속 `미지정(기본 모델)`로 보여도 내부 요청은 `auto`를 전달한다. 다음 단계는 신산님이 동일 입력으로 외부 흐름 시험을 재시도하는 것이다. Provider 호출 smoke 및 DB credential 회전은 별도 승인 전 수행하지 않는다.
 
 ## 2026-09-23 — 외부 클라이언트 흐름 시험 일반화 및 기본 모델 전달 수정
 
