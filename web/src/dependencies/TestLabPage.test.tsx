@@ -31,6 +31,12 @@ it("sends the selected public model and standard reasoning effort", async () => 
   expect(body.reasoning_effort).toBe("high");
 });
 
+it("labels an unspecified public model as auto in both test flows", async () => {
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse([]))));
+  render(<TestLabPage role="operator" csrfToken="csrf-value" />);
+  await waitFor(() => expect(screen.getAllByRole("option", { name: "미지정(auto)" })).toHaveLength(2));
+});
+
 it("sends external-client model and reasoning settings", async () => {
   const user = userEvent.setup();
   const fetchMock = vi.fn<typeof fetch>((input) => requestUrl(input).endsWith("/models")

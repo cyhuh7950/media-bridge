@@ -1,5 +1,11 @@
 # Media Bridge 작업현황
 
+## 2026-09-24 — Test Lab 공개 모델 기본 선택 라벨 명확화
+
+- 전체 파이프라인 및 외부 클라이언트 시험의 공개 모델 첫 선택 항목을 `미지정(기본 모델)`에서 `미지정(auto)`로 변경했다. 제출 값은 기존처럼 미지정 상태(`target_model` 생략)를 유지하며 서버가 `auto`로 변환한다. 별도 `auto(자동 선택)` 및 명시적 모델 항목은 유지했다.
+- RED→GREEN: 두 선택 목록 라벨 회귀 테스트는 기존 화면에서 실패했고, 변경 후 TestLabPage 7 passed. TypeScript typecheck 및 Vite production build 통과.
+- 배포 후 Test Lab 브라우저에서 두 항목의 `미지정(auto)` 표시를 확인한다. Provider 호출은 UI 라벨 변경 검증에 필요하지 않아 수행하지 않는다.
+
 ## 2026-09-24 — 외부 클라이언트 시험 invalid_request 기본 모델 수정
 
 - Test Lab의 외부 클라이언트 흐름에서 모델 선택을 비워 둔 경우 `model` 필드 자체를 생략하던 동작을 확인했다. 미지정 입력은 Media Bridge가 OpenAI 호환 `auto`로 받도록 전달해, 요청 대상 Gateway가 현재 활성 snapshot을 기준으로 선택하게 수정했다. Control DB의 모델 목록으로 대체하지 않는다.
