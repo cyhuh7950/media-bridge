@@ -1,5 +1,14 @@
 # Media Bridge 작업현황
 
+## 2026-09-24 — main 병합·ysna-server 배포 게이트 재확인
+
+- 신산님이 기존 서버 실행본 폐기를 허용했다. 정식 서버 Git checkout은 `codex/manual-integrated-revision` exact commit `b0d7107f9d411a48ba6f5904fd2f40528592f211`로 전환했다. 실행 중 Control/Data 컨테이너는 아직 기존 이미지로 유지되어 앱 실행본은 교체되지 않았다.
+- 서버 Control 컨테이너에서 Secret 원문을 출력하지 않고 DB revision을 조회했다. 현재 `0014_model_no_expiry`이며 브랜치 migration target과 같아 migration은 no-op이다. 따라서 DB 변경 및 backup은 수행하지 않았다.
+- 브랜치 Gateway 회귀를 프로젝트 `pyproject.toml` 버전 범위로 일회성·읽기전용 source container에서 실행: `54 passed, 16 failed`. 첫 버전 범위 밖 실행도 동일 16개 실패였으며 병합 gate는 미통과다. 주요 관찰: Gateway auth 응답 401, capability stale/zero-call, 미디어 변환 결과, downstream Protocol 테스트 실패. 실패 원인은 아직 분류 중이고 main baseline 비교는 하지 않았다.
+- PR 조회 결과 해당 head의 PR은 없다. main 병합·앱 이미지 교체·배포 테스트는 보류한다. 신산님은 테스트 실패 수정 후 계속 진행하는 범위와 기존 서버 실행본 교체를 승인했다.
+- 원인 분류: `tests/gateway/helpers.py`의 credential 만료 `2026-09-23` 및 정상 모델 capability 만료 `2026-08-24`가 현재 날짜 `2026-09-24`보다 과거다. `SnapshotCredentialVerifier`와 기본 capability resolution은 wall clock을 사용하여 HTTP 401 및 `stale`을 유발한다. `ResponsesDownstream` runtime Protocol은 `close()`를 요구하지만 두 test fake가 구현하지 않는다. `PreRequestGate.extract_context`에는 Vision 호출이 없으나 gateway 계약 테스트는 generic image/PDF 변환의 Vision 결과와 Vision 실패 시 fail-closed를 요구한다. `error_screenshot` 및 `document` 프로필은 각각 OCR 전용 경로 기대가 기존 통합 테스트에 명시돼 있다.
+- 테스트 우선 구현을 위해 `tests/integration/test_router_gate.py`에 generic 비전 Non-Vision 이미지에서 OCR+Vision 결합과 zero-call Vision 실패 사례를 추가했다(원격 재실행 대기). 임시 QA Python venv `/tmp/media-bridge-merge-qa-20260924`를 ysna-server에 만들었고 프로젝트 `pyproject.toml` 제한 범위 의존성 설치를 완료했다. 테스트 뒤 해당 경로만 제거한다. 실제 Provider 호출은 포함하지 않는다.
+
 ## 2026-09-24 — Test Lab auto의 분석 모델 선택 결함 수정
 
 - 실패 재확인: `auto`가 snapshot의 첫 registry 모델을 선택하는 기존 구현은 활성 snapshot에서 LLM 생성 모델이 아니라 분석 전용 Provider `document-parse`를 선택했다. 따라서 auto 경로가 최종 Non-Vision LLM 대상으로 이어지지 않는 확정 결함이다.

@@ -202,6 +202,34 @@ async def test_image_nonvision_delivers_only_converted_text(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
+async def test_generic_nonvision_image_includes_ocr_and_vision_context(
+    tmp_path: Path,
+) -> None:
+    now = datetime(2026, 8, 23, tzinfo=UTC)
+    ocr = FakeOcr()
+    vision = FakeVision()
+    gate, signer = _gate(tmp_path, now=now, ocr=ocr, vision=vision)
+    spy = SpyDownstream()
+    router = RouterAdapter(gate=gate, downstream=GuardedDownstream(spy, signer))
+
+    invocation = await router.invoke(
+        PrepareForModelRequest(
+            content=[_media_part()],
+            target=TargetModel(registry_id="text-model"),
+            conversion_profile="generic",
+        ),
+        tenant_id="tenant-a",
+    )
+
+    assert invocation.gate_result.action == "converted"
+    assert ocr.calls == 1
+    assert vision.calls == 1
+    assert len(spy.calls) == 1
+    assert "ERROR 104: timeout" in repr(spy.calls[0].content)
+    assert "red stack trace" in repr(spy.calls[0].content)
+
+
+@pytest.mark.asyncio
 async def test_pdf_nonvision_delivers_only_converted_text(tmp_path: Path) -> None:
     now = datetime(2026, 8, 23, tzinfo=UTC)
     ocr = FakeOcr()
@@ -269,7 +297,7 @@ async def test_pdf_render_failure_blocks_before_backends_and_downstream(tmp_path
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure_stage", ["ocr", "sanitizer", "cleanup"])
+@pytest.mark.parametrize("failure_stage", ["ocr", "vision", "sanitizer", "cleanup"])
 async def test_every_conversion_boundary_failure_makes_zero_downstream_calls(
     tmp_path: Path,
     failure_stage: str,
