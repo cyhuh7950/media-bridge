@@ -406,12 +406,21 @@ class PolicyUpdate(NonEmptyUpdate):
 
 
 class CredentialCreate(AdminStrictModel):
-    name: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")]
+    name: Annotated[str, StringConstraints(min_length=1, max_length=128)]
     scopes: Annotated[
         set[Literal["assets:write", "mcp:invoke", "responses:invoke"]],
         Field(min_length=1, max_length=3),
     ]
     expires_at: datetime | None = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        if not value[0].isalnum() or any(
+            not (character.isalnum() or character in "_.-") for character in value
+        ):
+            raise ValueError("credential name contains invalid characters")
+        return value
 
     @field_validator("expires_at")
     @classmethod
