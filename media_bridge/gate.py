@@ -313,6 +313,22 @@ class PreRequestGate:
                         else f"Media {media_index}"
                     )
                     media_converted_sections.append(f"[{page_label} OCR]\n{ocr_text}")
+                    if conversion_profile == "generic":
+                        vision_result = await self._vision_backend.describe(
+                            data=page.data,
+                            mime_type=page.mime_type,
+                            profile=conversion_profile,
+                        )
+                        if vision_result.status is BackendStatus.FAILURE:
+                            raise GateFailureError(
+                                "vision_failed", "Visual analysis failed safely."
+                            )
+                        description = (vision_result.description or "").strip()
+                        if description:
+                            media_description_sections.append(description)
+                            media_converted_sections.append(
+                                f"[{page_label} Vision]\n{description}"
+                            )
             except GateFailureError as failure:
                 processing_failure = failure
             except Exception:

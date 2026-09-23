@@ -320,6 +320,8 @@ class DataPlaneAuthMiddleware:
             return "responses:invoke", "/v1/models"
         if path == "/v1/responses":
             return "responses:invoke", "/v1/responses"
+        if path == "/v1/chat/completions":
+            return "responses:invoke", "/v1/chat/completions"
         if path == "/mcp":
             return "mcp:invoke", "/mcp"
         return None

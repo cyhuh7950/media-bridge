@@ -9,7 +9,9 @@
 - 원인 분류: `tests/gateway/helpers.py`의 credential 만료 `2026-09-23` 및 정상 모델 capability 만료 `2026-08-24`가 현재 날짜 `2026-09-24`보다 과거다. `SnapshotCredentialVerifier`와 기본 capability resolution은 wall clock을 사용하여 HTTP 401 및 `stale`을 유발한다. `ResponsesDownstream` runtime Protocol은 `close()`를 요구하지만 두 test fake가 구현하지 않는다. `PreRequestGate.extract_context`에는 Vision 호출이 없으나 gateway 계약 테스트는 generic image/PDF 변환의 Vision 결과와 Vision 실패 시 fail-closed를 요구한다. `error_screenshot` 및 `document` 프로필은 각각 OCR 전용 경로 기대가 기존 통합 테스트에 명시돼 있다.
 - 테스트 우선 구현을 위해 `tests/integration/test_router_gate.py`에 generic 비전 Non-Vision 이미지에서 OCR+Vision 결합과 zero-call Vision 실패 사례를 추가했다(원격 재실행 대기). 임시 QA Python venv `/tmp/media-bridge-merge-qa-20260924`를 ysna-server에 만들었고 프로젝트 `pyproject.toml` 제한 범위 의존성 설치를 완료했다. 테스트 뒤 해당 경로만 제거한다. 실제 Provider 호출은 포함하지 않는다.
 - 새 generic Vision 테스트를 원격 venv에서 실행해 예상대로 `vision.calls == 0`에서 RED를 확인했다. 같은 실행에서 만료시각이 고정된 gateway auth fixture 때문에 다른 4개 사례가 401로 실패했다.
-- 다음 테스트 checkpoint에서 gateway 정상 fixture의 capability/credential expiry를 null로 두고 만료 검증 사례만 명시적 과거 expiry를 유지한다. `ResponsesDownstream.close()` 누락 test fake를 보완하고, fail-closed Vision 검증은 기존 테스트의 OCR 전용 profile 대신 generic profile에서 실행하도록 바로잡는다.
+- 두 번째 test checkpoint `855834d`에서 gateway 정상 fixture의 capability/credential expiry를 null로 두고 만료 검증 사례만 명시적 과거 expiry로 유지했다. `ResponsesDownstream.close()` 누락 test fake를 보완하고 fail-closed Vision 검증은 generic profile로 분리했다.
+- 두 번째 원격 회귀 후 `79 passed, 8 failed`. fixture expiry 수정으로 401 및 stale 실패가 해소됐다. 남은 원인은 generic Vision 호출 누락(비전 성공/실패 경로), `/v1/chat/completions`가 route security에서 404 처리되는 누락, 이미지/PDF 응답의 기대 Vision description 미포함이다.
+- 구현: generic 변환에서 페이지별 Vision 분석을 실행해 OCR+Vision 문맥을 downstream에 전달하고 Vision FAILURE 시 fail-closed한다. `error_screenshot`·`document` profile은 기존대로 OCR만 수행한다. Chat Completions route에 `responses:invoke` scope gate를 연결했다. 원격 targeted/full 회귀 재실행 대기.
 
 ## 2026-09-24 — Test Lab auto의 분석 모델 선택 결함 수정
 
