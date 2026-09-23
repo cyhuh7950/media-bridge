@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -467,7 +467,7 @@ def build_control_app(
         kind = request.query_params.get("kind", "analysis")
         if kind not in ("analysis", "llm"):
             return _error("invalid_provider_catalog_kind", 400)
-        catalog_kind = cast(ProviderKind, "llm" if kind == "llm" else "analysis")
+        catalog_kind: ProviderKind = "llm" if kind == "llm" else "analysis"
         return JSONResponse(provider_catalog_payload(catalog_kind))
 
     async def provider_reasoning_options(request: Request) -> Response:
