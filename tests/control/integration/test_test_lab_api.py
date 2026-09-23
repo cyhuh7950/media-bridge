@@ -22,7 +22,7 @@ def _preview_payload() -> dict[str, object]:
     }
 
 
-def test_preview_has_zero_downstream_and_run_requires_literal_opt_in(
+def test_preview_fails_closed_without_a_routing_profile(
     migrated_postgres: str,
     monkeypatch: object,
 ) -> None:
@@ -48,9 +48,8 @@ def test_preview_has_zero_downstream_and_run_requires_literal_opt_in(
     payload = _preview_payload()
 
     preview = client.post("/admin/v1/test-lab/preview", headers=headers, json=payload)
-    assert preview.status_code == 200
-    assert preview.json()["action"] == "preview"
-    assert preview.json()["status"] == "validated"
+    assert preview.status_code == 404
+    assert preview.json() == {"error": {"code": "routing_profile_unavailable"}}
     assert gateway.calls == []
 
     missing_opt_in = client.post(
@@ -75,7 +74,6 @@ def test_preview_has_zero_downstream_and_run_requires_literal_opt_in(
     assert missing_opt_in.status_code == 400
     assert false_opt_in.status_code == 400
     assert gateway.calls == []
-
     run = client.post(
         "/admin/v1/test-lab/run",
         headers=headers,
@@ -86,9 +84,9 @@ def test_preview_has_zero_downstream_and_run_requires_literal_opt_in(
             "execute_downstream": True,
         },
     )
-    assert run.status_code == 200
-    assert run.json()["id"] == "resp_test"
-    assert gateway.calls[-3:] == ["upload", "responses", "delete"]
+    assert run.status_code == 404
+    assert run.json() == {"error": {"code": "routing_profile_unavailable"}}
+    assert gateway.calls == []
     database.close()
 
 
@@ -118,7 +116,7 @@ def test_preview_does_not_call_downstream_or_expose_credentials(
     payload = _preview_payload()
 
     response = client.post("/admin/v1/test-lab/preview", headers=headers, json=payload)
-    assert response.status_code == 200
-    assert response.json()["status"] == "validated"
+    assert response.status_code == 404
+    assert response.json() == {"error": {"code": "routing_profile_unavailable"}}
     assert gateway.calls == []
     database.close()

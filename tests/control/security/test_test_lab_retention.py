@@ -50,7 +50,8 @@ def test_test_lab_bodies_do_not_persist_to_database_audit_or_logs(
             "media_base64": base64.b64encode(media_marker).decode(),
         },
     )
-    assert response.status_code == 200
+    assert response.status_code == 404
+    assert response.json() == {"error": {"code": "routing_profile_unavailable"}}
 
     safe_queries = [
         text("SELECT row_to_json(entry)::text FROM connections AS entry"),

@@ -199,19 +199,21 @@ def test_only_admin_can_create_users(migrated_postgres: str) -> None:
     database.close()
 
 
-def test_provider_api_rejects_raw_secret_and_persists_reference_only(
+def test_provider_api_encrypts_raw_secret_and_persists_reference_only(
     migrated_postgres: str,
 ) -> None:
     _, database, app = _setup(migrated_postgres)
     operator, csrf = _login(app, "operator")
 
     raw_value = "sk-test-raw-value-never-store"
-    rejected = operator.post(
+    created_with_key = operator.post(
         "/admin/v1/providers",
         headers={"origin": "https://control.test", "x-csrf-token": csrf},
-        json={**_provider_payload("bad"), "api_key": raw_value},
+        json={**_provider_payload("good"), "api_key": raw_value},
     )
-    assert rejected.status_code == 400
+    assert created_with_key.status_code == 201
+    assert created_with_key.json()["has_api_key"] is True
+    assert raw_value not in created_with_key.text
     created = operator.post(
         "/admin/v1/providers",
         headers={"origin": "https://control.test", "x-csrf-token": csrf},
@@ -223,6 +225,8 @@ def test_provider_api_rejects_raw_secret_and_persists_reference_only(
     with database.session() as session:
         provider = session.scalar(select(Provider).where(Provider.name == "good"))
         assert provider is not None
+        assert provider.encrypted_api_key is not None
+        assert raw_value not in provider.encrypted_api_key
         persisted = " ".join(
             [
                 provider.name,

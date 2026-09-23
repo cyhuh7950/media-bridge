@@ -98,6 +98,7 @@ def build_control_app(
     action_rate_limiter: AdminActionRateLimiter | None = None,
 ) -> Starlette:
     configuration = ConfigurationService(service.database, service.security)
+    connections = ConnectionService(service.database)
     credentials = CredentialService(
         database=service.database,
         security=service.security,

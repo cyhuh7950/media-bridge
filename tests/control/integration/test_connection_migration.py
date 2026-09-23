@@ -18,7 +18,7 @@ def test_connection_migration_is_reversible_and_contains_no_raw_credential_colum
     clean_postgres: str,
 ) -> None:
     config = _config(clean_postgres)
-    command.upgrade(config, "head")
+    command.upgrade(config, "0005_routing_profiles")
 
     engine = create_engine(clean_postgres)
     inspector = inspect(engine)
@@ -50,7 +50,7 @@ def test_connection_migration_is_reversible_and_contains_no_raw_credential_colum
     assert "connections" not in inspect(engine).get_table_names()
     engine.dispose()
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "0005_routing_profiles")
     engine = create_engine(clean_postgres)
     assert "connections" in inspect(engine).get_table_names()
     engine.dispose()

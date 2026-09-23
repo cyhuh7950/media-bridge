@@ -40,11 +40,22 @@ def test_model_and_fail_closed_policy_round_trip(migrated_postgres: str) -> None
     client, csrf, database = _configured_client(migrated_postgres)
     headers = {"origin": "https://control.test", "x-csrf-token": csrf}
     reviewed = datetime(2026, 8, 24, 3, 0, tzinfo=UTC)
+    provider = client.post(
+        "/admin/v1/providers",
+        headers=headers,
+        json={
+            "name": "llm-primary",
+            "kind": "llm",
+            "endpoint": "https://provider.test/v1",
+            "secret_ref": {"kind": "env", "identifier": "LLM_API_KEY"},
+        },
+    ).json()
 
     model = client.post(
         "/admin/v1/models",
         headers=headers,
         json={
+            "provider_id": provider["id"],
             "model_id": "vendor/text-model",
             "aliases": ["text-model"],
             "input_modalities": ["text"],
@@ -113,19 +124,6 @@ def test_configuration_items_support_guarded_patch_and_delete(
             "enabled": True,
         },
     ).json()
-    created_model = client.post(
-        "/admin/v1/models",
-        headers=headers,
-        json={
-            "model_id": "vendor/vision-model",
-            "aliases": [],
-            "input_modalities": ["text", "image"],
-            "evidence": "vendor capability statement",
-            "reviewed_at": reviewed.isoformat(),
-            "expires_at": (reviewed + timedelta(days=30)).isoformat(),
-            "pdf_passthrough_verified": False,
-        },
-    ).json()
     created_policy = client.post(
         "/admin/v1/policies",
         headers=headers,
@@ -139,6 +137,29 @@ def test_configuration_items_support_guarded_patch_and_delete(
             "allow_asset": True,
             "allow_local_path": False,
             "fail_closed": True,
+        },
+    ).json()
+    llm_provider = client.post(
+        "/admin/v1/providers",
+        headers=headers,
+        json={
+            "name": "llm-primary",
+            "kind": "llm",
+            "endpoint": "https://llm.provider.test/v1",
+            "secret_ref": {"kind": "env", "identifier": "LLM_API_KEY"},
+        },
+    ).json()
+    created_model = client.post(
+        "/admin/v1/models",
+        headers=headers,
+        json={
+            "provider_id": llm_provider["id"],
+            "model_id": "vendor/vision-model",
+            "aliases": [],
+            "input_modalities": ["text", "image"],
+            "evidence": "vendor capability statement",
+            "reviewed_at": reviewed.isoformat(),
+            "pdf_passthrough_verified": False,
         },
     ).json()
 
@@ -240,6 +261,7 @@ def test_provider_reasoning_options_require_authentication(migrated_postgres: st
     service = ControlPlaneService(
         database=database,
         security=SecurityContext(pepper=b"c" * 32),
+        now=lambda: datetime(2026, 8, 24, 3, 0, tzinfo=UTC),
     )
     client = TestClient(
         build_control_app(
