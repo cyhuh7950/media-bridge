@@ -160,7 +160,7 @@ def build_control_app(
             result.session_token,
             max_age=int(service.SESSION_TTL.total_seconds()),
             path="/admin/v1",
-            secure=True,
+            secure=not allow_insecure_http,
             httponly=True,
             samesite="strict",
         )
@@ -213,7 +213,7 @@ def build_control_app(
             result.session_token,
             max_age=int(service.SESSION_TTL.total_seconds()),
             path="/admin/v1",
-            secure=True,
+            secure=not allow_insecure_http,
             httponly=True,
             samesite="strict",
         )

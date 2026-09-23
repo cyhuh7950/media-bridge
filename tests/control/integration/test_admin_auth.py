@@ -113,6 +113,43 @@ def test_http_control_endpoint_can_login_when_explicitly_enabled(
     database.close()
 
 
+def test_http_totp_login_sets_cookie_usable_without_tls(migrated_postgres: str) -> None:
+    database = Database(migrated_postgres)
+    now = datetime(2026, 8, 24, 1, 0, tzinfo=UTC)
+    service = ControlPlaneService(
+        database=database,
+        security=SecurityContext(pepper=b"s" * 32),
+        now=lambda: now,
+    )
+    service.ensure_default_admin()
+    enrollment = service.begin_totp_enrollment_with_password(
+        username="admin",
+        password="admin",
+    )
+    counter = int(now.timestamp()) // 30
+    code = _hotp(base64.b32decode(enrollment.secret + "=" * (-len(enrollment.secret) % 8)), counter)
+    service.confirm_totp_enrollment(user_id=enrollment.user_id, code=code)
+    client = TestClient(
+        build_control_app(
+            service=service,
+            allowed_origin="http://control.test",
+            allowed_host="control.test",
+            allow_insecure_http=True,
+        ),
+        base_url="http://control.test",
+    )
+
+    response = client.post(
+        "/admin/v1/auth/totp/login",
+        headers={"origin": "http://control.test"},
+        json={"username": "admin", "password": "admin", "code": code},
+    )
+
+    assert response.status_code == 200
+    assert "Secure" not in response.headers["set-cookie"]
+    database.close()
+
+
 def test_password_recovery_endpoint_is_disabled(migrated_postgres: str) -> None:
     client, _, database = _client(migrated_postgres)
     response = client.post(
