@@ -64,7 +64,7 @@ export function RoutingProfilesPage({ role, csrfToken }: OperationsProps) {
   const analysis = providers.filter((provider) => ["analysis", "vision", "ocr"].includes(provider.kind));
   const llm = providers.filter((provider) => provider.kind === "llm");
   return <section aria-labelledby="routing-profiles-title">
-    <div className="page-heading"><div><h1 id="routing-profiles-title">라우팅 프로필 관리</h1><p>분석 Provider와 Non‑Vision LLM Provider를 N:N으로 연결하고 선택 정책을 관리합니다.</p></div>{writable ? <button type="button" onClick={openCreate}>라우팅 프로필 등록</button> : null}</div>
+    <div className="page-heading"><div><h1 id="routing-profiles-title">내부 실행 라우팅 관리</h1><p>분석 Provider와 Non‑Vision LLM Provider를 N:N으로 연결하는 Media Bridge 내부 실행 정책입니다. 외부 model 값은 모델 관리에서 생성합니다.</p></div>{writable ? <button type="button" onClick={openCreate}>내부 라우팅 등록</button> : null}</div>
     {failed ? <p role="alert">라우팅 프로필 목록을 불러올 수 없습니다.</p> : null}{deleteFailed ? <p role="alert">선택한 라우팅 프로필을 모두 삭제하지 못했습니다.</p> : null}{!writable ? <p>viewer는 라우팅 프로필을 읽기만 할 수 있습니다.</p> : null}
     {profiles.length === 0 && !failed ? <p role="status">등록된 라우팅 프로필이 없습니다.</p> : null}
     {profiles.length > 0 ? <>{writable && selectedIds.length > 0 ? <div className="inline-actions"><button type="button" className="danger-button" onClick={() => { void deleteSelected(); }}>선택 삭제 ({selectedIds.length})</button></div> : null}

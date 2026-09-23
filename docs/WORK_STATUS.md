@@ -1,5 +1,15 @@
 # Media Bridge 작업현황
 
+## 2026-09-23 — OmniRoute 호환 공개 모델·추론 등급 구현 진행
+
+- `codex/manual-integrated-revision`에서 구현 중이다. 설치형은 수정·배포하지 않는다.
+- Provider 등록은 외부 모델을 자동 공개하지 않고, Provider 약어(alias)만 자동 생성하며 수정할 수 있게 했다. 모델 관리에서 `provider/model` 공개 모델을 생성하고 내부 routing profile과 연결한다.
+- `/v1/models`에는 등록된 공개 모델만 노출한다. Provider 등록만으로 모델이 생기지 않으며, OmniRoute/OpenRouter 등 route형 카탈로그는 upstream Provider 선택 목록에서 제외했다. 사용자 정의 Provider 입력은 유지한다.
+- 외부 모델 선택은 미지정(기본 모델), `auto`(Media Bridge 내부 선택), 명시적 `provider/model`로 구분했다. 요청 추론 등급 → 공개 모델 설정 → Provider 설정 → Media Bridge 정책 기본값 순으로 적용하며 공개 표준값은 `low|medium|high`이다.
+- Test Lab의 전체 파이프라인과 외부 클라이언트 흐름 시험 모두 공개 모델·추론 등급을 선택한다. Provider 화면의 Secret 환경변수 입력·표시 경로는 제거하고 Provider API key는 DB 보관 경로만 사용한다.
+- 검증: 변경 Python Ruff 통과, control unit/packaging 74 passed, Web build 및 Operations/Test Lab 16 passed. Gateway unit은 33 passed, 3 failed이며 실패 중 downstream capability fixture는 수정 후 해당 테스트가 통과했고, 나머지는 기존 FakeDownstream 계약 assertion 및 만료일 fixture 문제로 미수정·미해결이다.
+- 아직 commit/push, WSL-server 배포, DB migration 적용, 브라우저 운영 smoke는 수행하지 않았다. 다음은 변경 diff 검토 후 checkpoint commit/push와 배포 전 재검증이다.
+
 ## 2026-09-22 — WSL 배포형 clean redeploy 및 초기 Control 기동 복구
 
 - 신산님 지시를 최신 기준으로 적용한다: WSL 배포형 Media Bridge의 이전 리소스는 정리하고 기존 `/home/daon/deploy/media-bridge/.env`만 보존한다. 기존 WSL DB/볼륨은 재사용하지 않고 새 DB로 시작한다. 개인 설치형 런타임과 다른 프로젝트 리소스는 범위 밖이다.

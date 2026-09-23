@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import re
 from typing import Any
 from uuid import UUID
 
@@ -40,6 +40,11 @@ class ConfigurationError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+def _provider_alias(value: str) -> str:
+    alias = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return (alias or "provider")[:64]
 
 
 class ConfigurationService:
@@ -89,6 +94,7 @@ class ConfigurationService:
                 candidate = ProviderCreate.model_validate(
                     {
                         "name": row.name,
+                        "alias": row.alias,
                         "kind": row.kind,
                         "catalog_id": row.catalog_id,
                         "model_id": row.model_id,
@@ -139,6 +145,7 @@ class ConfigurationService:
                 raise ConfigurationError("reasoning_effort_unsupported")
         return {
             "name": request.name,
+            "alias": request.alias or _provider_alias(request.catalog_id or request.name),
             "kind": request.kind,
             "catalog_id": request.catalog_id,
             "model_id": request.model_id,
@@ -173,6 +180,7 @@ class ConfigurationService:
         return {
             "id": str(row.id),
             "name": row.name,
+            "alias": row.alias or _provider_alias(row.catalog_id or row.name),
             "kind": row.kind,
             "catalog_id": row.catalog_id,
             "model_id": model_id,
@@ -285,22 +293,51 @@ class ConfigurationService:
     def create_model(self, request: ModelCapabilityCreate) -> dict[str, Any]:
         try:
             with self._database.session() as session:
-                if request.provider_id is None:
-                    raise ConfigurationError("model_provider_required")
-                provider = session.get(Provider, request.provider_id)
-                if provider is None:
-                    raise ConfigurationError("model_provider_not_found")
-                if provider.kind != "llm":
+                profile = (
+                    session.get(RoutingProfile, request.routing_profile_id)
+                    if request.routing_profile_id
+                    else None
+                )
+                if request.routing_profile_id and profile is None:
+                    raise ConfigurationError("model_routing_profile_not_found")
+                provider = (
+                    session.get(Provider, request.provider_id)
+                    if request.provider_id
+                    else None
+                )
+                if provider is not None and provider.kind != "llm":
                     raise ConfigurationError("model_provider_invalid")
+                if provider is None and profile is None:
+                    raise ConfigurationError("model_provider_or_routing_required")
+                if profile is not None:
+                    llm_ids = [UUID(value) for value in profile.llm_provider_ids]
+                    if provider is not None and provider.id not in llm_ids:
+                        raise ConfigurationError("model_provider_not_in_routing_profile")
+                    if provider is None and llm_ids:
+                        provider = session.get(Provider, llm_ids[0])
+                    if provider is None or provider.kind != "llm":
+                        raise ConfigurationError("model_routing_provider_invalid")
+                assert provider is not None
+                public_model_id = request.model_id
+                if "/" not in public_model_id:
+                    public_model_id = (
+                        f"{provider.alias or _provider_alias(provider.name)}/{public_model_id}"
+                    )
                 row = ModelCapability(
-                    provider_id=request.provider_id,
-                    model_id=request.model_id,
+                    provider_id=provider.id,
+                    routing_profile_id=profile.id if profile else None,
+                    model_id=public_model_id,
                     aliases=sorted(request.aliases),
                     input_modalities=sorted(request.input_modalities),
                     evidence=request.evidence,
                     reviewed_at=request.reviewed_at,
                     expires_at=request.expires_at,
                     pdf_passthrough_verified=request.pdf_passthrough_verified,
+                    reasoning_effort=(
+                        None
+                        if request.reasoning_effort == "provider_default"
+                        else request.reasoning_effort
+                    ),
                 )
                 session.add(row)
                 session.flush()
@@ -326,6 +363,7 @@ class ConfigurationService:
                 candidate = ModelCapabilityCreate.model_validate(
                     {
                         "provider_id": row.provider_id,
+                        "routing_profile_id": row.routing_profile_id,
                         "model_id": row.model_id,
                         "aliases": row.aliases,
                         "input_modalities": set(row.input_modalities),
@@ -333,10 +371,12 @@ class ConfigurationService:
                         "reviewed_at": row.reviewed_at,
                         "expires_at": row.expires_at,
                         "pdf_passthrough_verified": row.pdf_passthrough_verified,
+                        "reasoning_effort": row.reasoning_effort or "provider_default",
                         **request.model_dump(exclude_unset=True),
                     }
                 )
                 row.model_id = candidate.model_id
+                row.routing_profile_id = candidate.routing_profile_id
                 if candidate.provider_id is not None:
                     provider = session.get(Provider, candidate.provider_id)
                     if provider is None:
@@ -350,6 +390,11 @@ class ConfigurationService:
                 row.reviewed_at = candidate.reviewed_at
                 row.expires_at = candidate.expires_at
                 row.pdf_passthrough_verified = candidate.pdf_passthrough_verified
+                row.reasoning_effort = (
+                    None
+                    if candidate.reasoning_effort == "provider_default"
+                    else candidate.reasoning_effort
+                )
                 session.flush()
                 return self._model(row)
         except IntegrityError as error:
@@ -369,6 +414,9 @@ class ConfigurationService:
         return {
             "id": str(row.id),
             "provider_id": str(row.provider_id) if row.provider_id is not None else None,
+            "routing_profile_id": (
+                str(row.routing_profile_id) if row.routing_profile_id is not None else None
+            ),
             "model_id": row.model_id,
             "aliases": row.aliases,
             "input_modalities": row.input_modalities,
@@ -376,6 +424,7 @@ class ConfigurationService:
             "reviewed_at": row.reviewed_at.isoformat(),
             "expires_at": row.expires_at.isoformat(),
             "pdf_passthrough_verified": row.pdf_passthrough_verified,
+            "reasoning_effort": row.reasoning_effort or "provider_default",
         }
 
     def create_policy(self, request: PolicyCreate) -> dict[str, Any]:
@@ -446,21 +495,8 @@ class ConfigurationService:
                 select(ModelCapability).order_by(ModelCapability.model_id)
             )
         ]
-        if not models:
-            models = [
-                {
-                    "provider_id": item["id"],
-                    "model_id": item["model_id"],
-                    "aliases": [],
-                    "input_modalities": (
-                        ["text"] if item["kind"] == "llm" else ["image", "pdf"]
-                    ),
-                    "expires_at": datetime.max.replace(tzinfo=UTC).isoformat(),
-                    "pdf_passthrough_verified": False,
-                }
-                for item in providers
-                if item["model_id"] is not None
-            ]
+        # Registering a Provider does not publish an external model. A public
+        # model is created separately and is the only source for the snapshot.
         policies = [
             self._policy(row)
             for row in session.scalars(select(Policy).order_by(Policy.name))
@@ -478,11 +514,21 @@ class ConfigurationService:
                         "input_modalities": item["input_modalities"],
                         "expires_at": item["expires_at"],
                         "pdf_passthrough_verified": item["pdf_passthrough_verified"],
+                        "routing_profile_id": item.get("routing_profile_id"),
+                        "reasoning_effort": item.get("reasoning_effort"),
                     }
                     for item in models
                 ],
             },
             "providers": providers,
+            "routing_profiles": [
+                self._routing_profile(row)
+                for row in session.scalars(select(RoutingProfile).order_by(RoutingProfile.name))
+                if row.enabled
+            ],
+            "defaults": {
+                "reasoning_effort": policies[0].get("reasoning_effort", "provider_default")
+            },
             "policy": policies[0],
             "data_plane_auth": {"entries": self._data_plane_auth_entries(session)},
         }

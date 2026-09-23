@@ -44,13 +44,14 @@ def test_fresh_upgrade_creates_control_plane_schema(clean_postgres: str) -> None
     with engine.connect() as connection:
         revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
     engine.dispose()
-    assert revision == "0010_previous_csrf_digest"
+    assert revision == "0011_public_model_routing"
     assert {
         "catalog_id",
         "protocol",
         "capabilities",
         "encrypted_api_key",
         "reasoning_effort",
+        "alias",
     } <= provider_columns
 
 

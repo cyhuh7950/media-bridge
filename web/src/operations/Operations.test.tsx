@@ -55,7 +55,7 @@ it("builds dashboard status only from current P1 API responses", async () => {
   expect(document.body.textContent).not.toMatch(/demo|sample|가짜/i);
 });
 
-it("renders persisted provider references but no write controls for a viewer", async () => {
+it("does not expose provider secret references to a viewer", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>().mockResolvedValue(
@@ -75,7 +75,7 @@ it("renders persisted provider references but no write controls for a viewer", a
   render(<ProvidersPage role="viewer" csrfToken={null} />);
 
   expect(await screen.findByText("vision-primary")).toBeInTheDocument();
-  expect(screen.getByText("환경변수: VISION_API_KEY")).toBeInTheDocument();
+  expect(screen.queryByText("환경변수: VISION_API_KEY")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Provider 추가" })).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Provider Secret 원문")).not.toBeInTheDocument();
 });
@@ -90,7 +90,7 @@ it("does not expose the internal DB provider secret identifier", async () => {
 
   render(<ProvidersPage role="viewer" csrfToken={null} />);
 
-  expect(await screen.findByText("등록됨")).toBeInTheDocument();
+  expect(screen.queryByText("등록됨")).not.toBeInTheDocument();
   expect(screen.queryByText("DB: provider_api_key")).not.toBeInTheDocument();
 });
 

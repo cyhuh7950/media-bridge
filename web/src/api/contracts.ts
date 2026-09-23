@@ -15,6 +15,7 @@ export interface ProviderReasoningOptions {
 
 export interface ProviderWriteRequest {
   name: string;
+  alias?: string;
   kind: "analysis" | "llm";
   catalog_id?: string;
   model_id?: string;

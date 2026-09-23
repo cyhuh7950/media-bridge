@@ -29,6 +29,11 @@ from media_bridge_gateway.contracts import (
     SealedGatewayRequest,
 )
 from media_bridge_gateway.normalizer import digest_gateway_payload
+from media_bridge_gateway.provider_selection import (
+    ProviderRouteCandidate,
+    ProviderSelectionError,
+    select_provider,
+)
 
 _RESPONSE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _REQUEST_NONCE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
@@ -468,6 +473,20 @@ class ProviderResponsesDownstream:
         output_model = self._model or request.target_id
         if self._snapshot is not None:
             provider = self._provider_for_target(request.target_id)
+            requested_effort = request.payload.get("reasoning_effort")
+            if requested_effort is None:
+                defaults = self._snapshot.get("defaults")
+                if isinstance(defaults, Mapping):
+                    requested_effort = defaults.get("reasoning_effort")
+            if requested_effort is not None:
+                if requested_effort not in {"low", "medium", "high"}:
+                    raise DownstreamError(
+                        "reasoning_effort_invalid",
+                        "The requested reasoning effort is invalid.",
+                        http_status=400,
+                    )
+                provider = dict(provider)
+                provider["reasoning_effort"] = requested_effort
             assert self._backend_factory is not None
             try:
                 backend = self._backend_factory(provider)
@@ -534,11 +553,32 @@ class ProviderResponsesDownstream:
                 isinstance(aliases, list) and target_id in aliases
             ):
                 model_matches.append(item)
+        if len(model_matches) != 1:
+            raise DownstreamError(
+                "model_provider_unavailable",
+                "No unique Provider is configured for the target model.",
+            )
+        model = model_matches[0]
+        routing_profile_id = model.get("routing_profile_id")
+        routing_profiles = self._snapshot.get("routing_profiles")
         provider_ids = {
             item.get("provider_id")
             for item in model_matches
             if isinstance(item.get("provider_id"), str)
         }
+        if isinstance(routing_profile_id, str) and isinstance(routing_profiles, list):
+            profile = next(
+                (
+                    item
+                    for item in routing_profiles
+                    if isinstance(item, Mapping) and item.get("id") == routing_profile_id
+                ),
+                None,
+            )
+            if isinstance(profile, Mapping) and isinstance(profile.get("llm_provider_ids"), list):
+                provider_ids = {
+                    item for item in profile["llm_provider_ids"] if isinstance(item, str)
+                }
         provider_matches = [
             item
             for item in providers
@@ -547,12 +587,47 @@ class ProviderResponsesDownstream:
             and item.get("kind") == "llm"
             and item.get("enabled") is True
         ]
-        if len(model_matches) != 1 or len(provider_ids) != 1 or len(provider_matches) != 1:
+        if not provider_matches:
             raise DownstreamError(
                 "model_provider_unavailable",
                 "No unique Provider is configured for the target model.",
             )
-        provider = provider_matches[0]
+        strategy = "priority"
+        if isinstance(routing_profile_id, str) and isinstance(routing_profiles, list):
+            profile = next(
+                (
+                    item
+                    for item in routing_profiles
+                    if isinstance(item, Mapping) and item.get("id") == routing_profile_id
+                ),
+                None,
+            )
+            if isinstance(profile, Mapping) and profile.get("strategy") in {
+                "priority", "fallback", "health", "cost"
+            }:
+                strategy = cast(str, profile["strategy"])
+        try:
+            chosen = select_provider(
+                [
+                    ProviderRouteCandidate(
+                        provider_id=str(item["id"]),
+                        enabled=bool(item.get("enabled")),
+                        capabilities=frozenset(
+                            item.get("capabilities", [])
+                            or (["text"] if item.get("kind") == "llm" else [])
+                        ),
+                    )
+                    for item in provider_matches
+                ],
+                required_capability="text",
+                strategy=strategy,  # type: ignore[arg-type]
+            )
+        except ProviderSelectionError as error:
+            raise DownstreamError(
+                "model_provider_unavailable",
+                "No healthy Provider can serve this model.",
+            ) from error
+        provider = next(item for item in provider_matches if str(item["id"]) == chosen.provider_id)
         if not all(
             isinstance(provider.get(key), str) and provider[key]
             for key in ("catalog_id", "protocol", "endpoint", "model_id")

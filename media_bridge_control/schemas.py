@@ -117,6 +117,10 @@ class SecretReference(AdminStrictModel):
 
 class ProviderCreate(AdminStrictModel):
     name: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")]
+    alias: Annotated[
+        str,
+        StringConstraints(pattern=r"^[a-z][a-z0-9-]{0,63}$"),
+    ] | None = None
     kind: Literal["ocr", "vision", "analysis", "llm"]
     catalog_id: Annotated[
         str,
@@ -145,6 +149,10 @@ class ProviderUpdate(NonEmptyUpdate):
     name: Annotated[
         str,
         StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"),
+    ] | None = None
+    alias: Annotated[
+        str,
+        StringConstraints(pattern=r"^[a-z][a-z0-9-]{0,63}$"),
     ] | None = None
     kind: Literal["ocr", "vision", "analysis", "llm"] | None = None
     catalog_id: Annotated[
@@ -255,7 +263,8 @@ class TestLabPreviewRequest(AdminStrictModel):
     routing_profile_id: UUID | None = None
     gateway_url: Annotated[str, StringConstraints(max_length=2_048)] | None = None
     api_key: Annotated[str, StringConstraints(min_length=1, max_length=4_096)] | None = None
-    target_model: Annotated[str, StringConstraints(min_length=1, max_length=128)]
+    target_model: Annotated[str, StringConstraints(min_length=1, max_length=128)] | None = None
+    reasoning_effort: Literal["provider_default", "low", "medium", "high"] = "provider_default"
     conversion_profile: Literal["generic", "error_screenshot", "document"] = "generic"
     user_request: Annotated[str, StringConstraints(min_length=1, max_length=20_000)]
     media_type: Literal["image", "pdf"]
@@ -306,6 +315,7 @@ class TestLabRunRequest(TestLabPreviewRequest):
 
 
 class ModelCapabilityCreate(AdminStrictModel):
+    routing_profile_id: UUID | None = None
     provider_id: UUID | None = None
     model_id: Annotated[
         str,
@@ -320,6 +330,7 @@ class ModelCapabilityCreate(AdminStrictModel):
     reviewed_at: datetime
     expires_at: datetime
     pdf_passthrough_verified: bool = False
+    reasoning_effort: Literal["provider_default", "low", "medium", "high"] = "provider_default"
 
     @field_validator("reviewed_at", "expires_at")
     @classmethod
@@ -338,6 +349,7 @@ class ModelCapabilityCreate(AdminStrictModel):
 
 
 class ModelCapabilityUpdate(NonEmptyUpdate):
+    routing_profile_id: UUID | None = None
     provider_id: UUID | None = None
     model_id: Annotated[
         str,
@@ -354,6 +366,7 @@ class ModelCapabilityUpdate(NonEmptyUpdate):
     reviewed_at: datetime | None = None
     expires_at: datetime | None = None
     pdf_passthrough_verified: bool | None = None
+    reasoning_effort: Literal["provider_default", "low", "medium", "high"] | None = None
 
     @field_validator("reviewed_at", "expires_at")
     @classmethod
@@ -373,6 +386,7 @@ class PolicyCreate(AdminStrictModel):
     allow_asset: bool
     allow_local_path: bool
     fail_closed: bool
+    reasoning_effort: Literal["provider_default", "low", "medium", "high"] = "provider_default"
 
 
 class PolicyUpdate(NonEmptyUpdate):
@@ -388,6 +402,7 @@ class PolicyUpdate(NonEmptyUpdate):
     allow_asset: bool | None = None
     allow_local_path: bool | None = None
     fail_closed: bool | None = None
+    reasoning_effort: Literal["provider_default", "low", "medium", "high"] | None = None
 
 
 class CredentialCreate(AdminStrictModel):

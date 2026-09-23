@@ -67,7 +67,7 @@ def test_supported_schemas_can_plan_upgrade_to_reasoning_head(current_revision: 
 def test_deployment_migration_applies_and_verifies_reasoning_head(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    revisions = iter(("0008_model_provider", "0009_provider_reasoning_effort"))
+    revisions = iter(("0008_model_provider", "0011_public_model_routing"))
     applied: list[str] = []
 
     class FakeConfig:
@@ -89,7 +89,7 @@ def test_deployment_migration_applies_and_verifies_reasoning_head(
     )
 
     assert result == "migration_applied"
-    assert applied == ["0009_provider_reasoning_effort"]
+    assert applied == ["0011_public_model_routing"]
 
 
 def test_upgrade_requires_verified_backup_and_exact_version(tmp_path: Path) -> None:

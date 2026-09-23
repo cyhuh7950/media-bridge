@@ -76,16 +76,6 @@ _CATALOG: tuple[ProviderCatalogEntry, ...] = (
         "vision",
     ),
     ProviderCatalogEntry(
-        "omniroute",
-        "OmniRoute",
-        "llm",
-        "openai-responses",
-        ("text",),
-        None,
-        "MEDIA_BRIDGE_OMNIROUTE_API_KEY",
-        "auto",
-    ),
-    ProviderCatalogEntry(
         "openai",
         "OpenAI",
         "llm",
@@ -154,16 +144,6 @@ _CATALOG: tuple[ProviderCatalogEntry, ...] = (
         "https://api.deepseek.com/v1",
         "DEEPSEEK_API_KEY",
         "deepseek-chat",
-    ),
-    ProviderCatalogEntry(
-        "openrouter",
-        "OpenRouter",
-        "llm",
-        "openai-chat-completions",
-        ("text",),
-        "https://openrouter.ai/api/v1",
-        "OPENROUTER_API_KEY",
-        "openrouter/auto",
     ),
     ProviderCatalogEntry(
         "ollama",

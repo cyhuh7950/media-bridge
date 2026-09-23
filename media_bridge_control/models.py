@@ -145,6 +145,7 @@ class Provider(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(128), unique=True)
+    alias: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     kind: Mapped[str] = mapped_column(String(16))
     catalog_id: Mapped[str | None] = mapped_column(String(128))
     model_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -191,6 +192,9 @@ class ModelCapability(Base):
     provider_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("providers.id"), nullable=True
     )
+    routing_profile_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("routing_profiles.id"), nullable=True
+    )
     model_id: Mapped[str] = mapped_column(String(128), unique=True)
     aliases: Mapped[list[str]] = mapped_column(JSONB, default=list)
     input_modalities: Mapped[list[str]] = mapped_column(JSONB)
@@ -198,6 +202,7 @@ class ModelCapability(Base):
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     pdf_passthrough_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    reasoning_effort: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

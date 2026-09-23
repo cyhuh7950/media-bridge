@@ -22,6 +22,7 @@ class SnapshotModelEntry(StrictModel):
         StringConstraints(pattern=r"^[a-z0-9][a-z0-9./:_-]{0,127}$"),
     ] = Field(alias="id")
     provider_id: str | None = None
+    routing_profile_id: str | None = None
     aliases: list[
         Annotated[
             str,
@@ -31,6 +32,7 @@ class SnapshotModelEntry(StrictModel):
     input_modalities: set[Literal["text", "image", "pdf"]]
     expires_at: datetime
     pdf_passthrough_verified: bool = False
+    reasoning_effort: str | None = None
 
     @field_validator("expires_at")
     @classmethod

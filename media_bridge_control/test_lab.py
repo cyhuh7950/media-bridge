@@ -12,10 +12,11 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
+from sqlalchemy import select
 
 from media_bridge_control.db import Database
 from media_bridge_control.gateway_client import GatewayClient, GatewayClientError
-from media_bridge_control.models import Provider, RoutingProfile
+from media_bridge_control.models import ModelCapability, Provider, RoutingProfile
 from media_bridge_control.schemas import SecretReference, TestLabPreviewRequest, TestLabRunRequest
 from media_bridge_control.secrets import GatewaySecretResolver, SecretResolutionError
 from media_bridge_control.security import SecurityContext
@@ -78,10 +79,9 @@ class TestLabService:
 
     async def preview(self, request: TestLabPreviewRequest) -> dict[str, object]:
         data = self._decode(request.media_base64)
-        if request.routing_profile_id is None:
-            raise TestLabError("routing_profile_required")
+        profile_id = request.routing_profile_id or self._default_profile_id()
         try:
-            profile, analysis, llm = self._providers(request.routing_profile_id)
+            profile, analysis, llm = self._providers(profile_id)
             analysis_key = self._provider_key(analysis)
             llm_key = self._provider_key(llm)
             async with httpx.AsyncClient(
@@ -92,7 +92,9 @@ class TestLabService:
                     f"{request.user_request.strip()}\n\n"
                     f"[미디어에서 추출한 텍스트]\n{extracted}"
                 ).strip()
-                answer = await self._answer(client, llm, llm_key, forwarded)
+                answer = await self._answer(
+                    client, llm, llm_key, forwarded, request.reasoning_effort
+                )
         except (httpx.HTTPError, ValueError, KeyError, SecretResolutionError) as error:
             logger.exception(
                 "test lab routed provider call failed",
@@ -107,6 +109,15 @@ class TestLabService:
             "originalMediaForwarded": False,
             "answer": answer,
         }
+
+    def _default_profile_id(self) -> Any:
+        with self._database.session() as session:
+            profile = session.scalar(
+                select(RoutingProfile).where(RoutingProfile.enabled.is_(True)).order_by(RoutingProfile.name)
+            )
+            if profile is None:
+                raise TestLabError("routing_profile_unavailable")
+            return profile.id
 
     def _providers(self, profile_id: Any) -> tuple[RoutingProfile, Provider, Provider]:
         with self._database.session() as session:
@@ -172,7 +183,8 @@ class TestLabService:
         raise ValueError("upstream_invalid_response")
 
     async def _answer(
-        self, client: httpx.AsyncClient, provider: Provider, key: str, prompt: str
+        self, client: httpx.AsyncClient, provider: Provider, key: str, prompt: str,
+        reasoning_effort: str = "provider_default",
     ) -> str:
         protocol = provider.protocol or "openai-chat-completions"
         if protocol == "openai-responses":
@@ -187,6 +199,8 @@ class TestLabService:
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
             }
+        if reasoning_effort != "provider_default":
+            payload["reasoning_effort"] = reasoning_effort
         response = await client.post(
             self._llm_endpoint(provider.endpoint, protocol),
             headers={"Authorization": f"Bearer {key}"},
@@ -263,14 +277,18 @@ class TestLabService:
         The UI deliberately sends ``auto`` so the OmniRoute test exercises the
         same routing profile selected in the existing whole-pipeline test.
         """
-        if request.target_model != "auto":
-            return request.target_model
-        if request.routing_profile_id is None:
-            raise TestLabError("routing_profile_required")
-        _, _, llm = self._providers(request.routing_profile_id)
-        if not llm.model_id:
-            raise TestLabError("routing_model_unavailable")
-        return llm.model_id
+        with self._database.session() as session:
+            if request.target_model and request.target_model != "auto":
+                model = session.scalar(
+                    select(ModelCapability).where(ModelCapability.model_id == request.target_model)
+                )
+                if model is None:
+                    raise TestLabError("model_not_found")
+                return model.model_id
+            model = session.scalar(select(ModelCapability).order_by(ModelCapability.model_id))
+            if model is None:
+                raise TestLabError("model_unavailable")
+            return model.model_id
 
     @staticmethod
     def _decode(value: str) -> bytes:
@@ -322,6 +340,11 @@ class TestLabService:
             }
         return {
             "model": target_model,
+            **(
+                {"reasoning_effort": request.reasoning_effort}
+                if request.reasoning_effort != "provider_default"
+                else {}
+            ),
             "input": [
                 {
                     "role": "user",
