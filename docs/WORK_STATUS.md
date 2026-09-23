@@ -6,7 +6,8 @@
 - RED→GREEN: 중복 옵션 부재 회귀 검증은 수정 전 두 선택 목록에서 중복 `auto(자동 선택)`을 발견해 실패했고 수정 후 TestLabPage 7 passed. TypeScript `--noEmit`, Vite production build 및 `git diff --check` 통과.
 - `capability_unknown`의 유력 원인은 배포 Data Plane의 활성 capability snapshot이 Control의 공개 모델 목록보다 오래된 점이다. Control에 등록된 `us/solar-pro4`가 활성 snapshot에는 없으며 snapshot의 `solar-pro4` 항목 ID/alias와도 일치하지 않는다. 명시 모델 ID가 이 snapshot에 전달되면 capability 조회에서 거부될 수 있다.
 - 활성 snapshot을 검증·발행하면 운영 라우팅 설정에 지속 변경이 발생하므로 이 작업에서는 실행하지 않았다. 외부 Provider 호출도 하지 않았다. 따라서 중복 UI 옵션 수정으로 `capability_unknown`이 해결됐다고 간주하지 않으며, snapshot 발행 및 동일 요청 재시험은 별도 조치로 남긴다.
-- 배포 후 확인: exact commit, Control health 및 `/test-lab`의 두 선택 목록을 확인한다. 실제 Provider 요청 결과와 snapshot 재발행은 미검증이다.
+- `5440f22bbf7c9dfe2c80e85d86393e235da442bd`를 설정된 `origin` SSH alias로 push하고 WSL-server 정식 배포 checkout에 반영했다. `media-bridge-control`만 재빌드·교체했으며 컨테이너 healthy, `/` 및 `/health` HTTP 200을 확인했다.
+- Chrome에서 `http://172.27.253.53:18642/test-lab`을 열어 배포 화면의 두 공개 모델 선택 목록에 `미지정(auto)`가 한 번씩만 표시되고, 기존 공개 모델 선택도 유지되는 것을 확인했다. 실제 Provider 요청 결과와 snapshot 재발행은 미검증이다.
 
 ## 2026-09-24 — Test Lab 공개 모델 기본 선택 라벨 명확화
 
