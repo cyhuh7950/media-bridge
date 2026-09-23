@@ -43,6 +43,22 @@ def test_public_model_binds_to_internal_routing_profile() -> None:
     assert request.reasoning_effort == "provider_default"
 
 
+def test_public_model_can_use_media_bridge_default_routing() -> None:
+    reviewed, expires = _timestamps()
+    request = ModelCapabilityCreate(
+        provider_id=uuid4(),
+        model_id="openai-prod/gpt-5",
+        aliases=[],
+        input_modalities={"text"},
+        evidence="operator verified",
+        reviewed_at=reviewed,
+        expires_at=expires,
+    )
+
+    assert request.routing_profile_id is None
+    assert request.provider_id is not None
+
+
 def test_public_model_rejects_non_public_identifier() -> None:
     reviewed, expires = _timestamps()
     with pytest.raises(ValidationError):

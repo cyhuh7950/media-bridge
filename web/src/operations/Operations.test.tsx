@@ -8,6 +8,7 @@ import { ProvidersPage } from "./ProvidersPage";
 import { PoliciesPage } from "./PoliciesPage";
 import { SnapshotsPage } from "./SnapshotsPage";
 import { SystemPage } from "./SystemPage";
+import { ModelsPage } from "./ModelsPage";
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -29,6 +30,33 @@ function parseRequestBody(body: BodyInit | null | undefined): Record<string, unk
     ? parsed as Record<string, unknown>
     : undefined;
 }
+
+it("creates a public model without requiring an internal routing profile", async () => {
+  const calls: Array<{ path: string; method: string; body?: Record<string, unknown> }> = [];
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>((input, init) => {
+    const path = requestPath(input);
+    const method = init?.method ?? "GET";
+    const body = parseRequestBody(init?.body);
+    calls.push({ path, method, body });
+    if (path === "/admin/v1/providers") return Promise.resolve(jsonResponse([{ id: "provider-1", name: "solar", alias: "solar", kind: "llm" }]));
+    if (path === "/admin/v1/models" && method === "GET") return Promise.resolve(jsonResponse([]));
+    if (path === "/admin/v1/models" && method === "POST") return Promise.resolve(jsonResponse({ id: "model-1" }, 201));
+    return Promise.reject(new Error(`unexpected request: ${method} ${path}`));
+  }));
+  const user = userEvent.setup();
+
+  render(<ModelsPage role="admin" csrfToken="csrf" />);
+  await user.click(await screen.findByRole("button", { name: "모델 생성" }));
+  expect(screen.queryByLabelText("내부 실행 라우팅")).not.toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText("기준 Non-Vision LLM Provider"), "provider-1");
+  await user.type(screen.getByLabelText("공개 모델 ID"), "solar/solar-pro4");
+  await user.type(screen.getByLabelText("Capability 근거"), "operator verified");
+  await user.click(screen.getByRole("button", { name: "생성" }));
+
+  const saved = calls.find((call) => call.method === "POST" && call.path === "/admin/v1/models");
+  expect(saved?.body?.provider_id).toBe("provider-1");
+  expect(saved?.body).not.toHaveProperty("routing_profile_id");
+});
 
 it("builds dashboard status only from current P1 API responses", async () => {
   const responses = new Map<string, object>([

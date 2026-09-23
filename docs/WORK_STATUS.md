@@ -1,5 +1,12 @@
 # Media Bridge 작업현황
 
+## 2026-09-23 — 모델과 내부 라우팅 책임 분리
+
+- 모델 생성 화면에서 `내부 실행 라우팅`을 필수 입력·조회 항목으로 제거했다. 모델은 공개 `provider/model`, 기준 Non‑Vision LLM Provider, 모델별 추론 등급·capability만 관리한다.
+- 모델에 라우팅 연결이 없는 경우 Data Plane은 snapshot의 첫 번째 활성 routing profile을 Media Bridge 기본 라우팅으로 사용한다. 활성 기본 라우팅이 없으면 기존 모델 Provider fallback을 유지한다.
+- RED→GREEN 검증: 공개 모델 무라우팅 계약 및 기본 라우팅 선택 테스트 추가 후 Python 관련 unit 66 passed, Web Operations 13 passed, Web typecheck/build passed, 변경 Python Ruff passed.
+- 미검증: 실제 브라우저에서 모델 생성·snapshot 발행 후 외부 Provider 호출과 WSL 재배포. 이번 변경은 로컬 작업 브랜치에만 반영했으며 설치형은 수정하지 않았다.
+
 ## 2026-09-23 — OmniRoute 호환 공개 모델·추론 등급 구현 진행
 
 - `codex/manual-integrated-revision`에서 구현 중이다. 설치형은 수정·배포하지 않는다.

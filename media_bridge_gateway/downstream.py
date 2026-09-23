@@ -561,6 +561,17 @@ class ProviderResponsesDownstream:
         model = model_matches[0]
         routing_profile_id = model.get("routing_profile_id")
         routing_profiles = self._snapshot.get("routing_profiles")
+        if not isinstance(routing_profile_id, str) and isinstance(routing_profiles, list):
+            default_profile = next(
+                (
+                    item
+                    for item in routing_profiles
+                    if isinstance(item, Mapping) and item.get("enabled") is not False
+                ),
+                None,
+            )
+            if isinstance(default_profile, Mapping):
+                routing_profile_id = default_profile.get("id")
         provider_ids = {
             item.get("provider_id")
             for item in model_matches

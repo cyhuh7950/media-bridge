@@ -102,6 +102,47 @@ async def test_downstream_resolves_model_provider_from_snapshot_and_only_passes_
 
 
 @pytest.mark.asyncio
+async def test_downstream_uses_default_routing_when_model_has_no_route_binding() -> None:
+    signer = GateReceiptSigner(secret=b"r" * 32)
+    backend = CaptureBackend()
+    seen_provider_ids: list[str] = []
+
+    def build(provider: dict[str, Any]) -> CaptureBackend:
+        seen_provider_ids.append(provider["id"])
+        return backend
+
+    snapshot = _snapshot()
+    snapshot["providers"].append(
+        {
+            "id": "provider-route-default",
+            "kind": "llm",
+            "enabled": True,
+            "catalog_id": "openai",
+            "protocol": "openai-chat-completions",
+            "endpoint": "https://api.openai.com/v1/chat/completions",
+            "model_id": "gpt-5",
+        }
+    )
+    snapshot["routing_profiles"] = [
+        {
+            "id": "route-default",
+            "llm_provider_ids": ["provider-route-default"],
+            "strategy": "priority",
+            "enabled": True,
+        }
+    ]
+
+    downstream = ProviderResponsesDownstream(
+        snapshot=snapshot,
+        backend_factory=build,
+        receipt_signer=signer,
+    )
+    await downstream.invoke(_request(signer, "solar-alias"))
+
+    assert seen_provider_ids == ["provider-route-default"]
+
+
+@pytest.mark.asyncio
 async def test_downstream_rejects_ambiguous_model_provider_before_backend_creation() -> None:
     signer = GateReceiptSigner(secret=b"r" * 32)
     created: list[bool] = []
