@@ -50,11 +50,14 @@ it("creates a public model without requiring an internal routing profile", async
   expect(screen.queryByLabelText("내부 실행 라우팅")).not.toBeInTheDocument();
   await user.selectOptions(screen.getByLabelText("기준 Non-Vision LLM Provider"), "provider-1");
   await user.type(screen.getByLabelText("공개 모델 ID"), "solar/solar-pro4");
-  await user.type(screen.getByLabelText("Capability 근거"), "operator verified");
+  await user.click(screen.getByLabelText("Capability image"));
+  await user.click(screen.getByLabelText("Capability pdf"));
   await user.click(screen.getByRole("button", { name: "생성" }));
 
   const saved = calls.find((call) => call.method === "POST" && call.path === "/admin/v1/models");
   expect(saved?.body?.provider_id).toBe("provider-1");
+  expect(saved?.body?.input_modalities).toEqual(["text", "image", "pdf"]);
+  expect(saved?.body?.evidence).toBeUndefined();
   expect(saved?.body).not.toHaveProperty("routing_profile_id");
 });
 

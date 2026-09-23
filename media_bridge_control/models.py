@@ -198,7 +198,7 @@ class ModelCapability(Base):
     model_id: Mapped[str] = mapped_column(String(128), unique=True)
     aliases: Mapped[list[str]] = mapped_column(JSONB, default=list)
     input_modalities: Mapped[list[str]] = mapped_column(JSONB)
-    evidence: Mapped[str] = mapped_column(String(1024))
+    evidence: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     pdf_passthrough_verified: Mapped[bool] = mapped_column(Boolean, default=False)

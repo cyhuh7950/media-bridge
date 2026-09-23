@@ -5,6 +5,11 @@ import { textField, type OperationsProps } from "./operationTypes";
 import { useAdminList } from "./useAdminList";
 
 type Model = Record<string, unknown>;
+const capabilityOptions = [
+  { value: "text", label: "텍스트" },
+  { value: "image", label: "이미지" },
+  { value: "pdf", label: "PDF" },
+] as const;
 
 export function ModelsPage({ role, csrfToken }: OperationsProps) {
   const { items, failed, reload } = useAdminList("/models");
@@ -14,6 +19,7 @@ export function ModelsPage({ role, csrfToken }: OperationsProps) {
   const [providerId, setProviderId] = useState("");
   const [modelId, setModelId] = useState("");
   const [reasoningEffort, setReasoningEffort] = useState("provider_default");
+  const [capabilities, setCapabilities] = useState<string[]>(["text"]);
   const [evidence, setEvidence] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [actionFailed, setActionFailed] = useState(false);
@@ -21,14 +27,14 @@ export function ModelsPage({ role, csrfToken }: OperationsProps) {
   const allSelected = !!items?.length && selected.length === items.length;
   const llmProviders = (providers ?? []).filter((provider) => textField(provider, "kind") === "llm");
 
-  function openCreate() { setDialog("create"); setEditingId(""); setProviderId(""); setModelId(""); setReasoningEffort("provider_default"); setEvidence(""); setActionFailed(false); }
-  function openEdit(item: Model) { setDialog("edit"); setEditingId(textField(item, "id")); setProviderId(textField(item, "provider_id")); setModelId(textField(item, "model_id")); setReasoningEffort(textField(item, "reasoning_effort") || "provider_default"); setEvidence(textField(item, "evidence")); setActionFailed(false); }
+  function openCreate() { setDialog("create"); setEditingId(""); setProviderId(""); setModelId(""); setReasoningEffort("provider_default"); setCapabilities(["text"]); setEvidence(""); setActionFailed(false); }
+  function openEdit(item: Model) { const savedCapabilities = Array.isArray(item.input_modalities) ? item.input_modalities.filter((value): value is string => typeof value === "string") : []; setDialog("edit"); setEditingId(textField(item, "id")); setProviderId(textField(item, "provider_id")); setModelId(textField(item, "model_id")); setReasoningEffort(textField(item, "reasoning_effort") || "provider_default"); setCapabilities(savedCapabilities.length ? savedCapabilities : ["text"]); setEvidence(textField(item, "evidence")); setActionFailed(false); }
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!writable || !dialog || !providerId) return;
     try {
       const now = new Date();
-      const body = { provider_id: providerId, model_id: modelId, aliases: [], input_modalities: ["text"], evidence, reviewed_at: now.toISOString(), expires_at: new Date(now.getTime() + 30 * 86400000).toISOString(), pdf_passthrough_verified: false, reasoning_effort: reasoningEffort };
+      const body = { provider_id: providerId, model_id: modelId, aliases: [], input_modalities: capabilities, ...(evidence.trim() ? { evidence: evidence.trim() } : {}), reviewed_at: now.toISOString(), expires_at: new Date(now.getTime() + 30 * 86400000).toISOString(), pdf_passthrough_verified: false, reasoning_effort: reasoningEffort };
       if (dialog === "edit") await adminRequest(`/models/${editingId}`, { method: "PATCH", csrfToken, body });
       else await adminRequest("/models", { method: "POST", csrfToken, body });
       setDialog(null); await reload();
@@ -53,6 +59,6 @@ export function ModelsPage({ role, csrfToken }: OperationsProps) {
       </tbody></table>
     </> : null}
     {!writable ? <p>viewer는 모델 설정을 읽기만 할 수 있습니다.</p> : null}
-    {dialog ? <section className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="model-dialog-title"><form className="dialog-card form-grid" onSubmit={(e) => { void submit(e); }}><h2 id="model-dialog-title">{dialog === "create" ? "모델 생성" : "모델 수정"}</h2><label htmlFor="operation-model-provider">기준 Non-Vision LLM Provider</label><select id="operation-model-provider" value={providerId} onChange={(e) => { setProviderId(e.target.value); }} required><option value="">Provider를 선택하세요</option>{llmProviders.map((provider) => <option key={textField(provider, "id")} value={textField(provider, "id")}>{textField(provider, "name")} ({textField(provider, "alias")})</option>)}</select><label htmlFor="operation-model-id">공개 모델 ID</label><input id="operation-model-id" value={modelId} onChange={(e) => { setModelId(e.target.value); }} placeholder="provider/model 형식" required /><label htmlFor="operation-model-reasoning">기본 추론 등급</label><select id="operation-model-reasoning" value={reasoningEffort} onChange={(e) => { setReasoningEffort(e.target.value); }}><option value="provider_default">Provider 설정 사용</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select><label htmlFor="operation-model-evidence">Capability 근거</label><textarea id="operation-model-evidence" value={evidence} onChange={(e) => { setEvidence(e.target.value); }} required /><div className="inline-actions"><button type="submit" disabled={!providerId}>{dialog === "create" ? "생성" : "저장"}</button><button type="button" className="secondary-button" onClick={() => { setDialog(null); }}>취소</button></div></form></section> : null}
+    {dialog ? <section className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="model-dialog-title"><form className="dialog-card form-grid" onSubmit={(e) => { void submit(e); }}><h2 id="model-dialog-title">{dialog === "create" ? "모델 생성" : "모델 수정"}</h2><label htmlFor="operation-model-provider">기준 Non-Vision LLM Provider</label><select id="operation-model-provider" value={providerId} onChange={(e) => { setProviderId(e.target.value); }} required><option value="">Provider를 선택하세요</option>{llmProviders.map((provider) => <option key={textField(provider, "id")} value={textField(provider, "id")}>{textField(provider, "name")} ({textField(provider, "alias")})</option>)}</select><label htmlFor="operation-model-id">공개 모델 ID</label><input id="operation-model-id" value={modelId} onChange={(e) => { setModelId(e.target.value); }} placeholder="provider/model 형식" required /><fieldset><legend>Capability</legend>{capabilityOptions.map((option) => <label key={option.value}><input aria-label={`Capability ${option.value}`} type="checkbox" checked={capabilities.includes(option.value)} disabled={capabilities.length === 1 && capabilities.includes(option.value)} onChange={(e) => { setCapabilities((current) => e.target.checked ? [...current, option.value] : current.filter((value) => value !== option.value)); }} />{option.label}</label>)}</fieldset><label htmlFor="operation-model-reasoning">기본 추론 등급</label><select id="operation-model-reasoning" value={reasoningEffort} onChange={(e) => { setReasoningEffort(e.target.value); }}><option value="provider_default">Provider 설정 사용</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select><label htmlFor="operation-model-evidence">Capability 근거 (선택)</label><textarea id="operation-model-evidence" value={evidence} onChange={(e) => { setEvidence(e.target.value); }} placeholder="공식 문서 URL 또는 테스트 결과" /><div className="inline-actions"><button type="submit" disabled={!providerId || !capabilities.length}>{dialog === "create" ? "생성" : "저장"}</button><button type="button" className="secondary-button" onClick={() => { setDialog(null); }}>취소</button></div></form></section> : null}
   </section>;
 }

@@ -326,7 +326,7 @@ class ModelCapabilityCreate(AdminStrictModel):
         set[Literal["text", "image", "pdf"]],
         Field(min_length=1, max_length=3),
     ]
-    evidence: Annotated[str, StringConstraints(min_length=1, max_length=1_024)]
+    evidence: Annotated[str, StringConstraints(min_length=1, max_length=1_024)] | None = None
     reviewed_at: datetime
     expires_at: datetime
     pdf_passthrough_verified: bool = False

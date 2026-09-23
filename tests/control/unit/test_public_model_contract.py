@@ -59,6 +59,19 @@ def test_public_model_can_use_media_bridge_default_routing() -> None:
     assert request.provider_id is not None
 
 
+def test_public_model_capability_evidence_is_optional() -> None:
+    reviewed, expires = _timestamps()
+    request = ModelCapabilityCreate(
+        provider_id=uuid4(),
+        model_id="openai-prod/gpt-5",
+        input_modalities={"text", "image"},
+        reviewed_at=reviewed,
+        expires_at=expires,
+    )
+
+    assert request.evidence is None
+
+
 def test_public_model_rejects_non_public_identifier() -> None:
     reviewed, expires = _timestamps()
     with pytest.raises(ValidationError):

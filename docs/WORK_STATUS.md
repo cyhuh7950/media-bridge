@@ -1,5 +1,11 @@
 # Media Bridge 작업현황
 
+## 2026-09-23 — 모델 Capability 설정 추가
+
+- 모델 생성·수정 화면에 `text`, `image`, `pdf` Capability 선택을 추가하고 선택값을 `input_modalities`로 저장한다. 모델 Capability 계약이 지원하지 않는 `ocr`는 모델 입력 Capability 목록에 노출하지 않는다.
+- `Capability 근거`는 선택 입력으로 변경했다. 백엔드 모델 capability evidence 컬럼을 nullable로 변경하는 `0012_optional_model_capability_evidence` migration을 추가했다.
+- 검증: Web Operations 14 passed, Web typecheck/build passed, Control unit 62 passed, migration rollback 14 passed, public model contract 11 passed, diff 검사 통과.
+
 ## 2026-09-23 — Provider 약어 저장 오류 수정
 
 - Provider 수정 화면에서 기존 약어 `US`가 서버 계약의 소문자 형식과 맞지 않아 저장 요청이 422로 거부되던 문제를 확인했다.
