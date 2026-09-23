@@ -15,6 +15,13 @@
 - 검증 재실행: Windows 기본 임시 경로 접근 거부로 첫 pytest가 `3 passed, 7 errors`였으나, worktree 내부의 신규 격리 basetemp로 재실행해 Control handoff 및 Gateway HTTP 회귀시험 `10 passed`.
 - 상태: 로컬 수정은 준비됐으나 안전한 remote checkpoint, WSL exact-commit 배포와 실제 화면 확인은 미완료. SSH 별칭 이름 해석이 복구되면 현재 branch의 검증 commit을 push하고 WSL 정식 checkout에서 배포를 재개한다.
 
+## 2026-09-24 — 외부 클라이언트 흐름 수정 WSL 배포 완료
+
+- 신산님 배포 지시에 따라 검증 commit `5dbeb6be8cbca62e953a1626470a3215c72d2cf4`를 설정된 Git SSH 별칭으로 push하고 WSL-server의 깨끗한 정식 checkout에 fetch·checkout했다.
+- 운영 DB와 Data Plane을 건드리지 않고 `media-bridge-control`만 Compose로 재빌드·교체했다. 이미지 빌드에서 TypeScript와 Vite production build가 통과했고 Control 컨테이너 상태는 `running / healthy`다.
+- 사용자 브라우저로 `http://172.27.253.53:18642/test-lab`을 새로 열어 실제 배포 UI를 확인했다. 제목이 `외부 클라이언트 → Media Bridge 전체 흐름 시험`으로 표시되고 OmniRoute는 외부 클라이언트 예시 문구에만 남아 있다.
+- 로컬 handoff·Gateway 회귀시험 10 passed. 미검증: 실제 외부 Provider 호출에서 기존 `capability_unknown` 재현 여부 및 auto 모델 라우팅 동작은 실제 요청으로 확인하지 않았다.
+
 ## 2026-09-23 — 모델 Capability 설정 추가
 
 - 모델 생성·수정 화면에 `text`, `image`, `pdf` Capability 선택을 추가하고 선택값을 `input_modalities`로 저장한다. 모델 Capability 계약이 지원하지 않는 `ocr`는 모델 입력 Capability 목록에 노출하지 않는다.
