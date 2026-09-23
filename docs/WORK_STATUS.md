@@ -414,3 +414,12 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 - 접근 키 이름은 Unicode 영숫자와 기존 구분자(`_`, `.`, `-`)를 허용하도록 검증을 수정하고, 한글 표시 이름 회귀 테스트를 추가했다.
 - 수정 전 회귀 테스트는 정규식 불일치로 실패했고, 수정 후 단위 테스트는 통과했다. PostgreSQL 통합 테스트는 로컬 fixture 기동이 정체되어 중단했으므로 미검증이다.
 - `952bacc`를 push하고 WSL-server에 재배포했다. Control/Data/DB 컨테이너는 running, DB head는 `0014_model_no_expiry`, 배포 컨테이너에서 `임시` 모델 검증 통과를 확인했다.
+
+## 2026-09-24 — 통합 검증 및 main 병합·ysna-server 배포 인수 상태
+
+- 요청 branch `codex/manual-integrated-revision`의 현재 검증 HEAD는 `46f085a09f32c54b6062a4f9ed384076b5c77762` (`Resolve console lint and request test typing`)이며 원격 branch에 push된 상태다.
+- ysna-server 임시 QA 환경에서 Python 전체 테스트 589 passed, 6 skipped, Ruff 전체 검사, strict mypy(84 source files), compileall이 통과했다. HEAD `a35f53f` 기준 Python gate이며 그 이후 Python 변경은 없다. 최종 HEAD `46f085a`의 Web은 Vitest 41 passed(9 files), ESLint, TypeScript, Vite production build가 통과했다. 실제 외부 Provider 호출은 수행하지 않았다.
+- ysna-server DB migration revision은 `0014_model_no_expiry`로 확인되어 branch의 migration 대상과 일치했다. 운영 DB migration 및 데이터 변경은 수행하지 않았다.
+- GitHub PR 생성은 `cyhuh7950/media-bridge` API의 HTTP 422 `must be a collaborator`로 거부됐다. 로컬 `gh`의 등록 계정 token도 유효하지 않았다. 자격 증명이나 계정을 변경하지 않았고, 정책에 따라 main 직접 push/우회 병합은 하지 않았다. 따라서 PR, main 병합, 앱 재배포는 미완료다.
+- QA DB 컨테이너 `media-bridge-merge-qa-20260924-db` 및 임시 venv `/tmp/media-bridge-merge-qa-20260924`는 정리 확인이 남았다. 정리 명령 전 SSH 별칭 `WSL-server` 접속이 `Could not resolve hostname wsl-server`로 실패해 원격 자원 상태를 확인하거나 삭제하지 못했다. 접근 복구 후 정확히 해당 두 QA 자원만 확인·정리한다.
+- 재개 조건: GitHub에서 collaborator 권한이 있는 계정으로 연결 인증을 복구한다. 그 뒤 이 branch로 PR 생성→검토/필수 gate→병합→merged-main smoke→ysna-server 재배포 및 `http://172.27.253.53:18642/` 사용자 확인 주소 점검을 수행한다. 서버 접근이 복구되면 QA 자원 정리부터 재개한다.
