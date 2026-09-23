@@ -7,7 +7,9 @@
 - RED→GREEN: `auto`가 첫 분석 모델 대신 `solar-pro4`를 선택하고 해당 ID가 capability registry에서 `non_vision`으로 확인되는 통합 테스트를 추가했다. 수정 전 실패(기대 `solar-pro4`, 실제 `document-parse`), 수정 후 Gateway snapshot-generation + Responses HTTP 관련 12 passed. 변경 Python Ruff 및 `git diff --check` 통과.
 - 전체 Gateway + Responses HTTP 회귀는 61 passed / 16 failed. 실패는 `test_http_network`, `test_mcp_gateway_shared_core`, `test_p2b_gateway_lifecycle`, `test_responses_transaction`, Gateway zero-call/redaction, downstream contract 및 entrypoint 테스트에 분포한다. 이번 자동 선택 코드와 직접 관련 없는 것으로 보이나 baseline 대조는 하지 않아 원인 귀속은 미확정이다. Starlette `BlockingPortal` deprecation 경고도 남는다.
 - 화면의 `capability_unknown`은 안전한 synthetic test로 직접 재현되지 않았다. 현재 WSL 활성 snapshot에는 `document-parse`와 `solar-pro4`가 capability registry에 함께 있고 auto의 잘못된 후보 선택을 고쳤다. 따라서 이를 해당 화면 오류의 직접 원인으로 단정하지 않는다. Data service 배포 뒤에도 오류가 지속되면 public Gateway domain의 실제 upstream/snapshot과 WSL Data Plane 간 차이를 추가 추적한다. 실제 Provider 호출은 수행하지 않는다.
-- 배포 전 상태: 검증한 Data Plane 코드의 checkpoint·WSL Data service 재배포·Control UI 재확인이 남아 있다.
+- `adf25d1081abf5345fd90f3dd3ff41b7e93b58cc`를 origin SSH alias로 push하고 WSL-server의 정식 checkout에서 Data Plane만 재빌드·재기동했다. exact checkout SHA를 확인했고 Data 컨테이너가 healthy이며 내장 Data health check도 통과했다. snapshot/DB/Control 컨테이너는 변경하지 않았다.
+- 재기동된 Data 컨테이너에서 현재 활성 snapshot으로 auto 선택 helper를 실행해 `solar-pro4`를 반환하는 것을 확인했다. Chrome에서 `http://172.27.253.53:18642/test-lab` 배포 화면도 열었고 두 흐름 모두 단일 `미지정(auto)` 선택과 등록 공개 모델을 표시한다.
+- 제한: 안전상 외부 LLM Provider 실제 호출은 하지 않았다. 따라서 사용자 화면의 `capability_unknown`이 실제 endpoint에서도 해소됐는지는 아직 확인되지 않았다. 재시도에서도 지속되면 공개 Gateway domain이 가리키는 Data Plane/snapshot이 WSL 정식 checkout과 동일한지 다음으로 확인한다.
 
 ## 2026-09-24 — Test Lab 중복 auto 선택 제거 및 capability_unknown 확인
 
