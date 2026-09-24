@@ -6,8 +6,10 @@
 - 작업 branch/worktree: `codex/installed-reasoning-level-config`, `.worktrees/installed-reasoning-level-config`, 시작 HEAD `e45b0c9`. 설치형 `npm_runtime.py` 저장·조회·UI·Provider 시험·실제 downstream 구성 경로와 회귀 테스트를 수정 중이며 DB migration은 없다.
 - RED→GREEN: 새 미지원 조합/기존 custom 설정 호환성 검사가 구현 전 실패했다. 변경 후 설치형 테스트 `16 passed`, `npm_runtime` + `solar_responses` 회귀 `27 passed`, 변경 파일 Ruff 통과.
 - 전체 검증: Windows Python full suite `585 passed, 7 skipped, 5 failed`. Windows에 `os.O_DIRECTORY`가 없어 snapshot 원자 기록 통합 테스트 3건이 실패했다. 나머지 2건은 PowerShell subprocess stderr의 cp949 decode 문제였고 UTF‑8 모드 재검증에서는 `2 passed`다. 이 5건은 수정 파일·기능과 무관하다.
-- 미검증: 실제 Upstage 요청·설치 artifact 재빌드·현재 `127.0.0.1:8642` 런타임 반영/브라우저 확인, Linux 전용 snapshot 통합 테스트. 운영/배포형은 건드리지 않았다.
-- 다음: 이 branch에 checkpoint commit/push하고 원격과 로컬 SHA 일치를 확인한다. 현재 branch 외 branch/worktree 정리, main 병합, 배포·설치 런타임 교체는 수행하지 않는다.
+- 설치형 브라우저 미리보기: 지정 branch 소스를 `http://127.0.0.1:18648`에서 실행했다. Health 200, HTML에 Media Bridge 및 Non-Vision LLM 등급 선택기 표시, `/api/settings`에서 전역 `low`와 LLM `provider_default` 반환을 확인했다. 미리보기는 현재 유지 중이며 전용 임시 설정/HOME만 사용한다.
+- 설치 artifact: Linux-x64 artifact를 commit `4c49f622db3409552e305d32c599a57f3f2b5e71` 기준으로 빌드하고 공식 검증 스크립트가 통과했다(SHA-256 `e94c8c7c7d672f7317779dfaa48ff7146779fc250d8833b7cb5b48b1175240b6`). 단, 격리된 npm 서비스 실행의 HTML/API에는 새 설정 필드가 반영되지 않아 패키징된 서비스 경로는 미검증으로 남긴다. 기존 `127.0.0.1:8642` 서비스는 이전 실행본으로 복구되었고 변경하지 않았다.
+- 미검증: 실제 Upstage Provider 요청·패키징 서비스에서 새 UI의 반영·Linux 전용 snapshot 통합 테스트. 운영/배포형은 건드리지 않았다.
+- 다음: 사용자는 미리보기 `http://127.0.0.1:18648`에서 두 선택기를 확인할 수 있다. 현재 branch 외 branch/worktree 정리, main 병합, 배포·설치 런타임 교체는 수행하지 않는다.
 
 ## 2026-09-24 — 외부 Responses의 image/PDF 전처리 경로 수정·배포
 
