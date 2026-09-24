@@ -459,3 +459,12 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 - GitHub PR 생성은 `cyhuh7950/media-bridge` API의 HTTP 422 `must be a collaborator`로 거부됐다. 로컬 `gh`의 등록 계정 token도 유효하지 않았다. 자격 증명이나 계정을 변경하지 않았고, 정책에 따라 main 직접 push/우회 병합은 하지 않았다. 따라서 PR, main 병합, 앱 재배포는 미완료다.
 - QA DB 컨테이너 `media-bridge-merge-qa-20260924-db` 및 임시 venv `/tmp/media-bridge-merge-qa-20260924`는 정리 확인이 남았다. 정리 명령 전 SSH 별칭 `WSL-server` 접속이 `Could not resolve hostname wsl-server`로 실패해 원격 자원 상태를 확인하거나 삭제하지 못했다. 접근 복구 후 정확히 해당 두 QA 자원만 확인·정리한다.
 - 재개 조건: GitHub에서 collaborator 권한이 있는 계정으로 연결 인증을 복구한다. 그 뒤 이 branch로 PR 생성→검토/필수 gate→병합→merged-main smoke→ysna-server 재배포 및 `http://172.27.253.53:18642/` 사용자 확인 주소 점검을 수행한다. 서버 접근이 복구되면 QA 자원 정리부터 재개한다.
+
+## 2026-09-24 — 설치형 추론 등급 npm 후보 패키지 준비
+
+- 작업 브랜치 `codex/installed-reasoning-level-config`에서 후보 버전 `@cyhuh/media-bridge@0.1.14` 준비를 진행한다. `main`, 사용자 PC의 `127.0.0.1:8642`, ysna-server, 공개 GitHub Release/tag 및 npm registry는 변경하지 않는다.
+- 세 native runtime reusable workflow가 지정된 버전/source SHA를 받아 빌드하도록 조정했고, branch 전용 후보 workflow·artifact 일치성 조립기·격리 native install 검증기를 추가했다. Actions 권한은 `actions: read`, `contents: read`로 제한하고 수동 공개 workflow 실행은 no-op 안내만 하도록 했다. 실제 publish 경로는 정확한 `release-vX.Y.Z` tag에서만 연결된다.
+- `packaging/npm/package.json` 버전은 0.1.14로 갱신했다. 직전 공개 runtime-manifest 0.1.13은 보존하고 후보 assembler가 임시 staging package/manifest를 생성한다.
+- 검증: `node --test tests/npm/*.test.cjs` — 81 passed, 4 skipped, 0 failed(Windows 조건부 skip 포함); 두 후보 `.cjs` 스크립트 `node --check`, 두 Linux verifier `bash -n`, `git diff --check` 통과. 전용 npm cache를 이용한 `npm pack --dry-run --json`은 0.1.14 package 파일 10개만 포함함을 확인했다.
+- 환경 한계: 호스트 Python은 설치되어 있지 않아 Python packaging suite와 세 플랫폼 native runtime 생성/설치는 아직 검증하지 않았다. GitHub Actions workflow YAML 전용 validator도 로컬에 없다. 후보 workflow의 실제 Windows x64/Linux x64/Linux ARM64 실행, tarball install·health·설정 UI/API 검증은 아직 `UNVERIFIED`이며 feature branch push 뒤 결과를 확인해야 한다.
+- 다음 조치: workflow/script 권한·artifact 파일 목록·오류 정리를 최종 점검하고, 이 feature branch에 checkpoint commit/push한 다음 후보 Actions matrix 결과를 확인한다. Actions 실패 시 실패 단계만 수정·재검증한다. 공개 publish, main 병합, 설치형 로컬 runtime 변경, ysna 배포는 계속 범위 밖이다.

@@ -13,21 +13,21 @@ const arm64BuildScript = path.join(root, 'packaging', 'runtime', 'build-linux-ar
 const arm64VerifyScript = path.join(root, 'packaging', 'runtime', 'verify-linux-arm64.sh');
 const { loadRuntimeManifest, selectArtifact } = require('../../packaging/npm/lib/runtime.cjs');
 
-test('published package selects the exact linux-x64 v0.1.13 runtime', () => {
+test('retained release manifest selects the exact linux-x64 v0.1.13 runtime', () => {
   const packageMetadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
   const manifest = loadRuntimeManifest({
     manifestPath: path.join(packageRoot, 'runtime-manifest.json'),
-    packageVersion: packageMetadata.version,
+    packageVersion: '0.1.13',
   });
   const artifact = selectArtifact({
     manifest,
-    packageVersion: packageMetadata.version,
+    packageVersion: '0.1.13',
     platform: 'linux',
     arch: 'x64',
   });
 
   assert.equal(packageMetadata.name, '@cyhuh/media-bridge');
-  assert.equal(packageMetadata.version, '0.1.13');
+  assert.equal(packageMetadata.version, '0.1.14');
   assert.deepEqual(
     {
       key: artifact.key,
@@ -51,15 +51,15 @@ test('published package selects the exact linux-x64 v0.1.13 runtime', () => {
   assert.equal(artifact.sha256, 'f82449d487dc7287f07f1a4a7342ee389e9ad61bc6b315c0e00aac65a7e2964b');
 });
 
-test('published package selects the exact win32-x64 v0.1.13 runtime', () => {
+test('retained release manifest selects the exact win32-x64 v0.1.13 runtime', () => {
   const packageMetadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
   const manifest = loadRuntimeManifest({
     manifestPath: path.join(packageRoot, 'runtime-manifest.json'),
-    packageVersion: packageMetadata.version,
+    packageVersion: '0.1.13',
   });
   const artifact = selectArtifact({
     manifest,
-    packageVersion: packageMetadata.version,
+    packageVersion: '0.1.13',
     platform: 'win32',
     arch: 'x64',
   });
@@ -87,15 +87,15 @@ test('published package selects the exact win32-x64 v0.1.13 runtime', () => {
   assert.equal(artifact.sha256, '3801cef1a8df3a1f1fe98d767980f5fd7d4abe8a9b19bdbc3db9d15705d12879');
 });
 
-test('published package selects the exact linux-arm64 v0.1.13 runtime', () => {
+test('retained release manifest selects the exact linux-arm64 v0.1.13 runtime', () => {
   const packageMetadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
   const manifest = loadRuntimeManifest({
     manifestPath: path.join(packageRoot, 'runtime-manifest.json'),
-    packageVersion: packageMetadata.version,
+    packageVersion: '0.1.13',
   });
   const artifact = selectArtifact({
     manifest,
-    packageVersion: packageMetadata.version,
+    packageVersion: '0.1.13',
     platform: 'linux',
     arch: 'arm64',
   });

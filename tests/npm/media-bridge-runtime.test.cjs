@@ -78,6 +78,7 @@ test('runtime install succeeds when Git GNU tar precedes Windows system tar on P
       env: { MEDIA_BRIDGE_RUNTIME_MANIFEST: manifestPath },
       platform: 'win32',
       arch: 'x64',
+      packageVersion: '0.1.13',
     });
     assert.equal(fs.readFileSync(result.command, 'utf8'), 'runtime-v1');
   } finally {
@@ -239,6 +240,7 @@ test('runtime resolver fails closed when no managed artifact is available', asyn
     env: { MEDIA_BRIDGE_RUNTIME_MANIFEST: manifestPath },
     platform: 'linux',
     arch: 'arm64',
+    packageVersion: '0.1.13',
   }), /runtime.*(available|artifact)|artifact.*(available|configured)/i);
   assert.equal(fs.existsSync(runtimeDir(tempHome)), false);
   fs.rmSync(manifestRoot, { recursive: true, force: true });
@@ -253,7 +255,7 @@ test('runtime resolver downloads the selected artifact and reuses verified metad
   try {
     const manifestPath = writeManifest(root, { url: server.url, sha256: fixture.sha256 });
     const env = { MEDIA_BRIDGE_RUNTIME_MANIFEST: manifestPath };
-    const first = await resolveRuntime({ homeDir: path.join(root, 'home'), env, platform: 'win32', arch: 'x64' });
+    const first = await resolveRuntime({ homeDir: path.join(root, 'home'), env, platform: 'win32', arch: 'x64', packageVersion: '0.1.13' });
     assert.equal(first.command, path.join(root, 'home', '.media-bridge', 'runtime', 'bin', 'media-bridge-runtime.exe'));
     assert.equal(first.python, false);
     assert.equal(fs.readFileSync(first.command, 'utf8'), 'runtime-v1');
@@ -267,7 +269,7 @@ test('runtime resolver downloads the selected artifact and reuses verified metad
       command: 'bin/media-bridge-runtime.exe',
       python: false,
     });
-    const second = await resolveRuntime({ homeDir: path.join(root, 'home'), env, platform: 'win32', arch: 'x64' });
+    const second = await resolveRuntime({ homeDir: path.join(root, 'home'), env, platform: 'win32', arch: 'x64', packageVersion: '0.1.13' });
     assert.equal(second.command, first.command);
     assert.equal(server.requests(), 1);
   } finally {
@@ -293,6 +295,7 @@ test('checksum failure preserves the previous verified runtime', async () => {
     const manifestPath = writeManifest(root, { url: server.url, sha256: 'c'.repeat(64) });
     await assert.rejects(() => resolveRuntime({
       homeDir, env: { MEDIA_BRIDGE_RUNTIME_MANIFEST: manifestPath }, platform: 'win32', arch: 'x64',
+      packageVersion: '0.1.13',
     }), /checksum mismatch/i);
     assert.equal(fs.readFileSync(path.join(installedRoot, 'bin', 'media-bridge-runtime.exe'), 'utf8'), 'previous-runtime');
   } finally {
@@ -314,6 +317,7 @@ test('missing artifact command preserves the previous verified runtime', async (
     const manifestPath = writeManifest(root, { url: server.url, sha256: fixture.sha256 });
     await assert.rejects(() => resolveRuntime({
       homeDir, env: { MEDIA_BRIDGE_RUNTIME_MANIFEST: manifestPath }, platform: 'win32', arch: 'x64',
+      packageVersion: '0.1.13',
     }), /command.*(missing|unavailable)/i);
     assert.equal(fs.readFileSync(path.join(installedRoot, 'bin', 'media-bridge-runtime.exe'), 'utf8'), 'previous-runtime');
   } finally {

@@ -5,7 +5,7 @@ const test = require('node:test');
 
 const root = path.resolve(__dirname, '../..');
 
-test('0.1.13 release metadata stays aligned across npm and native runtime workflows', () => {
+test('0.1.14 npm metadata advances while the verified 0.1.13 runtime manifest stays intact', () => {
   const packageMetadata = JSON.parse(fs.readFileSync(
     path.join(root, 'packaging', 'npm', 'package.json'),
     'utf8',
@@ -16,7 +16,7 @@ test('0.1.13 release metadata stays aligned across npm and native runtime workfl
   ));
 
   assert.equal(packageMetadata.name, '@cyhuh/media-bridge');
-  assert.equal(packageMetadata.version, '0.1.13');
+  assert.equal(packageMetadata.version, '0.1.14');
   assert.equal(manifest.packageVersion, '0.1.13');
   for (const platform of ['linux-arm64', 'linux-x64', 'win32-x64']) {
     const artifact = manifest.artifacts[platform];
@@ -37,9 +37,8 @@ test('0.1.13 release metadata stays aligned across npm and native runtime workfl
     path.join(root, '.github', 'workflows', 'publish-npm-runtime-release.yml'),
     'utf8',
   );
-  assert.match(releaseWorkflow, /VERSION:\s*0\.1\.13/);
-  assert.match(releaseWorkflow, /TAG:\s*v0\.1\.13/);
-  assert.match(releaseWorkflow, /SOURCE_COMMIT:\s*5e0f295d42ab7241369cce6f831e184539f06bed/);
+  assert.doesNotMatch(releaseWorkflow, /VERSION:\s*0\.1\.13|TAG:\s*v0\.1\.13|SOURCE_COMMIT:\s*5e0f295d42ab7241369cce6f831e184539f06bed/);
+  assert.match(releaseWorkflow, /release-v\(\[0-9\]/);
   assert.match(releaseWorkflow, /publish-npm-package:/);
   assert.match(releaseWorkflow, /id-token:\s*write/);
 });
