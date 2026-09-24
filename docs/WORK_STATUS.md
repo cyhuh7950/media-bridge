@@ -1,11 +1,12 @@
 # Media Bridge 작업현황
 
-## 2026-09-24 — 외부 Responses의 image/PDF 전처리 경로 수정
+## 2026-09-24 — 외부 Responses의 image/PDF 전처리 경로 수정·배포
 
 - 장애 원인: 모델 등록 `input_modalities`를 downstream LLM의 원본 Vision 지원으로 오해해 이미지/PDF를 Solar에 passthrough하거나 PDF를 차단했다. 반면 Control Test Lab은 분석 Provider OCR 후 Non-Vision LLM을 호출했다.
 - 수정: 등록된 image/PDF는 입력 허용 여부만 확인하고 기본적으로 분석·텍스트 변환 후 전달한다. 이미지 외부 `/v1/responses` 기본 profile은 Control 시험과 같은 OCR 전용 `error_screenshot`, PDF는 `document`다. 원본 PDF 전달은 `pdf_passthrough_verified`가 있고 PDF만 요청한 경우로 한정한다. DB schema 변경·migration은 없다.
-- 검증: Gateway 전체 및 연관 통합/단위 회귀 `119 passed`, 수정 파일 Ruff 통과. Control/실제 Provider 외부 호출과 서버 배포는 아직 미수행이다.
-- 다음: 검증된 변경을 alias 기반 main 반영·ysna-server 배포하고 사용자 URL에서 외부 image/PDF 호출을 확인한다.
+- 검증: Gateway 전체 및 연관 통합/단위 회귀 `119 passed`, 수정 파일 Ruff 통과. Git main에 `540f33519c5868e2270ca46862e6ef0dbeaeb9dd`를 별칭 push로 반영했다. ysna-server checkout도 동일 SHA다. DB `schema_current`로 migration 불필요를 확인했다.
+- 배포: Control `sha256:cc7e78e43c282c58bc5b6734d327f4cd24e87c4c1a3e2011795b08ea6a2198b6`, Data `sha256:59487d91c6f8e0f27b8881f824188c8771ed5758b836f288f1219ce26bc51ff8`. Control/Data/DB healthy. 공개 `/test-lab` 및 `/` HTTP 200. `compose.ysna.yaml` 미추적 override 보존.
+- 미검증: 실제 Upstage Provider 비용이 발생하는 image/PDF 외부 호출은 실행하지 않았다. 사용자가 [외부 Test Lab](https://media-bridge.sinsan.kr/test-lab)에서 선택한 이미지/PDF로 확인한다.
 
 ## 2026-09-24 — 외부 클라이언트 시험 `reasoning_effort_invalid` 수정·배포 완료
 
