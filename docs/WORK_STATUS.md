@@ -1,11 +1,13 @@
 # Media Bridge 작업현황
 
-## 2026-09-24 — 외부 클라이언트 시험 `reasoning_effort_invalid` 수정 진행
+## 2026-09-24 — 외부 클라이언트 시험 `reasoning_effort_invalid` 수정·배포 완료
 
 - 화면에서 추론 등급 `미지정(기본값)`을 선택한 요청이 Gateway에서 `reasoning_effort_invalid`로 거부되는 경로를 재현했다. 외부 시험 요청에서는 해당 필드를 생략하며, Gateway는 snapshot `defaults.reasoning_effort`에 기록된 `provider_default`를 유효 등급으로 취급해 거부하고 있었다.
 - 회귀 테스트를 먼저 추가해 수정 전 실패를 확인했다. Gateway에서 snapshot 기본값 `provider_default`를 명시적 덮어쓰기 없음으로 처리하도록 수정했다. Provider에 저장된 자체 추론 설정을 유지한다.
-- 검증: 신규 회귀 포함 Gateway 전체 `71 passed`; 배포/브라우저 재확인 및 사용자가 직접 실행하는 실제 Provider 호출은 아직 남아 있다.
-- 기준: 원격 `main` `ee0ca8bc758067f6acf36f2db17b8f8ff04596e0`, ysna-server checkout `474110a9c774443f5144ba7234e8de3f4af3a22a`; 다음 조치는 지정 SSH 별칭으로 변경 반영·배포 및 health/UI smoke다.
+- 검증: TDD RED→GREEN, Gateway 전체 `71 passed`, Ruff 및 diff 검사를 통과했다. ysna-server checkout을 `c7252e03c424618f8a61ef1d7a0e4c913f8264aa`로 반영하고 Control/Data 이미지를 재빌드·교체했다. Control/Data/DB 모두 healthy, 공개 `/test-lab` 및 `/` HTTP 200이다.
+- 이미지 ID: Control `sha256:72596b3d1cff96018c47af286e1bdc0510e5ec0a552f6fdfe78bf21f11dde678`, Data `sha256:3922232e64c4986c8524141c0baf5630311185e8677aeb2958ca99c3caa3354c`.
+- DB migration 불필요(코드 변경만). `compose.ysna.yaml` untracked override를 보존했다. 실제 외부 Provider를 호출해 버튼 결과를 확인하지는 않았으므로, 브라우저에서 새로고침 후 시험 버튼으로 최종 확인이 필요하다.
+- 공개 URL: `https://media-bridge.sinsan.kr/test-lab`.
 
 ## 2026-09-24 — codex/manual-integrated-revision main 반영·ysna-server 배포 완료
 
