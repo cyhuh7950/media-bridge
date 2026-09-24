@@ -477,3 +477,10 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 - 회귀 계약 테스트를 현재 구조에 맞췄다: 세 reusable build의 exact source SHA 전달, 5개 artifact 다운로드, `assemble-candidate.cjs`의 source/digest/manifest 검증, verifier로부터 전달된 source SHA 및 실제 npm tarball publish command를 검사한다. 이 계약 테스트 파일 변경도 후보 workflow를 다시 실행하도록 경로 필터에 등록했다.
 - 검증: Windows 호스트에서 `tests/packaging/test_runtime_artifact_contract.py` 전체 14 passed. Actions 로그에서 보인 실패 job 단계를 로컬에서 재현하고, 수정 후 전체 계약 suite를 통과했다. native artifact 재빌드·후보 조립·격리 설치는 새 Actions 실행으로 재확인해야 한다.
 - 다음 조치: 변경을 기존 SSH alias로 push해 path-filtered candidate workflow를 다시 실행하고 세 플랫폼 build, assembly 및 native install 결과를 확인한다. 공개 publish, main 병합, 로컬 runtime 변경, ysna 배포는 계속 범위 밖이다.
+
+## 2026-09-25 — npm 후보 native install 재검증 중단
+
+- 수정 checkpoint `0096ac4`에서 Actions run `36030131823`이 실행됐다. Windows x64·Linux x64·Linux ARM64 runtime build와 `assemble-candidate`가 모두 성공했고 candidate artifact가 생성됐다.
+- `verify-native-installs`의 격리 설치·실행 단계는 세 플랫폼 모두 실패했다. 익명 run/job 화면은 `Process completed with exit code 1`만 표시하고 로그 링크는 로그인으로 제한된다. 비인증 공개 logs endpoint도 HTTP 403이었다. GitHub 계정·토큰은 사용하지 않았다.
+- 공통 설치/검증 구간의 상세 stderr와 실패 명령을 확인할 수 없어 원인은 아직 미확정이다. runtime 설치 성공으로 판정하지 않으며, 추정 수정·추가 재실행은 하지 않는다.
+- 다음 조치: 로그 열람 가능한 환경에서 해당 실패 step의 `npm install` 및 `verify-candidate-install.cjs` 출력 원문(토큰·Secret은 제거)을 확보한 뒤, 최초 오류부터 재현·수정한다. 공개 publish, main 병합, 로컬 runtime 변경, ysna 배포는 계속 범위 밖이다.
