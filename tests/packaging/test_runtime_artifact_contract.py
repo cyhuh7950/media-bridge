@@ -24,6 +24,7 @@ VERIFY_SCRIPT = RUNTIME_DIR / "verify-win32-x64.ps1"
 MANAGED_VERIFY_SCRIPT = RUNTIME_DIR / "verify-managed-runtime.cjs"
 WORKFLOW = ROOT / ".github" / "workflows" / "build-runtime-win32-x64.yml"
 RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "publish-npm-runtime-release.yml"
+PACKAGE_ASSEMBLER = ROOT / "packaging" / "npm" / "scripts" / "assemble-candidate.cjs"
 
 
 def test_shell_build_scripts_are_pinned_to_lf_in_git() -> None:
@@ -181,28 +182,28 @@ def test_runtime_workflow_builds_without_public_release_commands() -> None:
     assert "npm publish" not in workflow
 
 
-def test_runtime_release_workflow_uses_verified_run_artifacts_without_local_gh() -> None:
+def test_runtime_release_workflow_uses_reusable_builds_and_verified_artifacts() -> None:
     workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    assembler = PACKAGE_ASSEMBLER.read_text(encoding="utf-8")
 
     assert "release-v*" in workflow
     assert "GITHUB_REF_NAME" in workflow
-    run_ids = [line.strip().removeprefix("run-id:").strip()
-               for line in workflow.splitlines() if line.strip().startswith("run-id:")]
-    assert len(run_ids) == 3
-    assert len(set(run_ids)) == 3
-    assert all(run_id.isdigit() and int(run_id) > 0 for run_id in run_ids)
-    assert "verification.sourceCommit !== sourceCommit" in workflow
-    assert "verification.sha256 !== actual" in workflow
-    assert workflow.count("actions/download-artifact@v4") == 3
-    assert "runtime-manifest.json" in workflow
-    assert "manifest.packageVersion !== version" in workflow
-    assert "manifest.version !== version" not in workflow
+    assert workflow.count("source_commit: ${{ github.sha }}") == 3
+    assert "uses: ./.github/workflows/build-runtime-linux-arm64.yml" in workflow
+    assert "uses: ./.github/workflows/build-runtime-linux-x64.yml" in workflow
+    assert "uses: ./.github/workflows/build-runtime-win32-x64.yml" in workflow
+    assert workflow.count("actions/download-artifact@v4") == 5
+    assert "verification.sourceCommit?.toLowerCase() !== sourceCommit.toLowerCase()" in assembler
+    assert "verification.sha256?.toLowerCase() !== digest" in assembler
+    assert "runtime-manifest.json" in assembler
+    assert "manifest.packageVersion !== version" in assembler
+    assert "manifest.version !== version" not in assembler
     assert "createRelease" in workflow
     assert "uploadReleaseAsset" in workflow
     assert "gh release" not in workflow
     assert "publish-npm-package:" in workflow
     assert "id-token: write" in workflow
-    assert "npm publish --access public" in workflow
+    assert 'npm publish "$RELEASE_CANDIDATE"/*.tgz --access public' in workflow
     assert "NPM_TOKEN" not in workflow
     assert "NODE_AUTH_TOKEN" not in workflow
     assert "_authToken" not in workflow
@@ -220,7 +221,9 @@ def test_runtime_verifier_is_wired_to_private_workflow_evidence() -> None:
     assert "sourceCommit" in verifier
     assert "MEDIA_BRIDGE_SERVICE_TOKEN" in verifier
     assert "packaging/runtime/verify-win32-x64.ps1" in workflow
-    assert "-SourceCommit '${{ github.sha }}'" in workflow
+    assert "INPUT_SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}" in workflow
+    assert "ref: ${{ inputs.source_commit || github.sha }}" in workflow
+    assert "-SourceCommit $env:SOURCE_COMMIT" in workflow
     assert "RUNTIME_OUTPUT" in workflow
     assert "actions/upload-artifact@v4" in workflow
     assert "retention-days: 14" in workflow
