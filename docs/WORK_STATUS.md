@@ -491,4 +491,6 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 - 제품의 인증·보안 규칙은 변경하지 않았다. 후보 설치 검증기에서 settings POST에 실제 loopback base URL의 Origin을 포함하도록 수정하고, loopback HTTP 서버가 수신 Origin·응답·JSON body를 확인하는 회귀 테스트를 추가했다.
 - TDD 증거: 신규 회귀 테스트는 수정 전에 `postSameOriginJson is not a function`으로 실패했고, 수정 후 통과했다.
 - 검증: `node --test tests/npm/media-bridge-release-candidate.test.cjs` 15 passed; `node --test tests/npm/*.test.cjs` 82 passed, 4 skipped, 0 failed; `git diff --check` 통과.
-- 다음 조치: 수정 checkpoint를 기존 SSH alias로 작업 branch에 push해 Windows x64·Linux x64·Linux ARM64 native install 검증을 다시 실행한다. Actions 재실행 전이므로 실제 native 설치 결과는 아직 미검증이다. 공개 publish, main 병합, 로컬 runtime 변경, ysna 배포는 하지 않는다.
+- 수정 commit `c331daf`를 기존 SSH alias `github-cyhuh7950`로 push했다. Actions run `36032355848`은 3분 52초 만에 전체 성공했으며, Linux x64·Linux ARM64·Windows x64 runtime build, 후보 조립, 각 플랫폼의 격리 npm install 및 설정 저장 검증이 모두 성공했다.
+- Actions는 actions/checkout@v4, setup-node@v4, setup-python@v5, upload-artifact@v4 및 download-artifact@v4에 대해 Node.js 20 deprecation warning을 표시했고 Node.js 24로 실행했다. 이번 후보 검증은 통과했으며 warning 자체는 별도 추적 항목이다.
+- 후보 artifact는 run `36032355848`에 생성됐다. 이는 검증 후보이며 공개 release나 npm publish가 아니다. 공개 publish, main 병합, 로컬 runtime 변경, ysna 배포는 하지 않았다.
