@@ -14,6 +14,7 @@ const ADMIN_ROOTS = new Set([
   "policies",
   "providers",
   "provider-catalog",
+  "provider-reasoning-options",
   "routing-profiles",
   "snapshots",
   "test-lab",

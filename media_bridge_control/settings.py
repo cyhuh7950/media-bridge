@@ -44,6 +44,13 @@ def _required(name: str) -> str:
     return value
 
 
+def _flag(name: str) -> bool:
+    value = os.environ.get(name, "").strip().lower()
+    if value not in {"", "0", "false", "no", "off", "1", "true", "yes", "on"}:
+        raise ControlSettingsError(f"{name} must be a boolean")
+    return value in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True, slots=True)
 class ControlSettings:
     database_url: str = field(repr=False)
@@ -53,6 +60,7 @@ class ControlSettings:
     snapshot_path: Path
     allowed_origin: str
     allowed_host: str
+    allow_insecure_http: bool = False
     console_static_root: Path | None = None
     smtp_host: str | None = None
     smtp_port: int = 587
@@ -88,16 +96,17 @@ class ControlSettings:
         if not snapshot_path.is_absolute() or snapshot_path.is_symlink():
             raise ControlSettingsError("snapshot path must be absolute and non-symlink")
         origin = _required("MEDIA_BRIDGE_CONTROL_ORIGIN")
+        allow_insecure_http = _flag("MEDIA_BRIDGE_CONTROL_ALLOW_INSECURE_HTTP")
         parsed = urlsplit(origin)
         if (
-            parsed.scheme != "https"
+            parsed.scheme not in ({"http", "https"} if allow_insecure_http else {"https"})
             or parsed.hostname is None
             or parsed.username is not None
             or parsed.password is not None
             or parsed.query
             or parsed.fragment
         ):
-            raise ControlSettingsError("Control Plane origin must be credential-free HTTPS")
+            raise ControlSettingsError("Control Plane origin must be credential-free HTTP(S)")
         host = _required("MEDIA_BRIDGE_CONTROL_HOST").lower()
         if host != parsed.hostname.lower():
             raise ControlSettingsError("Control Plane host and origin do not match")
@@ -133,6 +142,7 @@ class ControlSettings:
             snapshot_path=snapshot_path,
             allowed_origin=origin,
             allowed_host=host,
+            allow_insecure_http=allow_insecure_http,
             console_static_root=console_static_root,
             smtp_host=smtp_host,
             smtp_port=smtp_port,

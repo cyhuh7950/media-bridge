@@ -17,8 +17,25 @@ def test_compose_has_three_isolated_services() -> None:
     assert "ports" not in services["media-bridge-db"]
     assert config["networks"]["database"]["internal"] is True
     assert set(services["media-bridge-db"]["networks"]) == {"database"}
-    assert set(services["media-bridge-data"]["networks"]) == {"product", "egress"}
-    assert set(services["media-bridge-control"]["networks"]) == {"database", "product"}
+    assert set(services["media-bridge-data"]["networks"]) == {
+        "database",
+        "product",
+        "egress",
+    }
+    assert set(services["media-bridge-control"]["networks"]) == {
+        "database",
+        "product",
+        "egress",
+    }
+
+
+def test_control_publishes_a_configurable_host_port() -> None:
+    control = _compose()["services"]["media-bridge-control"]
+
+    assert control["ports"] == [
+        "${MEDIA_BRIDGE_CONTROL_BIND_ADDRESS:-127.0.0.1}"
+        ":${MEDIA_BRIDGE_CONTROL_HOST_PORT:-18642}:8081"
+    ]
 
 
 def test_compose_applies_runtime_confinement() -> None:
@@ -61,6 +78,19 @@ def test_compose_uses_secret_files_not_literal_values() -> None:
     assert "PASSWORD=" not in serialized
     assert "PRIVATE_KEY=" not in serialized
     assert ":latest" not in serialized
+
+
+def test_provider_credentials_and_endpoints_are_database_managed() -> None:
+    config = _compose()
+    data = config["services"]["media-bridge-data"]
+    environment = data["environment"]
+
+    assert "MEDIA_BRIDGE_OCR_ENDPOINT" not in environment
+    assert "MEDIA_BRIDGE_VISION_ENDPOINT" not in environment
+    assert "MEDIA_BRIDGE_VISION_MODEL" not in environment
+    assert not any(name.endswith("_API_KEY_FILE") for name in environment)
+    assert not {"ocr_api_key", "vision_api_key", "solar_api_key"} & set(config["secrets"])
+    assert not {"ocr_api_key", "vision_api_key", "solar_api_key"} & set(data["secrets"])
 
 
 def test_default_downstream_endpoint_satisfies_gateway_transport_policy() -> None:

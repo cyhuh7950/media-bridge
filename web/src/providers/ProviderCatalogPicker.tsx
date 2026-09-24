@@ -57,6 +57,7 @@ export function ProviderCatalogPicker({
         disabled={loadedKind !== kind}
       >
         <option value="">{loadedKind !== kind ? "목록을 불러오는 중…" : "Provider를 선택하세요"}</option>
+        {loadedKind === kind ? <option value="__custom__">사용자 정의</option> : null}
         {loadedKind === kind ? entries?.map((entry) => <option key={entry.provider_id} value={entry.provider_id}>{entry.display_name}</option>) : null}
       </select>
       {failed ? <p role="alert">Provider 카탈로그를 불러올 수 없습니다.</p> : null}

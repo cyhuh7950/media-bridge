@@ -11,6 +11,11 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from media_bridge.reasoning import (
+    ReasoningEffort,
+    reasoning_capability,
+    reasoning_payload_fields,
+)
 from media_bridge_local.core.backends import SecretConfigurationError, load_secret
 from media_bridge_local.core.receipts import GateReceiptSigner, ReceiptValidationError
 from media_bridge_local.gateway.contracts import (
@@ -193,6 +198,7 @@ class SolarResponsesDownstream:
         api_key_env: str = "SOLAR_API_KEY",
         credential_loader: Callable[[], str] | None = None,
         protocol: str = "openai-chat-completions",
+        reasoning_effort: str = "provider_default",
         provider_name: str = "Solar",
         error_prefix: str = "solar",
         transport: httpx.AsyncBaseTransport | None = None,
@@ -201,6 +207,11 @@ class SolarResponsesDownstream:
         max_response_bytes: int = 8 * 1024 * 1024,
     ) -> None:
         _validate_endpoint(endpoint, protocol)
+        capability = reasoning_capability("upstage-solar", protocol, model)
+        if reasoning_effort != "provider_default" and (
+            capability is None or reasoning_effort not in capability.efforts
+        ):
+            raise ValueError("Solar reasoning effort is unsupported for this model and protocol")
         if (
             not model.strip()
             or timeout_seconds <= 0
@@ -213,6 +224,7 @@ class SolarResponsesDownstream:
         self._api_key_env = api_key_env
         self._credential_loader = credential_loader
         self._protocol = protocol
+        self._reasoning_effort = reasoning_effort
         self._provider_name = provider_name
         self._error_prefix = error_prefix
         self._max_request_bytes = max_request_bytes
@@ -234,6 +246,12 @@ class SolarResponsesDownstream:
         solar_payload: dict[str, Any]
         if self._protocol == "openai-chat-completions":
             solar_payload = {"model": self._model, "messages": messages, "stream": False}
+            solar_payload.update(
+                reasoning_payload_fields(
+                    reasoning_capability("upstage-solar", self._protocol, self._model),
+                    cast(ReasoningEffort, self._reasoning_effort),
+                )
+            )
             if tools is not None:
                 solar_payload["tools"] = tools
             if "tool_choice" in sealed.payload:

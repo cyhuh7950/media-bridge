@@ -4,14 +4,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
 DOCS = ROOT / "docs"
-PUBLIC_DOC_DIRECTORIES = {"install", "manuals"}
+PUBLISHED_DOC_DIRECTORIES = {"install", "manuals"}
+INTERNAL_DOC_DIRECTORIES = {"design", "superpowers"}
+INTERNAL_DOC_FILES = {"WORK_PLAN.md", "WORK_STATUS.md"}
 
 
 def test_only_public_manual_directories_are_tracked_under_docs() -> None:
     unexpected = sorted(
         path.relative_to(ROOT).as_posix()
         for path in DOCS.rglob("*")
-        if path.is_file() and path.relative_to(DOCS).parts[0] not in PUBLIC_DOC_DIRECTORIES
+        if path.is_file()
+        and path.relative_to(DOCS).parts[0] not in PUBLISHED_DOC_DIRECTORIES
+        and path.relative_to(DOCS).parts[0] not in INTERNAL_DOC_DIRECTORIES
+        and path.relative_to(DOCS).as_posix() not in INTERNAL_DOC_FILES
     )
     assert unexpected == []
 

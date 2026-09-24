@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { AuditEventsPage } from "./AuditEventsPage";
@@ -8,6 +8,7 @@ import { ProvidersPage } from "./ProvidersPage";
 import { PoliciesPage } from "./PoliciesPage";
 import { SnapshotsPage } from "./SnapshotsPage";
 import { SystemPage } from "./SystemPage";
+import { ModelsPage } from "./ModelsPage";
 
 function jsonResponse(body: object, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -21,6 +22,44 @@ function requestPath(input: Parameters<typeof fetch>[0]): string {
   if (input instanceof URL) return input.toString();
   return input.url;
 }
+
+function parseRequestBody(body: BodyInit | null | undefined): Record<string, unknown> | undefined {
+  if (typeof body !== "string") return undefined;
+  const parsed: unknown = JSON.parse(body);
+  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : undefined;
+}
+
+it("creates a public model without requiring an internal routing profile", async () => {
+  const calls: Array<{ path: string; method: string; body?: Record<string, unknown> }> = [];
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>((input, init) => {
+    const path = requestPath(input);
+    const method = init?.method ?? "GET";
+    const body = parseRequestBody(init?.body);
+    calls.push({ path, method, body });
+    if (path === "/admin/v1/providers") return Promise.resolve(jsonResponse([{ id: "provider-1", name: "solar", alias: "solar", kind: "llm" }]));
+    if (path === "/admin/v1/models" && method === "GET") return Promise.resolve(jsonResponse([]));
+    if (path === "/admin/v1/models" && method === "POST") return Promise.resolve(jsonResponse({ id: "model-1" }, 201));
+    return Promise.reject(new Error(`unexpected request: ${method} ${path}`));
+  }));
+  const user = userEvent.setup();
+
+  render(<ModelsPage role="admin" csrfToken="csrf" />);
+  await user.click(await screen.findByRole("button", { name: "모델 생성" }));
+  expect(screen.queryByLabelText("내부 실행 라우팅")).not.toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText("기준 Non-Vision LLM Provider"), "provider-1");
+  await user.type(screen.getByLabelText("공개 모델 ID"), "solar/solar-pro4");
+  await user.click(screen.getByLabelText("Capability image"));
+  await user.click(screen.getByLabelText("Capability pdf"));
+  await user.click(screen.getByRole("button", { name: "생성" }));
+
+  const saved = calls.find((call) => call.method === "POST" && call.path === "/admin/v1/models");
+  expect(saved?.body?.provider_id).toBe("provider-1");
+  expect(saved?.body?.input_modalities).toEqual(["text", "image", "pdf"]);
+  expect(saved?.body?.evidence).toBeUndefined();
+  expect(saved?.body).not.toHaveProperty("routing_profile_id");
+});
 
 it("builds dashboard status only from current P1 API responses", async () => {
   const responses = new Map<string, object>([
@@ -47,7 +86,7 @@ it("builds dashboard status only from current P1 API responses", async () => {
   expect(document.body.textContent).not.toMatch(/demo|sample|가짜/i);
 });
 
-it("renders persisted provider references but no write controls for a viewer", async () => {
+it("does not expose provider secret references to a viewer", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>().mockResolvedValue(
@@ -67,12 +106,12 @@ it("renders persisted provider references but no write controls for a viewer", a
   render(<ProvidersPage role="viewer" csrfToken={null} />);
 
   expect(await screen.findByText("vision-primary")).toBeInTheDocument();
-  expect(screen.getByText("환경변수: VISION_API_KEY")).toBeInTheDocument();
+  expect(screen.queryByText("환경변수: VISION_API_KEY")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Provider 추가" })).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Provider Secret 원문")).not.toBeInTheDocument();
 });
 
-it("does not expose the internal DB provider secret identifier", async () => {
+it("does not expose the internal DB provider secret identifier", () => {
   vi.stubGlobal(
     "fetch",
     vi.fn<typeof fetch>().mockResolvedValue(
@@ -82,7 +121,7 @@ it("does not expose the internal DB provider secret identifier", async () => {
 
   render(<ProvidersPage role="viewer" csrfToken={null} />);
 
-  expect(await screen.findByText("등록됨")).toBeInTheDocument();
+  expect(screen.queryByText("등록됨")).not.toBeInTheDocument();
   expect(screen.queryByText("DB: provider_api_key")).not.toBeInTheDocument();
 });
 
@@ -95,6 +134,8 @@ it("uses the standard provider list actions with register/edit dialog and bulk d
       endpoint: "https://provider.test/v1",
       secret_ref: { kind: "db", identifier: "provider_api_key" },
       enabled: true,
+      updated_by: "admin",
+      updated_at: "2026-09-23T10:00:00+00:00",
     },
     {
       id: "provider-2",
@@ -122,6 +163,8 @@ it("uses the standard provider list actions with register/edit dialog and bulk d
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   const firstRow = await screen.findByRole("row", { name: /vision-primary/ });
   expect(within(firstRow).getByRole("button", { name: "수정" })).toBeInTheDocument();
+  expect(within(firstRow).getByText("admin")).toBeInTheDocument();
+  expect(within(firstRow).getByText("2026-09-23T10:00:00+00:00")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Provider 등록" }));
   expect(screen.getByRole("dialog", { name: "Provider 등록" })).toBeInTheDocument();
@@ -140,6 +183,171 @@ it("uses the standard provider list actions with register/edit dialog and bulk d
   await user.click(screen.getByRole("button", { name: /선택 삭제/ }));
   expect(calls).toContain("DELETE /admin/v1/providers/provider-1");
   expect(calls).toContain("DELETE /admin/v1/providers/provider-2");
+});
+
+it("normalizes provider aliases to lowercase before saving", async () => {
+  const calls: Array<{ path: string; method: string; body?: Record<string, unknown> }> = [];
+  const provider = {
+    id: "provider-1",
+    name: "upstage-solar",
+    alias: "US",
+    kind: "llm",
+    catalog_id: "upstage-solar",
+    model_id: "solar-pro4",
+    protocol: "openai-chat-completions",
+    endpoint: "https://api.upstage.ai/v1",
+    capabilities: ["text"],
+    reasoning_effort: "provider_default",
+    enabled: true,
+  };
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>((input, init) => {
+    const path = requestPath(input);
+    const method = init?.method ?? "GET";
+    const body = parseRequestBody(init?.body);
+    calls.push({ path, method, body });
+    if (path === "/admin/v1/providers" && method === "GET") return Promise.resolve(jsonResponse([provider]));
+    if (path.startsWith("/admin/v1/provider-reasoning-options?")) return Promise.resolve(jsonResponse({ efforts: ["provider_default", "low", "medium", "high"] }));
+    if (path === "/admin/v1/providers/provider-1" && method === "PATCH") return Promise.resolve(jsonResponse(provider));
+    return Promise.reject(new Error(`unexpected request: ${method} ${path}`));
+  }));
+  const user = userEvent.setup();
+
+  render(<ProvidersPage role="admin" csrfToken="csrf" />);
+  const row = await screen.findByRole("row", { name: /upstage-solar/ });
+  await user.click(within(row).getByRole("button", { name: "수정" }));
+  fireEvent.change(screen.getByLabelText("Provider 약어"), { target: { value: "US" } });
+  await user.click(screen.getByRole("button", { name: "저장" }));
+
+  const saved = calls.find((call) => call.method === "PATCH");
+  expect(saved?.body?.alias).toBe("us");
+});
+
+it("registers an LLM with only server-supported reasoning choices", async () => {
+  const calls: Array<{ path: string; method: string; body?: Record<string, unknown> }> = [];
+  const fetchMock = vi.fn<typeof fetch>((input, init) => {
+    const path = requestPath(input);
+    const method = init?.method ?? "GET";
+    const body = parseRequestBody(init?.body);
+    calls.push({ path, method, body });
+    if (path === "/admin/v1/providers" && method === "GET") return Promise.resolve(jsonResponse([]));
+    if (path.startsWith("/admin/v1/provider-catalog?kind=")) {
+      const kind = new URL(path, window.location.origin).searchParams.get("kind");
+      return Promise.resolve(jsonResponse(kind === "llm" ? [{
+        provider_id: "upstage-solar",
+        display_name: "Upstage Solar",
+        kind: "llm",
+        protocol: "openai-chat-completions",
+        capabilities: ["text"],
+        default_endpoint: "https://api.upstage.ai/v1/chat/completions",
+        secret_env: "SOLAR_API_KEY",
+        default_model_id: "solar-pro4",
+      }] : []));
+    }
+    if (path.startsWith("/admin/v1/provider-reasoning-options?")) {
+      return Promise.resolve(jsonResponse({ efforts: ["provider_default", "low", "medium", "high"] }));
+    }
+    if (path === "/admin/v1/providers" && method === "POST") return Promise.resolve(jsonResponse({ id: "solar" }, 201));
+    return Promise.reject(new Error(`unexpected request: ${method} ${path}`));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const user = userEvent.setup();
+
+  render(<ProvidersPage role="admin" csrfToken="csrf" />);
+  await user.click(await screen.findByRole("button", { name: "Provider 등록" }));
+  await user.selectOptions(screen.getByLabelText("Provider 유형"), "llm");
+  await user.selectOptions(await screen.findByLabelText("Provider 선택"), "upstage-solar");
+  expect(screen.queryByLabelText("Secret 환경변수 이름")).not.toBeInTheDocument();
+  const effort = await screen.findByLabelText("추론 등급");
+  expect(effort).toHaveValue("provider_default");
+  expect(within(effort).getAllByRole("option").map((option) => (option as HTMLOptionElement).value)).toEqual([
+    "provider_default", "low", "medium", "high",
+  ]);
+
+  await user.selectOptions(effort, "high");
+  await user.click(screen.getByRole("button", { name: "등록" }));
+
+  const saved = calls.find((call) => call.method === "POST" && call.path === "/admin/v1/providers");
+  expect(saved?.body?.reasoning_effort).toBe("high");
+  expect(saved?.body?.secret_ref).toEqual({ kind: "db", identifier: "provider_api_key" });
+});
+
+it("hides reasoning for analysis Providers and blocks stale LLM effort after model change", async () => {
+  const calls: Array<{ path: string; method: string; body?: Record<string, unknown> }> = [];
+  const provider = {
+    id: "solar",
+    name: "solar",
+    kind: "llm",
+    catalog_id: "upstage-solar",
+    model_id: "solar-pro4",
+    endpoint: "https://api.upstage.ai/v1/chat/completions",
+    protocol: "openai-chat-completions",
+    capabilities: ["text"],
+    secret_ref: { kind: "db", identifier: "provider_api_key" },
+    reasoning_effort: "high",
+    enabled: true,
+  };
+  const fetchMock = vi.fn<typeof fetch>((input, init) => {
+    const path = requestPath(input);
+    const method = init?.method ?? "GET";
+    const body = parseRequestBody(init?.body);
+    calls.push({ path, method, body });
+    if (path === "/admin/v1/providers" && method === "GET") return Promise.resolve(jsonResponse([provider]));
+    if (path.startsWith("/admin/v1/provider-catalog?kind=")) {
+      const kind = new URL(path, window.location.origin).searchParams.get("kind");
+      return Promise.resolve(jsonResponse(kind === "llm" ? [{
+        provider_id: "upstage-solar",
+        display_name: "Upstage Solar",
+        kind: "llm",
+        protocol: "openai-chat-completions",
+        capabilities: ["text"],
+        default_endpoint: "https://api.upstage.ai/v1/chat/completions",
+        secret_env: "SOLAR_API_KEY",
+        default_model_id: "solar-pro4",
+      }] : []));
+    }
+    if (path.startsWith("/admin/v1/provider-reasoning-options?")) {
+      const model = new URL(path, window.location.origin).searchParams.get("model_id");
+      return Promise.resolve(jsonResponse({ efforts: model === "solar-pro4" ? ["provider_default", "low", "medium", "high"] : ["provider_default"] }));
+    }
+    if (path === "/admin/v1/providers/solar" && method === "PATCH") return Promise.resolve(jsonResponse(provider));
+    return Promise.reject(new Error(`unexpected request: ${method} ${path}`));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const user = userEvent.setup();
+
+  render(<ProvidersPage role="admin" csrfToken="csrf" />);
+  const row = await screen.findByRole("row", { name: /solar/ });
+  await user.click(within(row).getByRole("button", { name: "수정" }));
+  const effort = await screen.findByLabelText("추론 등급");
+  expect(effort).toHaveValue("high");
+  fireEvent.change(screen.getByLabelText("기준 모델 (선택)"), { target: { value: "solar-mini" } });
+  expect(screen.getByLabelText("기준 모델 (선택)")).toHaveValue("solar-mini");
+  await waitFor(() => {
+    expect(calls.filter((call) => call.path.includes("provider-reasoning-options")).at(-1)?.path).toContain("model_id=solar-mini");
+  });
+  expect(await screen.findByText(/현재 저장된 추론 등급은 이 모델에서 지원되지 않습니다/)).toBeInTheDocument();
+  await waitFor(() => {
+    expect(within(effort).getAllByRole("option").map((option) => (option as HTMLOptionElement).value)).toEqual([
+      "provider_default", "high",
+    ]);
+  });
+  await user.click(screen.getByRole("button", { name: "저장" }));
+  expect(calls.some((call) => call.method === "PATCH")).toBe(false);
+
+  await waitFor(() => {
+    expect(effort).toBeEnabled();
+  });
+  await user.selectOptions(effort, "provider_default");
+  expect(effort).toHaveValue("provider_default");
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: "저장" })).toBeEnabled();
+  });
+  expect(screen.getByLabelText("Provider 선택")).toHaveValue("upstage-solar");
+  await user.click(screen.getByRole("button", { name: "저장" }));
+  const updated = calls.find((call) => call.method === "PATCH");
+  expect(updated?.body?.reasoning_effort).toBe("provider_default");
+  await user.click(await screen.findByRole("button", { name: "Provider 등록" }));
+  expect(screen.queryByLabelText("추론 등급")).not.toBeInTheDocument();
 });
 
 it("shows an issued credential once and clears it on close", async () => {

@@ -16,7 +16,7 @@ class CapabilityState(StrEnum):
 class ModelCapability:
     model_id: str
     input_modalities: set[str]
-    expires_at: datetime
+    expires_at: datetime | None = None
     pdf_passthrough_verified: bool = False
 
     def supports_all(self, modalities: frozenset[str]) -> bool:
@@ -24,7 +24,7 @@ class ModelCapability:
 
     def is_stale(self, now: datetime | None = None) -> bool:
         checked_at = now or datetime.now(UTC)
-        return self.expires_at <= checked_at
+        return self.expires_at is not None and self.expires_at <= checked_at
 
 
 @dataclass(frozen=True, slots=True)

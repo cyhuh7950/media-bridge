@@ -18,10 +18,10 @@ class ProviderCatalogEntry:
     display_name: str
     kind: ProviderKind
     protocol: str
-    capabilities: tuple[str, ...]
+    capabilities: tuple[Literal["text", "image", "pdf", "ocr"], ...]
     default_endpoint: str | None
     secret_env: str | None
-    default_model_id: str
+    default_model_id: str | None
 
 
 _CATALOG: tuple[ProviderCatalogEntry, ...] = (
@@ -74,16 +74,6 @@ _CATALOG: tuple[ProviderCatalogEntry, ...] = (
         None,
         None,
         "vision",
-    ),
-    ProviderCatalogEntry(
-        "omniroute",
-        "OmniRoute",
-        "llm",
-        "openai-responses",
-        ("text",),
-        None,
-        "MEDIA_BRIDGE_OMNIROUTE_API_KEY",
-        "auto",
     ),
     ProviderCatalogEntry(
         "openai",
@@ -154,16 +144,6 @@ _CATALOG: tuple[ProviderCatalogEntry, ...] = (
         "https://api.deepseek.com/v1",
         "DEEPSEEK_API_KEY",
         "deepseek-chat",
-    ),
-    ProviderCatalogEntry(
-        "openrouter",
-        "OpenRouter",
-        "llm",
-        "openai-chat-completions",
-        ("text",),
-        "https://openrouter.ai/api/v1",
-        "OPENROUTER_API_KEY",
-        "openrouter/auto",
     ),
     ProviderCatalogEntry(
         "ollama",

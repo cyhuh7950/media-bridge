@@ -107,7 +107,10 @@ class RecordingDownstream:
             content_type="application/json",
             response_id="resp_gateway",
             status_code=200,
-        )
+    )
+
+    async def close(self) -> None:
+        return None
 
 
 def build_test_runtime(
@@ -134,13 +137,11 @@ def build_test_runtime(
                 {
                     "id": "text-model",
                     "input_modalities": ["text"],
-                    "expires_at": (now + timedelta(hours=1)).isoformat(),
                     "pdf_passthrough_verified": False,
                 },
                 {
                     "id": "vision-model",
                     "input_modalities": ["text", "image", "pdf"],
-                    "expires_at": (now + timedelta(hours=1)).isoformat(),
                     "pdf_passthrough_verified": True,
                 },
                 {
@@ -159,7 +160,6 @@ def build_test_runtime(
                     "selector": "gateway-client",
                     "digest": digest,
                     "scopes": ["assets:write", "mcp:invoke", "responses:invoke"],
-                    "expires_at": (now + timedelta(days=30)).isoformat(),
                     "revoked": False,
                 }
             ]

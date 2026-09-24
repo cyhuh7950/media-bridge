@@ -1,5 +1,30 @@
 export type Role = "admin" | "operator" | "viewer";
 
+export type ReasoningEffort =
+  | "provider_default"
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
+
+export interface ProviderReasoningOptions {
+  efforts: ReasoningEffort[];
+}
+
+export interface ProviderWriteRequest {
+  name: string;
+  alias?: string;
+  kind: "analysis" | "llm";
+  catalog_id?: string;
+  model_id?: string;
+  endpoint: string;
+  protocol?: string;
+  capabilities: string[];
+  reasoning_effort?: ReasoningEffort;
+}
+
 export interface Principal {
   username: string;
   role: Role;

@@ -9,6 +9,7 @@ import os
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import UUID
 
 import httpx
 import uvicorn
@@ -18,19 +19,24 @@ from starlette.types import ASGIApp
 from media_bridge.acquisition import MediaAcquirer
 from media_bridge.assets import AssetStore
 from media_bridge.backends import (
+    AnalysisBackend,
+    BackendStatus,
     OpenAICompatibleVisionBackend,
     SolarAnalysisBackend,
     UpstageOcrBackend,
+    VisionBackend,
+    VisionResult,
     load_secret,
 )
 from media_bridge.config_snapshot import SignedSnapshot, SnapshotVerifier
 from media_bridge.gate import PreRequestGate
+from media_bridge.llm_backends import build_llm_backend
 from media_bridge.pdf_pipeline import PdfiumPageRenderer
 from media_bridge.receipts import GateReceiptSigner
+from media_bridge.runtime_snapshot import capability_registry_from_snapshot
 from media_bridge_control.db import Database
 from media_bridge_control.models import Provider
 from media_bridge_control.security import SecurityContext
-from media_bridge.runtime_snapshot import capability_registry_from_snapshot
 from media_bridge_gateway.app import build_gateway_app
 from media_bridge_gateway.contracts import ResponsesDownstream
 from media_bridge_gateway.downstream import ProviderResponsesDownstream
@@ -45,6 +51,20 @@ from media_bridge_gateway.state import GatewayStateStore
 
 class GatewayConfigurationError(RuntimeError):
     pass
+
+
+class _UnavailableVisionBackend:
+    """Keep the gateway available when no optional Vision Provider is registered."""
+
+    async def describe(
+        self,
+        *,
+        data: bytes,
+        mime_type: str,
+        profile: str,
+    ) -> VisionResult:
+        del data, mime_type, profile
+        return VisionResult(BackendStatus.FAILURE, error_code="configuration")
 
 
 def _required(name: str) -> str:
@@ -189,7 +209,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
         db = database
         security = SecurityContext(pepper=credential_pepper)
 
-        def db_provider(catalog_id: str) -> Provider:
+        def db_provider(catalog_id: str, *, required: bool = True) -> Provider | None:
             with db.session() as session:
                 provider = session.scalar(
                     select(Provider).where(
@@ -197,46 +217,93 @@ def build_gateway_process_from_environment() -> GatewayProcess:
                         Provider.enabled.is_(True),
                     )
                 )
-            if provider is None:
+            if provider is None and required:
                 raise ValueError("provider is not configured")
             return provider
 
-        def db_provider_credential(catalog_id: str) -> str:
-            provider = db_provider(catalog_id)
+        def db_provider_by_id(provider_id: str) -> Provider:
+            try:
+                parsed_id = UUID(provider_id)
+            except (TypeError, ValueError) as error:
+                raise ValueError("provider is not configured") from error
+            with db.session() as session:
+                provider = session.get(Provider, parsed_id)
+            if provider is None or not provider.enabled:
+                raise ValueError("provider is not configured")
+            return provider
+
+        def db_provider_credential(provider_id: str) -> str:
+            provider = db_provider_by_id(provider_id)
             if not provider.encrypted_api_key:
                 raise ValueError("provider credential is not configured")
             return security.decrypt_secret(provider.encrypted_api_key)
 
-        ocr_provider = db_provider("upstage-document-parse")
-        solar_provider = db_provider("upstage-solar")
-        solar_endpoint = solar_provider.endpoint.rstrip("/")
-        if not solar_endpoint.endswith("/chat/completions"):
-            solar_endpoint = f"{solar_endpoint}/chat/completions"
-        solar_model = solar_provider.model_id or "solar-pro4"
+        ocr_provider = db_provider("upstage-document-parse", required=False)
+        if ocr_provider is None:
+            with db.session() as session:
+                ocr_provider = session.scalar(
+                    select(Provider).where(
+                        Provider.kind == "analysis",
+                        Provider.enabled.is_(True),
+                    ).order_by(Provider.name)
+                )
+        if ocr_provider is None:
+            raise GatewayConfigurationError("analysis Provider is not configured")
+        vision_provider = db_provider("openai-vision", required=False)
+        solar_provider = db_provider("upstage-solar", required=False)
         ocr = UpstageOcrBackend(
             endpoint=ocr_provider.endpoint,
-            credential_loader=lambda: db_provider_credential("upstage-document-parse"),
+            api_key_env=None,
+            credential_loader=lambda: db_provider_credential(str(ocr_provider.id)),
             client=client,
         )
-        vision = OpenAICompatibleVisionBackend(
-            endpoint=_required("MEDIA_BRIDGE_VISION_ENDPOINT"),
-            model=_required("MEDIA_BRIDGE_VISION_MODEL"),
-            api_key_env="MEDIA_BRIDGE_VISION_API_KEY",
-            credential_loader=lambda: db_provider_credential("openai-vision"),
-            client=client,
-        )
-        solar = SolarAnalysisBackend(
-            endpoint=solar_endpoint,
-            model=solar_model,
-            credential_loader=lambda: db_provider_credential("upstage-solar"),
-            client=client,
-        )
-        configured_downstream = ProviderResponsesDownstream(
-            backend=solar,
-            receipt_signer=receipt_signer,
-            model=solar_model,
-        )
-        downstream = configured_downstream
+        vision: VisionBackend
+        if vision_provider is None:
+            vision = _UnavailableVisionBackend()
+        else:
+            if not vision_provider.model_id:
+                raise GatewayConfigurationError("vision Provider model is not configured")
+            vision = OpenAICompatibleVisionBackend(
+                endpoint=vision_provider.endpoint,
+                model=vision_provider.model_id,
+                api_key_env=None,
+                credential_loader=lambda: db_provider_credential(str(vision_provider.id)),
+                client=client,
+            )
+        solar = None
+        if solar_provider is not None:
+            solar_endpoint = solar_provider.endpoint.rstrip("/")
+            if not solar_endpoint.endswith("/chat/completions"):
+                solar_endpoint = f"{solar_endpoint}/chat/completions"
+            solar_model = solar_provider.model_id or "solar-pro4"
+            solar = SolarAnalysisBackend(
+                endpoint=solar_endpoint,
+                model=solar_model,
+                api_key_env=None,
+                credential_loader=lambda: db_provider_credential(str(solar_provider.id)),
+                client=client,
+            )
+
+        def provider_backend(provider: dict[str, object]) -> AnalysisBackend:
+            provider_id = provider.get("id")
+            if not isinstance(provider_id, str) or not provider_id:
+                raise ValueError("provider identifier is invalid")
+
+            def credential_loader() -> str:
+                return db_provider_credential(provider_id)
+
+            return build_llm_backend(
+                provider,
+                credential_loader=credential_loader,
+                client=client,
+            )
+
+        def downstream_factory(snapshot: SignedSnapshot) -> ProviderResponsesDownstream:
+            return ProviderResponsesDownstream(
+                snapshot=snapshot.body,
+                receipt_signer=receipt_signer,
+                backend_factory=provider_backend,
+            )
 
         def gate_factory(snapshot: SignedSnapshot) -> PreRequestGate:
             return PreRequestGate(
@@ -250,14 +317,17 @@ def build_gateway_process_from_environment() -> GatewayProcess:
 
         factory = GatewayTransactionFactory(
             gate_factory=gate_factory,
-            downstream_factory=lambda _snapshot: configured_downstream,
+            downstream_factory=downstream_factory,
             receipt_signer=receipt_signer,
             state_store_factory=GatewayStateStore,
             credential_pepper=credential_pepper,
-            analysis_backends_factory=lambda _snapshot: {"solar": solar},
+            analysis_backends_factory=lambda _snapshot: (
+                {"solar": solar} if solar is not None else {}
+            ),
         )
         runtime = VerifiedSnapshotRuntime(verifier=verifier, generation_factory=factory)
         runtime.load(snapshot_path)
+        downstream = runtime.current().downstream
         app = build_gateway_app(
             runtime=runtime,
             asset_store=asset_store,
@@ -290,7 +360,7 @@ def build_gateway_process_from_environment() -> GatewayProcess:
             app=app,
             runtime=runtime,
             asset_store=asset_store,
-            downstream=configured_downstream,
+            downstream=downstream,
             http_client=client,
             database=database,
         )

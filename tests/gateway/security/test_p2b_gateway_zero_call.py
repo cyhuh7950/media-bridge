@@ -106,10 +106,13 @@ async def test_prepare_conversion_failure_is_blocked_without_downstream(
         transport=httpx.ASGITransport(app=app),
         base_url="https://gateway.test",
     ) as client:
+        request = _media_request("text-model")
+        if failure_stage == "vision":
+            request["conversion_profile"] = "generic"
         response = await client.post(
             "/v1/prepare",
             headers={"Authorization": f"Bearer {TEST_RAW_CREDENTIAL}"},
-            json=_media_request("text-model"),
+            json=request,
         )
 
     assert response.status_code == 200

@@ -106,7 +106,7 @@ async def test_direct_mcp_calls_return_text_only_structured_output(tmp_path: Pat
 
     extracted = await server.call_tool(
         "extract_image_context",
-        {"content": [media], "conversion_profile": "error_screenshot"},
+        {"content": [media], "conversion_profile": "generic"},
     )
     analyzed = await server.call_tool(
         "analyze_error_image",

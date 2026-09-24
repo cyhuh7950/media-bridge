@@ -44,8 +44,15 @@ def test_fresh_upgrade_creates_control_plane_schema(clean_postgres: str) -> None
     with engine.connect() as connection:
         revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
     engine.dispose()
-    assert revision == "0006_provider_api_keys"
-    assert {"catalog_id", "protocol", "capabilities", "encrypted_api_key"} <= provider_columns
+    assert revision == "0014_model_no_expiry"
+    assert {
+        "catalog_id",
+        "protocol",
+        "capabilities",
+        "encrypted_api_key",
+        "reasoning_effort",
+        "alias",
+    } <= provider_columns
 
 
 def test_migration_round_trip_is_reversible(clean_postgres: str) -> None:
@@ -56,11 +63,42 @@ def test_migration_round_trip_is_reversible(clean_postgres: str) -> None:
     engine = create_engine(clean_postgres)
     assert set(inspect(engine).get_table_names()) <= {"alembic_version"}
     engine.dispose()
-
     command.upgrade(config, "head")
     engine = create_engine(clean_postgres)
     assert set(inspect(engine).get_table_names()) >= EXPECTED_TABLES
     engine.dispose()
+
+
+def test_legacy_provider_gets_null_effort_when_migration_is_applied(clean_postgres: str) -> None:
+    config = _config(clean_postgres)
+    command.upgrade(config, "0008_model_provider")
+    engine = create_engine(clean_postgres)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO providers "
+                "(id, name, kind, endpoint, secret_ref_kind, secret_ref_identifier, "
+                "capabilities, enabled) VALUES "
+                "('00000000-0000-0000-0000-000000000021', 'legacy-provider', 'llm', "
+                "'https://provider.test/v1', 'env', 'PROVIDER_KEY', '[]'::jsonb, true)"
+            )
+        )
+    engine.dispose()
+
+    command.upgrade(config, "head")
+    engine = create_engine(clean_postgres)
+    with engine.connect() as connection:
+        effort = connection.scalar(
+            text(
+                "SELECT reasoning_effort FROM providers "
+                "WHERE name = 'legacy-provider'"
+            )
+        )
+    engine.dispose()
+    assert effort is None
+
+    command.downgrade(config, "0008_model_provider")
+    command.upgrade(config, "head")
 
 
 def test_user_identity_is_unique_and_snapshot_rows_are_immutable(clean_postgres: str) -> None:

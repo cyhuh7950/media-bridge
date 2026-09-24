@@ -40,6 +40,63 @@ class GatewayGeneration:
     state_store: GatewayStateStore
     transaction: GatewayTransaction
     models: tuple[str, ...] = ()
+    auto_model: str | None = None
+
+
+def _auto_model_for_snapshot(
+    *,
+    registry_models: list[object],
+    providers: object,
+    routing_profiles: object,
+    public_models: tuple[str, ...],
+) -> str | None:
+    if not isinstance(providers, list):
+        return None
+    profiles = routing_profiles if isinstance(routing_profiles, list) else []
+    enabled_llm_ids = {
+        provider.get("id")
+        for provider in providers
+        if isinstance(provider, dict)
+        and provider.get("kind") == "llm"
+        and provider.get("enabled") is True
+        and isinstance(provider.get("id"), str)
+    }
+    for model in registry_models:
+        if not isinstance(model, dict):
+            continue
+        model_id = model.get("id")
+        if not isinstance(model_id, str) or model_id not in public_models:
+            continue
+        provider_id = model.get("provider_id")
+        provider_ids = {provider_id} if isinstance(provider_id, str) else set()
+        route_id = model.get("routing_profile_id")
+        if not isinstance(route_id, str):
+            default_route = next(
+                (
+                    route
+                    for route in profiles
+                    if isinstance(route, dict) and route.get("enabled") is not False
+                ),
+                None,
+            )
+            route_id = default_route.get("id") if isinstance(default_route, dict) else None
+        route = next(
+            (
+                candidate
+                for candidate in profiles
+                if isinstance(candidate, dict) and candidate.get("id") == route_id
+            ),
+            None,
+        )
+        if isinstance(route, dict) and isinstance(route.get("llm_provider_ids"), list):
+            provider_ids = {
+                provider_id
+                for provider_id in route["llm_provider_ids"]
+                if isinstance(provider_id, str)
+            }
+        if provider_ids.intersection(enabled_llm_ids):
+            return model_id
+    return None
 
 
 class GenerationFactory(Protocol):
@@ -90,12 +147,26 @@ class GatewayTransactionFactory:
             snapshot_version=snapshot.version,
         )
         registry = snapshot.body.get("registry")
-        registry_models = registry.get("models", []) if isinstance(registry, dict) else []
+        registry_models = (
+            registry.get("models", []) if isinstance(registry, dict) else []
+        )
         configured_models = snapshot.body.get("models", registry_models)
-        models = tuple(
-            item if isinstance(item, str) else item.get("id")
-            for item in configured_models
-            if (isinstance(item, str) and item) or (isinstance(item, dict) and item.get("id"))
+        if not isinstance(configured_models, list):
+            configured_models = []
+        model_names: list[str] = []
+        for item in configured_models:
+            if isinstance(item, str) and item:
+                model_names.append(item)
+            elif isinstance(item, dict):
+                model_id = item.get("id")
+                if isinstance(model_id, str) and model_id:
+                    model_names.append(model_id)
+        models = tuple(model_names)
+        auto_model = _auto_model_for_snapshot(
+            registry_models=registry_models if isinstance(registry_models, list) else [],
+            providers=snapshot.body.get("providers"),
+            routing_profiles=snapshot.body.get("routing_profiles"),
+            public_models=models,
         )
         return GatewayGeneration(
             version=snapshot.version,
@@ -108,6 +179,7 @@ class GatewayTransactionFactory:
             state_store=state_store,
             transaction=transaction,
             models=models,
+            auto_model=auto_model,
         )
 
 

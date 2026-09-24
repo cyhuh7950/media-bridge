@@ -82,6 +82,29 @@ def _error(code: str, message: str, status_code: int) -> JSONResponse:
     )
 
 
+def _resolve_public_request(
+    payload: object, generation: GatewayGeneration | None
+) -> dict[str, object]:
+    if generation is None:
+        raise RuntimeError("gateway_unavailable")
+    if not isinstance(payload, dict):
+        raise ValueError("request must be an object")
+    resolved = dict(payload)
+    requested = resolved.get("model")
+    if requested is None or requested == "auto":
+        if generation.auto_model is None:
+            raise LookupError("model_unavailable")
+        # Resolve only to a public model backed by an enabled LLM Provider.
+        # Analysis-only targets are not valid downstream generation models.
+        resolved["model"] = generation.auto_model
+    elif not isinstance(requested, str) or requested not in generation.models:
+        raise LookupError("model_not_found")
+    effort = resolved.get("reasoning_effort")
+    if effort is not None and effort not in {"low", "medium", "high"}:
+        raise ValueError("reasoning_effort must be low, medium, or high")
+    return resolved
+
+
 def enforce_v2_provider_boundary(result: InteropV2Result) -> None:
     """Raise before a provider call unless v2 has removed original media."""
 
@@ -297,6 +320,8 @@ class DataPlaneAuthMiddleware:
             return "responses:invoke", "/v1/models"
         if path == "/v1/responses":
             return "responses:invoke", "/v1/responses"
+        if path == "/v1/chat/completions":
+            return "responses:invoke", "/v1/chat/completions"
         if path == "/mcp":
             return "mcp:invoke", "/mcp"
         return None
@@ -471,7 +496,13 @@ def build_gateway_app(
                     413,
                 )
         try:
-            payload = json.loads(bytes(body))
+            payload = _resolve_public_request(json.loads(bytes(body)), current_generation.get())
+        except LookupError as error:
+            return _error(str(error), "The requested public model is unavailable.", 404)
+        except RuntimeError:
+            return _error("gateway_unavailable", "Gateway is unavailable.", 503)
+        except ValueError:
+            return _error("invalid_request", "Responses request is invalid.", 400)
         except (UnicodeDecodeError, json.JSONDecodeError):
             return _error("invalid_json", "Responses request is not valid JSON.", 400)
         generation = current_generation.get()
@@ -553,7 +584,15 @@ def build_gateway_app(
                     413,
                 )
         try:
-            responses_payload = chat_request_to_responses(json.loads(bytes(body)))
+            responses_payload = chat_request_to_responses(
+                _resolve_public_request(json.loads(bytes(body)), current_generation.get())
+            )
+        except LookupError as error:
+            return _error(str(error), "The requested public model is unavailable.", 404)
+        except RuntimeError:
+            return _error("gateway_unavailable", "Gateway is unavailable.", 503)
+        except ValueError:
+            return _error("invalid_request", "Chat Completions request is invalid.", 400)
         except (UnicodeDecodeError, json.JSONDecodeError):
             return _error("invalid_json", "Chat Completions request is not valid JSON.", 400)
         except ChatNormalizationError as error:

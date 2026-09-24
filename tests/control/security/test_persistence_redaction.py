@@ -110,7 +110,7 @@ def test_raw_auth_provider_and_credential_values_never_persist_or_log(
     }
 
     provider_marker = "provider-raw-secret-marker"
-    rejected = client.post(
+    created = client.post(
         "/admin/v1/providers",
         headers=headers,
         json={
@@ -125,8 +125,9 @@ def test_raw_auth_provider_and_credential_values_never_persist_or_log(
             "api_key": provider_marker,
         },
     )
-    assert rejected.status_code == 400
-    assert provider_marker not in rejected.text
+    assert created.status_code == 201
+    assert created.json()["has_api_key"] is True
+    assert provider_marker not in created.text
 
     issued = client.post(
         "/admin/v1/credentials",

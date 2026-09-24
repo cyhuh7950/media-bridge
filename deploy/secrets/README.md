@@ -1,10 +1,13 @@
 # Docker Secret 운영 경계
 
-이 디렉터리에는 Secret 값 파일을 커밋하지 않는다. 운영자는 배포 호스트에서 값 파일의
-owner를 해당 컨테이너 UID(`10001`)로 맞추고 mode `0400`을 적용한 뒤 Compose에
-연결한다. rootful standalone Compose의 file-backed Secret은 host owner/mode를 그대로
-유지하므로 root 소유 `0400` 파일은 non-root 서비스가 읽지 못한다. 파일명은 `.secret`
-또는 `.pem`을 사용하며 두 패턴은 Git과 Docker build context에서 제외된다.
+이 디렉터리에는 Secret 값 파일을 커밋하지 않는다. 최초 배포에서 `deploy/scripts/secret_bootstrap.py`를
+root 권한으로 실행해 필요한 시스템 Secret을 생성한다. 이 스크립트는 `media-bridge_database` 볼륨이
+없는 초기화 상태에서만 새 값을 만들며, 기존 Secret은 검증 후 그대로 보존한다. 기존 DB 볼륨과 Secret이
+맞지 않거나 Secret 세트가 불완전하면 새 값을 만들지 않고 중단한다.
+
+rootful standalone Compose의 file-backed Secret은 host owner/mode를 그대로 유지한다. DB 암호 파일은
+컨테이너 UID `999`, 다른 Secret은 UID `10001`, 모두 mode `0400`으로 저장한다. 파일명은 `.secret` 또는
+`.pem`을 사용하며 값 파일은 Git과 Docker build context에서 제외된다.
 
 Provider API key, PostgreSQL password, credential pepper, receipt HMAC key와 snapshot
 private key는 이미지·설정·로그·snapshot·backup에 포함하지 않는다. 교체 시 새 파일을

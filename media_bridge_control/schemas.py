@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from media_bridge.contracts import StrictModel
+from media_bridge.reasoning import ReasoningEffort
 
 
 class AdminStrictModel(StrictModel):
@@ -116,6 +117,10 @@ class SecretReference(AdminStrictModel):
 
 class ProviderCreate(AdminStrictModel):
     name: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")]
+    alias: Annotated[
+        str,
+        StringConstraints(pattern=r"^[a-z][a-z0-9-]{0,63}$"),
+    ] | None = None
     kind: Literal["ocr", "vision", "analysis", "llm"]
     catalog_id: Annotated[
         str,
@@ -136,6 +141,7 @@ class ProviderCreate(AdminStrictModel):
     ] = Field(default_factory=set)
     secret_ref: SecretReference
     api_key: Annotated[str, StringConstraints(min_length=1, max_length=4_096)] | None = None
+    reasoning_effort: ReasoningEffort = "provider_default"
     enabled: bool = True
 
 
@@ -143,6 +149,10 @@ class ProviderUpdate(NonEmptyUpdate):
     name: Annotated[
         str,
         StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"),
+    ] | None = None
+    alias: Annotated[
+        str,
+        StringConstraints(pattern=r"^[a-z][a-z0-9-]{0,63}$"),
     ] | None = None
     kind: Literal["ocr", "vision", "analysis", "llm"] | None = None
     catalog_id: Annotated[
@@ -167,6 +177,7 @@ class ProviderUpdate(NonEmptyUpdate):
     ] | None = None
     secret_ref: SecretReference | None = None
     api_key: Annotated[str, StringConstraints(min_length=1, max_length=4_096)] | None = None
+    reasoning_effort: ReasoningEffort | None = None
     enabled: bool | None = None
 
 
@@ -252,7 +263,8 @@ class TestLabPreviewRequest(AdminStrictModel):
     routing_profile_id: UUID | None = None
     gateway_url: Annotated[str, StringConstraints(max_length=2_048)] | None = None
     api_key: Annotated[str, StringConstraints(min_length=1, max_length=4_096)] | None = None
-    target_model: Annotated[str, StringConstraints(min_length=1, max_length=128)]
+    target_model: Annotated[str, StringConstraints(min_length=1, max_length=128)] | None = None
+    reasoning_effort: Literal["provider_default", "low", "medium", "high"] = "provider_default"
     conversion_profile: Literal["generic", "error_screenshot", "document"] = "generic"
     user_request: Annotated[str, StringConstraints(min_length=1, max_length=20_000)]
     media_type: Literal["image", "pdf"]
@@ -303,6 +315,7 @@ class TestLabRunRequest(TestLabPreviewRequest):
 
 
 class ModelCapabilityCreate(AdminStrictModel):
+    routing_profile_id: UUID | None = None
     provider_id: UUID | None = None
     model_id: Annotated[
         str,
@@ -313,21 +326,22 @@ class ModelCapabilityCreate(AdminStrictModel):
         set[Literal["text", "image", "pdf"]],
         Field(min_length=1, max_length=3),
     ]
-    evidence: Annotated[str, StringConstraints(min_length=1, max_length=1_024)]
+    evidence: Annotated[str, StringConstraints(min_length=1, max_length=1_024)] | None = None
     reviewed_at: datetime
-    expires_at: datetime
+    expires_at: datetime | None = None
     pdf_passthrough_verified: bool = False
+    reasoning_effort: Literal["provider_default", "low", "medium", "high"] = "provider_default"
 
     @field_validator("reviewed_at", "expires_at")
     @classmethod
-    def require_timezone(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
+    def require_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("capability timestamps must be timezone-aware")
         return value
 
     @model_validator(mode="after")
     def require_future_expiry(self) -> "ModelCapabilityCreate":
-        if self.expires_at <= self.reviewed_at:
+        if self.expires_at is not None and self.expires_at <= self.reviewed_at:
             raise ValueError("capability expiry must follow review")
         if self.pdf_passthrough_verified and "pdf" not in self.input_modalities:
             raise ValueError("PDF verification requires PDF input modality")
@@ -335,6 +349,7 @@ class ModelCapabilityCreate(AdminStrictModel):
 
 
 class ModelCapabilityUpdate(NonEmptyUpdate):
+    routing_profile_id: UUID | None = None
     provider_id: UUID | None = None
     model_id: Annotated[
         str,
@@ -351,6 +366,7 @@ class ModelCapabilityUpdate(NonEmptyUpdate):
     reviewed_at: datetime | None = None
     expires_at: datetime | None = None
     pdf_passthrough_verified: bool | None = None
+    reasoning_effort: Literal["provider_default", "low", "medium", "high"] | None = None
 
     @field_validator("reviewed_at", "expires_at")
     @classmethod
@@ -369,7 +385,8 @@ class PolicyCreate(AdminStrictModel):
     allow_base64: bool
     allow_asset: bool
     allow_local_path: bool
-    fail_closed: bool
+    fail_closed: Literal[True]
+    reasoning_effort: Literal["provider_default", "low", "medium", "high"] = "provider_default"
 
 
 class PolicyUpdate(NonEmptyUpdate):
@@ -384,16 +401,26 @@ class PolicyUpdate(NonEmptyUpdate):
     allow_base64: bool | None = None
     allow_asset: bool | None = None
     allow_local_path: bool | None = None
-    fail_closed: bool | None = None
+    fail_closed: Literal[True] | None = None
+    reasoning_effort: Literal["provider_default", "low", "medium", "high"] | None = None
 
 
 class CredentialCreate(AdminStrictModel):
-    name: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")]
+    name: Annotated[str, StringConstraints(min_length=1, max_length=128)]
     scopes: Annotated[
         set[Literal["assets:write", "mcp:invoke", "responses:invoke"]],
         Field(min_length=1, max_length=3),
     ]
     expires_at: datetime | None = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        if not value[0].isalnum() or any(
+            not (character.isalnum() or character in "_.-") for character in value
+        ):
+            raise ValueError("credential name contains invalid characters")
+        return value
 
     @field_validator("expires_at")
     @classmethod

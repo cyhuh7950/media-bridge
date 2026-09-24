@@ -21,14 +21,23 @@ class SnapshotModelEntry(StrictModel):
         str,
         StringConstraints(pattern=r"^[a-z0-9][a-z0-9./:_-]{0,127}$"),
     ] = Field(alias="id")
+    provider_id: str | None = None
+    routing_profile_id: str | None = None
+    aliases: list[
+        Annotated[
+            str,
+            StringConstraints(pattern=r"^[a-z0-9][a-z0-9./:_-]{0,127}$"),
+        ]
+    ] = Field(default_factory=list)
     input_modalities: set[Literal["text", "image", "pdf"]]
-    expires_at: datetime
+    expires_at: datetime | None = None
     pdf_passthrough_verified: bool = False
+    reasoning_effort: str | None = None
 
     @field_validator("expires_at")
     @classmethod
-    def require_timezone(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
+    def require_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("capability expiry must be timezone-aware")
         return value
 
@@ -57,12 +66,13 @@ def capability_registry_from_snapshot(snapshot: SignedSnapshot) -> CapabilityReg
         registry = SnapshotRegistry.model_validate(snapshot.body.get("registry"))
         capabilities = [
             ModelCapability(
-                model_id=item.model_id,
+                model_id=model_id,
                 input_modalities=set(item.input_modalities),
                 expires_at=item.expires_at,
                 pdf_passthrough_verified=item.pdf_passthrough_verified,
             )
             for item in registry.models
+            for model_id in (item.model_id, *item.aliases)
         ]
         return CapabilityRegistry(capabilities, version=registry.version)
     except (ValidationError, ValueError, TypeError) as error:

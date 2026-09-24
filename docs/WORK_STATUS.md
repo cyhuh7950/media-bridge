@@ -1,15 +1,176 @@
 # Media Bridge 작업현황
 
-판정: RUNNING
-정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, 현재 worktree `D:/Project/Media-Bridge/.worktree/auth-totp-recovery-email`
-작업계획: S3 Provider catalog — 카탈로그·관리 API·DB 스키마·Console 선택 UI·N:N routing 연결 완료, 운영 통합 검증은 다음 작업
-Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-body.md` untracked 보존 / 단일 writer 어울
-최근 완료 증거: TOTP QR·Provider 선택 우회 흐름의 기존 구현과 배포형 Control Plane 문서를 확인함. 2026-09-19 OmniRoute 공급자 화면에서 API 키 호환 1/1, API 키 Provider 5/230, Image Providers 0/8, Local Providers 0/14 및 OpenAI/Anthropic 호환 추가 기능을 확인함.
-현재 변경: Provider catalog, Provider schema/migration, onboarding/operations 선택 UI, N:N routing profile API·UI, fail-closed Provider selection primitive와 `/v1/models` runtime endpoint 구현 완료. 기존 `.pr-body.md`는 삭제하지 않음.
-실행·검증 결과: control/gateway unit·packaging 79 passed, web lint 0 errors, web tests 27 passed, web build·ruff·compileall·git diff --check 통과. snapshot model discovery 회귀 포함 관련 63 passed. WSL-server disposable PostgreSQL에서 migration/connection 4 passed, configuration API 2 passed. Provider selection의 실제 downstream 다중 endpoint wiring·DB 등록·배포 검증은 미실행.
-오류와 조치: 없음.
-미검증·승인 경계: 공개 OpenAI/Anthropic 계약, API key·tenant, DB migration, N:N routing, 비용·모니터링, OmniRoute 배포형 연결은 설계 승인 전 미구현·미검증. 인증·권한·Secret·비용·지속 schema 변경은 별도 승인 대상.
-정확한 다음 조치: Provider selection을 Gateway transaction/downstream에 연결하고, WSL-server에서 routing profile 통합 테스트와 Provider sandbox를 실행한다.
+## 2026-09-24 — main 병합·ysna-server 배포 게이트 재확인
+
+- 후속 전체 테스트에서 `540 passed, 6 skipped, 7 failed, 42 errors`를 확인했다. 격리 DB 부재(42), MCP 테스트의 error_screenshot와 generic Vision 기대 불일치, 0400 Secret 권한 fixture 누락, 현 Compose 네트워크 및 내부 docs 정본과 어긋난 기존 packaging assertion, A1 staging overlay에서 제거된 mock Secret 선언 누락으로 분류했다.
+- 테스트 보정: MCP 회귀 입력을 Vision 허용 generic으로 맞추고 Secret fixture에 실제 운영 요구 권한 0400을 적용했다. Compose 네트워크 계약을 현재 구성과 맞추고 staging overlay가 mock 전용 Secret 선언을 소유하도록 보완했다. docs packaging 검사는 기존 정본인 `design`, `superpowers`, `WORK_PLAN.md`, `WORK_STATUS.md`를 내부 문서로 허용한다.
+- 통합 테스트용 임시 자원 예정: ysna-server의 `media-bridge-merge-qa-20260924-db` Docker 컨테이너, host port 55432, ephemeral container layer only(no named volume), 테스트 전용 DB/user `media_bridge_test`; 이유는 PostgreSQL integration suite, 사용 시간은 suite 수행 동안, 정리 방법은 해당 컨테이너만 stop/remove 후 port·container 잔류 확인이다. 운영 `media-bridge-db` 및 데이터 volume은 대상에서 제외한다.
+- 임시 DB 사용 전체 suite는 `577 passed, 6 skipped, 12 failed`였다. traceback으로 API에 `ConnectionService` wiring 누락(NameError)을 확인했다. 나머지는 새 Provider 키 암호화 저장 및 모델의 Provider 연결 필수화 이후 낡은 기대·fixture, 서비스 생성 시 필수 `now`/`security` 누락, migration 테스트가 최신 head를 적용하고 구버전 revision을 기대, 라우팅 미구성 Test Lab preview의 과거 response 기대다. connection wiring은 제품 코드 결함으로 수정하고 테스트는 현재 계약으로 갱신한다.
+- 후속 targeted 검증은 8 passed / 4 failed. 두 건은 새로운 LLM Provider 중복 fixture, 검증 모델 생성에 Provider 연결 누락, migration 이후 남은 기대 불일치, preview/run 계약 구분 오류였다. Provider 키 암호화·snapshot 서비스 생성·connection CRUD wiring은 재검증 통과했고, fail-closed 정책에서 `false`를 허용하던 실제 schema 결함은 `Literal[True]`로 막도록 수정했다. 회귀와 전체 suite를 재실행한다.
+- 세 번째 targeted 회귀는 `12 passed`다. 전체 Ruff에서 정적 오류 17건이 드러났다. 상당수는 관리 API 감사 필드 추가 때 길어진 함수 선언/호출, 테스트의 fake credential 문자열 오탐 및 기존 auth test 형식 문제이며, branch code/style 12건을 교정해 전체 suite·Ruff·mypy·compileall을 재실행한다.
+- Ruff 후속 검사 전 strict mypy가 nullable catalog model ID/capabilities, capability 만료 nullability, bootstrap 만료 방어, Test Lab profile/provider key typing, Control principal narrowing, unavailable/real Vision backend 공통 타입 등 12건을 보고했다. DB migration `0014`가 expiry nullable화를 의도하므로 SQLAlchemy 모델 타입도 nullable로 정합화하고 나머지는 구체 타입·방어 조건을 반영했다. 재검증 대기.
+- Python 검증 최신 결과: Ruff 통과, strict mypy 84 files 통과, compileall 통과, 전체 pytest `589 passed, 6 skipped`. 프런트엔드는 Vitest `41 passed`, ESLint 통과, TypeScript·Vite production build 통과. 외부 실제 Provider 호출은 수행하지 않았으며 사용자가 서버에서 확인할 외부 호출 결과는 미검증이다.
+- Windows npm cache가 `C:\Users\cyhuh\AppData\Local\npm-cache` 쓰기 오류를 냈으나 실제 `web` 작업디렉터리의 lockfile/node_modules로 test·lint·build를 수행해 통과했다. 실패한 초기 npm 호출은 코드 오류가 아니다.
+- 신산님이 기존 서버 실행본 폐기를 허용했다. 정식 서버 Git checkout은 `codex/manual-integrated-revision` exact commit `b0d7107f9d411a48ba6f5904fd2f40528592f211`로 전환했다. 실행 중 Control/Data 컨테이너는 아직 기존 이미지로 유지되어 앱 실행본은 교체되지 않았다.
+- 서버 Control 컨테이너에서 Secret 원문을 출력하지 않고 DB revision을 조회했다. 현재 `0014_model_no_expiry`이며 브랜치 migration target과 같아 migration은 no-op이다. 따라서 DB 변경 및 backup은 수행하지 않았다.
+- 브랜치 Gateway 회귀를 프로젝트 `pyproject.toml` 버전 범위로 일회성·읽기전용 source container에서 실행: `54 passed, 16 failed`. 첫 버전 범위 밖 실행도 동일 16개 실패였으며 병합 gate는 미통과다. 주요 관찰: Gateway auth 응답 401, capability stale/zero-call, 미디어 변환 결과, downstream Protocol 테스트 실패. 실패 원인은 아직 분류 중이고 main baseline 비교는 하지 않았다.
+- PR 조회 결과 해당 head의 PR은 없다. main 병합·앱 이미지 교체·배포 테스트는 보류한다. 신산님은 테스트 실패 수정 후 계속 진행하는 범위와 기존 서버 실행본 교체를 승인했다.
+- 원인 분류: `tests/gateway/helpers.py`의 credential 만료 `2026-09-23` 및 정상 모델 capability 만료 `2026-08-24`가 현재 날짜 `2026-09-24`보다 과거다. `SnapshotCredentialVerifier`와 기본 capability resolution은 wall clock을 사용하여 HTTP 401 및 `stale`을 유발한다. `ResponsesDownstream` runtime Protocol은 `close()`를 요구하지만 두 test fake가 구현하지 않는다. `PreRequestGate.extract_context`에는 Vision 호출이 없으나 gateway 계약 테스트는 generic image/PDF 변환의 Vision 결과와 Vision 실패 시 fail-closed를 요구한다. `error_screenshot` 및 `document` 프로필은 각각 OCR 전용 경로 기대가 기존 통합 테스트에 명시돼 있다.
+- 테스트 우선 구현을 위해 `tests/integration/test_router_gate.py`에 generic 비전 Non-Vision 이미지에서 OCR+Vision 결합과 zero-call Vision 실패 사례를 추가했다(원격 재실행 대기). 임시 QA Python venv `/tmp/media-bridge-merge-qa-20260924`를 ysna-server에 만들었고 프로젝트 `pyproject.toml` 제한 범위 의존성 설치를 완료했다. 테스트 뒤 해당 경로만 제거한다. 실제 Provider 호출은 포함하지 않는다.
+- 새 generic Vision 테스트를 원격 venv에서 실행해 예상대로 `vision.calls == 0`에서 RED를 확인했다. 같은 실행에서 만료시각이 고정된 gateway auth fixture 때문에 다른 4개 사례가 401로 실패했다.
+- 두 번째 test checkpoint `855834d`에서 gateway 정상 fixture의 capability/credential expiry를 null로 두고 만료 검증 사례만 명시적 과거 expiry로 유지했다. `ResponsesDownstream.close()` 누락 test fake를 보완하고 fail-closed Vision 검증은 generic profile로 분리했다.
+- 두 번째 원격 회귀 후 `79 passed, 8 failed`. fixture expiry 수정으로 401 및 stale 실패가 해소됐다. 남은 원인은 generic Vision 호출 누락(비전 성공/실패 경로), `/v1/chat/completions`가 route security에서 404 처리되는 누락, 이미지/PDF 응답의 기대 Vision description 미포함이다.
+- 구현: generic 변환에서 페이지별 Vision 분석을 실행해 OCR+Vision 문맥을 downstream에 전달하고 Vision FAILURE 시 fail-closed한다. `error_screenshot`·`document` profile은 기존대로 OCR만 수행한다. Chat Completions route에 `responses:invoke` scope gate를 연결했다. 원격 targeted/full 회귀 재실행 대기.
+- 수정본 `0360b4a`에서 동일 87개 Gateway/Router 테스트 중 `86 passed, 1 failed`. 유일한 잔여는 PDF 요청이 자동으로 `document` profile(OCR-only)을 사용함에도 테스트가 Vision description을 기대한 계약 불일치다. assertion을 profile 의도에 맞게 정정하고 재검증한다. generic image Vision, fail-closed, chat route 테스트는 통과했다.
+- assertion 수정 후 첫 재실행은 잘못된 들여쓰기 때문에 collection error로 종료됐다. 구문을 바로잡고 동일 회귀를 다시 수행한다.
+
+## 2026-09-24 — Test Lab auto의 분석 모델 선택 결함 수정
+
+- 실패 재확인: `auto`가 snapshot의 첫 registry 모델을 선택하는 기존 구현은 활성 snapshot에서 LLM 생성 모델이 아니라 분석 전용 Provider `document-parse`를 선택했다. 따라서 auto 경로가 최종 Non-Vision LLM 대상으로 이어지지 않는 확정 결함이다.
+- 수정: auto 대상은 같은 활성 snapshot 내 공개 모델 중 활성 `kind=llm` Provider에 직접 연결되거나 해당 routing profile의 `llm_provider_ids`에 속한 첫 모델로 한정한다. 후보가 없으면 분석 모델을 임의 선택하지 않고 `model_unavailable`로 실패한다. 명시 모델, 공개 `/v1/models` 목록, snapshot 데이터는 변경하지 않는다.
+- RED→GREEN: `auto`가 첫 분석 모델 대신 `solar-pro4`를 선택하고 해당 ID가 capability registry에서 `non_vision`으로 확인되는 통합 테스트를 추가했다. 수정 전 실패(기대 `solar-pro4`, 실제 `document-parse`), 수정 후 Gateway snapshot-generation + Responses HTTP 관련 12 passed. 변경 Python Ruff 및 `git diff --check` 통과.
+- 전체 Gateway + Responses HTTP 회귀는 61 passed / 16 failed. 실패는 `test_http_network`, `test_mcp_gateway_shared_core`, `test_p2b_gateway_lifecycle`, `test_responses_transaction`, Gateway zero-call/redaction, downstream contract 및 entrypoint 테스트에 분포한다. 이번 자동 선택 코드와 직접 관련 없는 것으로 보이나 baseline 대조는 하지 않아 원인 귀속은 미확정이다. Starlette `BlockingPortal` deprecation 경고도 남는다.
+- 화면의 `capability_unknown`은 안전한 synthetic test로 직접 재현되지 않았다. 현재 WSL 활성 snapshot에는 `document-parse`와 `solar-pro4`가 capability registry에 함께 있고 auto의 잘못된 후보 선택을 고쳤다. 따라서 이를 해당 화면 오류의 직접 원인으로 단정하지 않는다. Data service 배포 뒤에도 오류가 지속되면 public Gateway domain의 실제 upstream/snapshot과 WSL Data Plane 간 차이를 추가 추적한다. 실제 Provider 호출은 수행하지 않는다.
+- `adf25d1081abf5345fd90f3dd3ff41b7e93b58cc`를 origin SSH alias로 push하고 WSL-server의 정식 checkout에서 Data Plane만 재빌드·재기동했다. exact checkout SHA를 확인했고 Data 컨테이너가 healthy이며 내장 Data health check도 통과했다. snapshot/DB/Control 컨테이너는 변경하지 않았다.
+- 재기동된 Data 컨테이너에서 현재 활성 snapshot으로 auto 선택 helper를 실행해 `solar-pro4`를 반환하는 것을 확인했다. Chrome에서 `http://172.27.253.53:18642/test-lab` 배포 화면도 열었고 두 흐름 모두 단일 `미지정(auto)` 선택과 등록 공개 모델을 표시한다.
+- 제한: 안전상 외부 LLM Provider 실제 호출은 하지 않았다. 따라서 사용자 화면의 `capability_unknown`이 실제 endpoint에서도 해소됐는지는 아직 확인되지 않았다. 재시도에서도 지속되면 공개 Gateway domain이 가리키는 Data Plane/snapshot이 WSL 정식 checkout과 동일한지 다음으로 확인한다.
+
+## 2026-09-24 — Test Lab 중복 auto 선택 제거 및 capability_unknown 확인
+
+- 전체 파이프라인 및 외부 클라이언트 시험 공개 모델 선택에서 동작이 같은 `auto(자동 선택)` 옵션을 제거했다. 두 화면 모두 단일 `미지정(auto)` 선택만 보여주며, 명시 공개 모델 선택은 유지한다. 서버의 미지정→`auto` 변환과 실제 자동 라우팅 동작은 변경하지 않았다.
+- RED→GREEN: 중복 옵션 부재 회귀 검증은 수정 전 두 선택 목록에서 중복 `auto(자동 선택)`을 발견해 실패했고 수정 후 TestLabPage 7 passed. TypeScript `--noEmit`, Vite production build 및 `git diff --check` 통과.
+- `capability_unknown`의 유력 원인은 배포 Data Plane의 활성 capability snapshot이 Control의 공개 모델 목록보다 오래된 점이다. Control에 등록된 `us/solar-pro4`가 활성 snapshot에는 없으며 snapshot의 `solar-pro4` 항목 ID/alias와도 일치하지 않는다. 명시 모델 ID가 이 snapshot에 전달되면 capability 조회에서 거부될 수 있다.
+- 활성 snapshot을 검증·발행하면 운영 라우팅 설정에 지속 변경이 발생하므로 이 작업에서는 실행하지 않았다. 외부 Provider 호출도 하지 않았다. 따라서 중복 UI 옵션 수정으로 `capability_unknown`이 해결됐다고 간주하지 않으며, snapshot 발행 및 동일 요청 재시험은 별도 조치로 남긴다.
+- `5440f22bbf7c9dfe2c80e85d86393e235da442bd`를 설정된 `origin` SSH alias로 push하고 WSL-server 정식 배포 checkout에 반영했다. `media-bridge-control`만 재빌드·교체했으며 컨테이너 healthy, `/` 및 `/health` HTTP 200을 확인했다.
+- Chrome에서 `http://172.27.253.53:18642/test-lab`을 열어 배포 화면의 두 공개 모델 선택 목록에 `미지정(auto)`가 한 번씩만 표시되고, 기존 공개 모델 선택도 유지되는 것을 확인했다. 실제 Provider 요청 결과와 snapshot 재발행은 미검증이다.
+
+## 2026-09-24 — Test Lab 공개 모델 기본 선택 라벨 명확화
+
+- 전체 파이프라인 및 외부 클라이언트 시험의 공개 모델 첫 선택 항목을 `미지정(기본 모델)`에서 `미지정(auto)`로 변경했다. 제출 값은 기존처럼 미지정 상태(`target_model` 생략)를 유지하며 서버가 `auto`로 변환한다. 별도 `auto(자동 선택)` 및 명시적 모델 항목은 유지했다.
+- RED→GREEN: 두 선택 목록 라벨 회귀 테스트는 기존 화면에서 실패했고, 변경 후 TestLabPage 7 passed. TypeScript typecheck 및 Vite production build 통과.
+- commit `4f82d6f043f9aa186083596311f9e3a7ecb68eb5`를 origin task branch와 WSL 배포 checkout에 반영하고 Control만 재빌드·교체했다. Control healthy, `/` 및 `/health` HTTP 200을 확인했다.
+- 로그인된 Chrome의 `http://172.27.253.53:18642/test-lab`에서 두 공개 모델 선택 목록 모두 `미지정(auto)`로 표시되는 것을 확인했다. 기존 요청값 의미와 별도 `auto(자동 선택)` 항목은 유지했다. Provider 호출은 수행하지 않았다.
+
+## 2026-09-24 — 외부 클라이언트 시험 invalid_request 기본 모델 수정
+
+- Test Lab의 외부 클라이언트 흐름에서 모델 선택을 비워 둔 경우 `model` 필드 자체를 생략하던 동작을 확인했다. 미지정 입력은 Media Bridge가 OpenAI 호환 `auto`로 받도록 전달해, 요청 대상 Gateway가 현재 활성 snapshot을 기준으로 선택하게 수정했다. Control DB의 모델 목록으로 대체하지 않는다.
+- RED→GREEN 회귀 검증: 기존 미지정 전달 동작에서 신규 기대값 테스트 1건 실패, 수정 뒤 handoff 3 passed. Control unit 전체 65 passed, 변경 파일 Ruff 및 `git diff --check` 통과.
+- 제한: 캡처된 실제 Gateway `invalid_request` 상세와 Provider 응답은 없어 이 변경은 유력 원인 수정이며, 정확한 실제 요청에서의 해소는 아직 검증하지 않았다. 실제 Provider 호출은 하지 않았다.
+- checkpoint `3070f6d5cc47795d86f21c70b43deb917d56b392`를 origin task branch와 WSL 배포 checkout에 반영했다. Control 이미지만 재빌드·교체했으며 Control healthy, `/`와 `/health` HTTP 200, Data 및 DB healthy를 확인했다. 실제 Provider 호출은 수행하지 않았다.
+- Chrome의 `http://172.27.253.53:18642/test-lab`에서 배포 화면을 열었다. 외부 클라이언트 흐름 시험에서 공개 모델은 계속 `미지정(기본 모델)`로 보여도 내부 요청은 `auto`를 전달한다. 다음 단계는 신산님이 동일 입력으로 외부 흐름 시험을 재시도하는 것이다. Provider 호출 smoke 및 DB credential 회전은 별도 승인 전 수행하지 않는다.
+
+## 2026-09-23 — 외부 클라이언트 흐름 시험 일반화 및 기본 모델 전달 수정
+
+- 테스트 랩의 `OmniRoute → Media Bridge` 전용 제목·안내·결과명을 `외부 클라이언트 → Media Bridge`로 일반화하고 OmniRoute는 예시 중 하나로 표기했다. 외부 endpoint·접근 키·공개 모델·추론 등급 입력은 유지한다.
+- `capability_unknown`의 원인이 될 수 있는 결함을 코드에서 확인했다. 기존 Test Lab은 미지정 또는 `auto`를 Control DB에서 정렬상 첫 모델로 치환했지만, 호출 대상 Media Bridge는 자신이 발행한 snapshot으로 모델을 해석한다. Control DB와 해당 Gateway snapshot이 다르면 다른 모델 ID가 전달된다. 다만 캡처된 실제 `capability_unknown` 요청/서버 로그는 없어 그 화면 오류와의 직접 인과는 미확정이다.
+- 수정: 외부 흐름 시험은 모델 미지정을 요청에서 생략하고 `auto` 및 명시적 `provider/model`은 그대로 전달한다. 모델 선택·자동 라우팅의 주체를 요청 대상 Gateway로 일원화했다. UI도 특정 route 제품명이 아닌 외부 클라이언트 일반 흐름으로 표시한다.
+- RED→GREEN: 미지정·`auto`·명시 모델 전달 회귀시험은 기존 DB 선조회 동작에서 미지정 및 `auto` 두 건이 실패했고, 수정 후 세 케이스 모두 통과했다. Test Lab UI 6 passed, Control handoff 및 Gateway HTTP 회귀시험 10 passed, Web typecheck/build, 변경 Python Ruff 및 `git diff --check` 통과.
+- 미검증: 배포된 브라우저가 여전히 OmniRoute 전용 화면을 보이는지 여부는 현 환경에 반영되지 않은 번들일 수 있다. 실제 `capability_unknown` 요청의 서버측 재현, 원격 Gateway snapshot 정합성 및 실제 endpoint smoke는 미수행이다. 설치형·배포형 runtime은 변경하지 않았다.
+
+## 2026-09-24 — 외부 클라이언트 흐름 수정 배포 시도
+
+- 신산님 배포 지시에 따라 현재 사용자 브라우저의 `http://172.27.253.53:18642/test-lab` 화면을 직접 확인했다. 서비스는 접근 가능하지만 화면은 아직 `OmniRoute → Media Bridge` 구버전이다.
+- 정식 배포 절차의 SSH 별칭 `WSL-server` 접속은 `wsl-server` 이름 해석 실패, Git 원격 별칭 `github-cyhuh7950` 접속도 이름 해석 실패로 push 전 단계에서 중단됐다. SSH 설정·인증정보·대체 접속 주소는 변경하지 않았다.
+- 검증 재실행: Windows 기본 임시 경로 접근 거부로 첫 pytest가 `3 passed, 7 errors`였으나, worktree 내부의 신규 격리 basetemp로 재실행해 Control handoff 및 Gateway HTTP 회귀시험 `10 passed`.
+- 상태: 로컬 수정은 준비됐으나 안전한 remote checkpoint, WSL exact-commit 배포와 실제 화면 확인은 미완료. SSH 별칭 이름 해석이 복구되면 현재 branch의 검증 commit을 push하고 WSL 정식 checkout에서 배포를 재개한다.
+
+## 2026-09-24 — 외부 클라이언트 흐름 수정 WSL 배포 완료
+
+- 신산님 배포 지시에 따라 검증 commit `5dbeb6be8cbca62e953a1626470a3215c72d2cf4`를 설정된 Git SSH 별칭으로 push하고 WSL-server의 깨끗한 정식 checkout에 fetch·checkout했다.
+- 운영 DB와 Data Plane을 건드리지 않고 `media-bridge-control`만 Compose로 재빌드·교체했다. 이미지 빌드에서 TypeScript와 Vite production build가 통과했고 Control 컨테이너 상태는 `running / healthy`다.
+- 사용자 브라우저로 `http://172.27.253.53:18642/test-lab`을 새로 열어 실제 배포 UI를 확인했다. 제목이 `외부 클라이언트 → Media Bridge 전체 흐름 시험`으로 표시되고 OmniRoute는 외부 클라이언트 예시 문구에만 남아 있다.
+- 로컬 handoff·Gateway 회귀시험 10 passed. 미검증: 실제 외부 Provider 호출에서 기존 `capability_unknown` 재현 여부 및 auto 모델 라우팅 동작은 실제 요청으로 확인하지 않았다.
+
+## 2026-09-23 — 모델 Capability 설정 추가
+
+- 모델 생성·수정 화면에 `text`, `image`, `pdf` Capability 선택을 추가하고 선택값을 `input_modalities`로 저장한다. 모델 Capability 계약이 지원하지 않는 `ocr`는 모델 입력 Capability 목록에 노출하지 않는다.
+- `Capability 근거`는 선택 입력으로 변경했다. 백엔드 모델 capability evidence 컬럼을 nullable로 변경하는 `0012_optional_model_capability_evidence` migration을 추가했다.
+- 검증: Web Operations 14 passed, Web typecheck/build passed, Control unit 62 passed, migration rollback 14 passed, public model contract 11 passed, diff 검사 통과.
+
+## 2026-09-23 — Provider 약어 저장 오류 수정
+
+- Provider 수정 화면에서 기존 약어 `US`가 서버 계약의 소문자 형식과 맞지 않아 저장 요청이 422로 거부되던 문제를 확인했다.
+- 편집 화면 초기화·입력·저장 요청 모두 Provider 약어를 소문자로 정규화했다. Provider 선택 목록과 API 키 저장 경로는 변경하지 않았다.
+- 검증: Operations 14 passed, Web typecheck/build passed, `git diff --check` passed. 배포형 Control 재빌드·재기동 후 브라우저 Provider 저장 smoke를 수행한다.
+
+## 2026-09-23 — OmniRoute 흐름 시험의 모델·추론 등급 분리 설정
+
+- Test Lab의 `OmniRoute → Media Bridge 전체 흐름 시험`에 독립적인 공개 모델과 추론 등급 선택을 추가했다.
+- 위의 전체 파이프라인 시험 선택값과 분리하며, OmniRoute 실행 시 아래 설정값을 `/test-lab/run` 요청에 전달한다.
+- 검증: Test Lab 5 passed, Web typecheck/build passed. 배포형 Control 이미지 재빌드·재기동은 커밋 push 후 수행한다.
+
+## 2026-09-23 — 모델과 내부 라우팅 책임 분리
+
+- 모델 생성 화면에서 `내부 실행 라우팅`을 필수 입력·조회 항목으로 제거했다. 모델은 공개 `provider/model`, 기준 Non‑Vision LLM Provider, 모델별 추론 등급·capability만 관리한다.
+- 모델에 라우팅 연결이 없는 경우 Data Plane은 snapshot의 첫 번째 활성 routing profile을 Media Bridge 기본 라우팅으로 사용한다. 활성 기본 라우팅이 없으면 기존 모델 Provider fallback을 유지한다.
+- RED→GREEN 검증: 공개 모델 무라우팅 계약 및 기본 라우팅 선택 테스트 추가 후 Python 관련 unit 66 passed, Web Operations 13 passed, Web typecheck/build passed, 변경 Python Ruff passed.
+- 미검증: 실제 브라우저에서 모델 생성·snapshot 발행 후 외부 Provider 호출과 WSL 재배포. 이번 변경은 로컬 작업 브랜치에만 반영했으며 설치형은 수정하지 않았다.
+
+## 2026-09-23 — OmniRoute 호환 공개 모델·추론 등급 구현 진행
+
+- `codex/manual-integrated-revision`에서 구현 중이다. 설치형은 수정·배포하지 않는다.
+- Provider 등록은 외부 모델을 자동 공개하지 않고, Provider 약어(alias)만 자동 생성하며 수정할 수 있게 했다. 모델 관리에서 `provider/model` 공개 모델을 생성하고 내부 routing profile과 연결한다.
+- `/v1/models`에는 등록된 공개 모델만 노출한다. Provider 등록만으로 모델이 생기지 않으며, OmniRoute/OpenRouter 등 route형 카탈로그는 upstream Provider 선택 목록에서 제외했다. 사용자 정의 Provider 입력은 유지한다.
+- 외부 모델 선택은 미지정(기본 모델), `auto`(Media Bridge 내부 선택), 명시적 `provider/model`로 구분했다. 요청 추론 등급 → 공개 모델 설정 → Provider 설정 → Media Bridge 정책 기본값 순으로 적용하며 공개 표준값은 `low|medium|high`이다.
+- Test Lab의 전체 파이프라인과 외부 클라이언트 흐름 시험 모두 공개 모델·추론 등급을 선택한다. Provider 화면의 Secret 환경변수 입력·표시 경로는 제거하고 Provider API key는 DB 보관 경로만 사용한다.
+- 검증: 변경 Python Ruff 통과, control unit/packaging 74 passed, Web build 및 Operations/Test Lab 16 passed. Gateway unit은 33 passed, 3 failed이며 실패 중 downstream capability fixture는 수정 후 해당 테스트가 통과했고, 나머지는 기존 FakeDownstream 계약 assertion 및 만료일 fixture 문제로 미수정·미해결이다.
+- checkpoint `5c5adad` 및 Data Plane 기동 보완 `9fe2f9c`를 `github-cyhuh7950` SSH alias 원격 branch에 push했다. WSL-server의 기존 배포형 디렉터리는 `.env`만 보존하고 `9fe2f9c` checkout으로 교체했다.
+- WSL-server 기존 DB `0010_previous_csrf_digest`에 승인된 `0011_public_model_routing` migration을 적용했고, 기존 Secret은 서버의 보존된 `media-bridge-runtime/deploy/secrets`에서 새 배포 디렉터리로 복구·검증했다. Secret 원문은 출력하지 않았다.
+- 배포형 Control/Data/DB를 새 이미지로 재기동했다. Control `172.27.253.53:18642` 및 Data Plane health가 healthy이고 Control `/`, `/login`, `/health`는 HTTP 200이다. Data Plane `/v1/models`는 인증 없이 HTTP 401로 차단된다. 설치형은 건드리지 않았다.
+- Data Plane 최초 기동에서 `openai-vision` 하드코딩으로 실패한 문제를 확인해, 등록된 분석 Provider를 사용하고 Vision Provider가 없으면 optional backend로 기동하도록 `9fe2f9c`에서 수정했다. 현재 DB에는 분석 Provider `upstage-document-parse`, LLM Provider `upstage-solar`가 있고 공개 모델은 아직 0개이므로 `/v1/models` 공개 목록과 실제 LLM 호출은 Provider/라우팅/모델 등록 후 확인해야 한다.
+- 남은 미검증: 브라우저 admin 로그인·Provider/라우팅/모델 등록 smoke 및 외부 Upstage 호출. 로컬 Gateway entrypoint 테스트 1건은 fixture 만료일이 현재 날짜와 겹친 기존 시간 의존 실패이며, 이번 변경 경로와 무관하다.
+
+## 2026-09-22 — WSL 배포형 clean redeploy 및 초기 Control 기동 복구
+
+- 신산님 지시를 최신 기준으로 적용한다: WSL 배포형 Media Bridge의 이전 리소스는 정리하고 기존 `/home/daon/deploy/media-bridge/.env`만 보존한다. 기존 WSL DB/볼륨은 재사용하지 않고 새 DB로 시작한다. 개인 설치형 런타임과 다른 프로젝트 리소스는 범위 밖이다.
+- 최초 배포에서 DB 볼륨이 없을 때 시스템 Secret 6개를 생성하고 재배포 시 유효한 기존 파일을 보존하며, 일부 누락 또는 기존 DB만 존재하면 중단하는 `deploy/scripts/secret_bootstrap.py`를 추가했다. Provider credential 정본은 계속 DB다.
+- 이전 배포형 전용 DB/asset/snapshot volumes 6개와 이미지 2개를 제거했고 기존 `/home/daon/deploy/media-bridge`에는 `.env`만 남겼다. 신규 DB/Control health 확인 후 임시 보관했던 이전 DB backup도 제거했다. 개인 설치형 런타임과 타 프로젝트 리소스는 보존했다.
+- ysna-server에서 현재 운영 Control이 참조하는 pepper(메타데이터만 확인)를 사용자가 제안해 새 WSL Secret으로 원문 노출 없이 전송했다. 새 DB의 bootstrap 재검증은 `deployment_secrets_preserved`; 전체 Secret 파일 권한·소유자 기준을 통과했다.
+- 최소 수정 commit `0da6282158d129c02f40dcd50ccee3090c3c6a0e`를 기존 원격 branch에 push하고 WSL checkout도 fast-forward했다. 수정 image `media-bridge-control:0.1.0`, image ID `sha256:321a95691cc2bce84afbb740fcf4a4823405379dbc383c7480812d9dbff56564`; Control과 신규 DB 모두 healthy, DB revision은 `0009_provider_reasoning_effort`다.
+- 이 수정의 unit 결과: 회귀 테스트는 수정 전 `control_plane_migration_required`로 RED, `0009_provider_reasoning_effort`를 허용한 뒤 GREEN. `tests/control/unit` 및 migration rollback 검사 합계 70 passed, 변경 파일 Ruff와 `git diff --check` 통과.
+- 신산님 지시에 따라 Control의 published port를 환경변수화하고, WSL `.env`에는 `172.27.253.53:18642`만 설정했다(파일 mode 0600, 나머지 기존 항목은 유지). 지정 branch commit `49f5051` 및 계약 테스트를 push하고 WSL checkout을 동기화한 뒤 Control만 재생성했다. Compose mapping은 `172.27.253.53:18642 -> 8081`; Windows에서 `/` HTTP 200, Control healthy, DB healthy 및 revision `0009_provider_reasoning_effort`를 확인했다. 개인 설치형은 계속 `127.0.0.1:8642` 및 `172.17.0.1:8642`에서 실행 중이다.
+- 직접 HTTPS 시험은 TLS `wrong version number`로 실패했다. Control 컨테이너는 TLS가 아닌 HTTP `8081`을 제공하고 Admin API는 HTTPS scheme/Host/Origin을 강제한다. health API는 HTTP 200이지만 로그인·onboarding은 usable하다고 입증되지 않았다. bootstrap POST는 안전검토에서 상태변경 위험으로 거부되어 수행하지 않았다. HTTP를 허용하도록 보안을 낮추지 않았다.
+- Data service 및 Provider/Snapshot 기반 Gateway 검증은 미수행이다. 다음에는 18642 앞에 승인된 TLS termination과 인증서 경로를 구성해야 사용자 로그인/onboarding을 검증할 수 있다.
+
+판정: PARTIAL — Control/DB health와 18642 HTTP route 확인; HTTPS 로그인/onboarding 및 Data/Gateway 검증은 TLS ingress 필요로 미완료
+정본: `docs/design/DESIGN.md`, `docs/WORK_PLAN.md`, `docs/WORK_STATUS.md`, `docs/superpowers/specs/2026-09-22-llm-reasoning-levels-design.md`
+작업계획: 배포형은 실행 가능한 지원 Non‑Vision LLM의 Provider/API/model별 설정과 downstream 반영, 설치형은 Upstage Solar 설정. 분석 Provider 및 N:N 연결 보존. 계획 구현은 `codex/manual-integrated-revision`에서만 진행하며 다른 branch/worktree는 생성하지 않음. 신산님은 nullable Provider DB column 및 migration을 승인했고 신규 WSL DB에 `0009_provider_reasoning_effort`를 적용했다. ysna-server DB에는 migration을 적용하지 않았다.
+Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-integrated-revision` / 추가 branch 생성 금지
+최근 완료 증거: `media_bridge_gateway/entrypoints.py`에서 기동 시 DB의 `upstage-solar`를 직접 읽어 Solar backend를 만들고, `GatewayTransactionFactory`에 같은 고정 downstream을 전달하는 것을 확인함. `media_bridge_control/configuration.py`의 snapshot에는 Provider 목록이 있지만 이 entrypoint는 snapshot Provider 목록으로 LLM downstream을 선택하지 않음.
+현재 변경: 공통 resolver, Provider nullable `reasoning_effort`/`0009` migration, Control API·snapshot 및 Provider LLM 등록/수정 UI, Gateway의 DB Provider/model별 LLM dispatch, 설치형 Upstage Solar 선택 및 downstream 전달을 같은 feature로 구현 중. API key credential은 snapshot/file이 아니라 기존 암호화 DB를 Provider UUID로 조회한다. 분석 Provider와 N:N 라우팅은 변경하지 않는다.
+실행·검증 결과: Task 1 resolver 43 tests와 Ruff 통과. Task 2 unit 4 tests, API/snapshot/schema checks 및 offline Alembic SQL 통과; PostgreSQL 통합 fixture 미검증. Task 3 Operations UI 12 tests, 변경 파일 ESLint, typecheck/build 통과; 전체 lint는 수정하지 않은 TestLab 파일에서 기존 오류 15개. Task 4 mock/unit/snapshot 72 passed. Task 5 adapters 15 passed; Task 6 personal/package suites 58 passed; 합산 관련 회귀 suite 88 passed. 설치형 작업 대상 Ruff, mypy, compileall 통과.
+오류와 조치: Windows 기본 pytest 임시 경로 ACL 오류는 worktree 내 `.pytest-tmp-task4` 경로로 우회. `127.0.0.1:55432` PostgreSQL fixture는 `connect_timeout=1` 기준 connection timeout; Docker CLI와 WSL 접근은 불가하고 운영 DB는 테스트에 사용하지 않음. Task 4 전체 지정 Gateway suite는 `test_responses_transaction.py`의 기존 Vision fixture 기대값 2건(`red terminal`을 기대하나 실제 sanitization 입력은 OCR `ERROR 104`만 포함)에서 실패했으며 관련 test/gate/service/sanitizer는 이 branch에서 수정하지 않음. Gateway DB credential 통합 테스트는 PostgreSQL 연결 시간초과로 시작 불가.
+미검증·승인 경계: Task 2 PostgreSQL API/migration/snapshot 통합 및 Task 4 DB credential fixture는 PostgreSQL fixture가 없어 미검증. Task 4 Gateway transaction suite의 기존 Vision 입력 기대값 2건은 현 구현 응답과 불일치. Task 3 전체 lint gate는 수정되지 않은 TestLab 파일의 baseline 오류. Full pytest/npm suite, DOCX visual render, 외부 Provider 호출, ysna의 실제 commit/image/health, 운영 DB migration 적용 및 배포는 미수행. 운영 DB 적용·배포 권한을 새로 넓히지 않는다.
+오류 횟수·조치: PostgreSQL fixture unavailable 1회; 전체 lint baseline 1회; Gateway transaction Vision assertion 불일치 2건; DOCX render가 번들 LibreOffice 미탑재로 중단. 설치형 설정/API/downstream 회귀는 테스트 우선 RED→GREEN, 관련 personal/package suite 58 passed.
+정확한 다음 조치: DOCX 렌더 runtime 경로를 확보해 visual QA를 완료하고, DB 통합·기존 Gateway assertion 판정 경계를 해결한 뒤 전체 Task 7 검증을 수행한다. ysna DB에 migration을 적용하거나 배포하지 않는다.
+
+## 2026-09-22 — 배포형 reasoning migration gate 보완
+
+- 배포 기동 migration 스크립트의 지원/목표 revision이 `0008_model_provider`로 고정되어 있어 `0009_provider_reasoning_effort`가 있는 이미지도 새 schema에서 시작하지 못하는 원인을 확인했다.
+- `deploy/scripts/migrate.py`의 지원 revision, 구 schema에서의 forward 허용 목록, apply 목표 및 사후 검증을 `0009_provider_reasoning_effort`로 정렬했다. Provider DB의 nullable reasoning 설정만 추가하며, 기존 credential 저장 경로·설치형 runtime·Provider Secret은 변경하지 않았다.
+- 회귀 검증: migration/package/control/gateway/provider backend 지정 테스트 44 passed; 배포형 관련 Ruff passed; Web 9 files/36 tests passed; typecheck/build passed.
+- 테스트를 위해 별도 `.venv-deploy-verification`를 생성했다. WSL-server 운영 DB revision과 backup은 아직 미확인이다. 이 이미지를 기동하면 entrypoint가 migration을 자동 apply하므로 운영 DB 적용 승인 전에는 container를 시작하지 않는다.
+- 다음: 지정 branch의 변경을 검토·checkpoint한 뒤 배포 서버의 compose·DB revision·backup 및 host bind 경로를 비밀값 없이 확인한다. `0009`는 `providers.reasoning_effort VARCHAR(16) NULL` 추가이며 rollback은 column drop이므로, DB 적용 직전 신산님께 대상 DB·revision·backup·rollback을 제시해 승인을 확인한다.
+
+## 2026-09-22 — Provider 정본 및 WSL 배포 차단점
+
+- Compose가 DB Provider credential을 이미 읽는 Gateway와 별도로 OCR/Vision/Solar API-key Secret 파일을 필수 선언하고 Vision endpoint/model도 환경변수로 요구하는 회귀를 확인했다. 배포형은 DB Provider의 endpoint/model/encrypted credential만 사용하도록 해당 3종 파일 Secret과 Provider endpoint/model 환경변수를 제거하고, Vision Provider를 DB에서 resolve하도록 수정했다. 설치형 generic backend 동작은 유지했다.
+- WSL의 실제 설치형 프로세스는 `127.0.0.1:8642`와 Docker relay `172.17.0.1:8642`에서 응답 중이며 중단·재설치하지 않았다. 요청 IP `172.27.253.53:8642`는 현재 연결 불가다. 배포 컨테이너는 없고, `/home/daon/media-bridge` checkout은 없다.
+- `/home/daon/deploy/media-bridge`는 dirty `main`이며 `origin/main` 대비 ahead 324/behind 253이므로 변경하지 않았다. 기존 Docker DB volumes `media-bridge_database`, `media-bridge-wsl_database`가 별도 compose project 소유로 존재하지만 대상 DB와 revision은 확인되지 않았다. 두 볼륨 모두 보존한다.
+- 현재 Control API와 settings는 HTTPS 전용이며 평문 요청은 `https_required` 400으로 거부한다. 요청받은 `http://172.27.253.53:8642` 바인딩·HTTP 보안 우회는 적용하지 않았다. 안전한 HTTPS 진입 경로가 필요하다.
+- Compose의 비-Provider 시스템 Secret 6개(db password, DB URL, security pepper, snapshot key pair, receipt secret)는 서버 기본 경로에 모두 없다. Provider API-key Secret 파일은 제거 대상이며 새로 만들지 않았다. Compose 기동 시 migration이 자동 apply되므로 확인되지 않은 기존 볼륨으로 기동하지 않았다.
+- 추가 검증: migration + gateway/provider/backend + 신규 compose contract 선택 테스트 46 passed, 변경 Python Ruff passed. 전체 packaging suite는 68 passed/7 skipped/6 failed; 실패는 Windows 전용 `os.fchmod`, 기존 compose-network assertion, public docs tree assertion, PowerShell subprocess encoding 등이며 상세는 실행 결과 참조. 앞서 Web 36 tests/typecheck/build도 통과.
+- 배포 재개 조건: HTTPS URL/인증서 진입 방식 확정, 새 격리 DB 사용 또는 기존 DB 중 정확한 대상 선택, 6개 시스템 Secret 생성·보관 승인, migration 대상·backup 승인. 설치형 runtime과 이전 volume 정리는 별도 지시 없이는 하지 않는다.
+
+## 2026-09-22 — WSL-server deployment checkpoint
+
+- 신산님 지시로 WSL 접속은 `WSL-server` SSH alias를 사용한다. 최초 확인에서 로컬 WSL distro를 잘못 대상으로 삼았으나, SSH alias 설정을 확인한 뒤 권한 승인 방식으로 접속했다.
+- 원격 `/home/daon/deploy/media-bridge`는 `main` HEAD `be56d404af24966ac53f22e0804dbff3e32d91fa`, `origin/main` 대비 ahead 324 / behind 253이며 `docs/install/linux.md` 수정과 `docs/design/` untracked 상태다. 신산님은 이것이 이전 개발 내용이므로 제거 가능하다고 지시했으나 아직 정리하지 않았다.
+- 원격 8642는 설치형 런타임이 이미 실행 중이다. `/home/daon/.local/bin/mb status`=`running 127.0.0.1:8642`, `mb health --json`=`healthy=true,status=200`; `172.17.0.1:8642` relay도 HTTP 200이다. 실행 바이너리는 `/home/daon/.media-bridge/runtime/bin/media-bridge-runtime`; config 및 credential 원문은 읽지 않았다.
+- 요청 URL의 호스트 IP `172.27.253.53:8642`는 원격에서 HTTP 연결 실패했다. 현재 listener는 `127.0.0.1:8642`와 Docker relay `172.17.0.1:8642`뿐이라 WSL bind 주소 설정/서비스 재기동이 필요하다. 아직 설정이나 프로세스를 변경하지 않았다.
+- 신산님은 WSL에 배포해 `http://172.27.253.53:8642`에서 확인하도록 지시했다. 현 시점 source 변경 배포는 미수행이며, source branch 변경은 미커밋 상태다. Provider·onboarding focused tests 15 passed, 전체 Web tests 36 passed, typecheck/build 및 설치형 회귀 27 passed, 관련 personal Python 파일 Ruff 통과.
+- 전체 gate는 미통과/미완료: repository Ruff 10 errors (`media_bridge_control/api.py`의 `connections` 미정의 참조 포함), Web lint 15 errors (`TestLabPage*`), 전체 pytest는 71개 진행 후 장시간 무출력으로 중단. WSL DB migration 필요 여부·대상은 아직 판별/적용하지 않았다.
+- WSL runtime 교체, `/home/daon/deploy/media-bridge` 정리, DB migration, commit/push는 미수행. 다음은 branch 전체 gate 문제 원인을 분리하고, 사용자가 승인한 이전 checkout 정리 범위와 설치형 runtime 업데이트/rollback 절차를 확인한 뒤 exact commit 배포 여부를 결정하는 것이다.
 
 ## 2026-09-19 — Provider catalog schema checkpoint
 
@@ -238,3 +399,27 @@ Git: `codex/auth-totp-recovery-email` / checkpoint push 예정 / 기존 `.pr-bod
 - Media Bridge 접근 키 관리 목록 선택 상자는 호출에 사용되지 않는 식별자 표시였으므로 제거했다.
 - 오류 문구의 `OmniRoute endpoint/API key` 표현을 `Media Bridge endpoint/접근 키 원문`으로 수정했다.
 - TestLabPage 웹 테스트 4개와 TypeScript/build 통과. `36f96fa`를 ysna-server에 배포했고 `/test-lab` HTTP 200 및 Control `healthy`를 확인했다.
+
+## 2026-09-23 — 관리 화면 수정자·수정일시 표시
+
+- Provider, 라우팅 프로필, 모델, 정책의 등록·수정 시 로그인 사용자명을 `updated_by`에 기록하고 목록에 수정자와 수정일시를 표시한다.
+- `0013_management_audit_fields` migration으로 네 관리 테이블에 감사 필드를 추가했다. 기존 행은 과거 수정자를 복원할 수 없으므로 값이 없을 때 `—`로 표시하며, 신규 등록·수정부터 실제 관리자 계정을 기록한다.
+- 모델 Capability의 근거 메모는 선택 입력이며, 화면의 30일 만료를 모델 정책으로 강제하지 않는다. 파일·영수증 등의 보안 TTL과는 별개다.
+- Web typecheck, Operations 14개, production build, Control unit 62개, migration packaging 14개 통과. PostgreSQL fixture 기반 migration integration은 로컬 실행이 정체되어 미검증이다.
+- WSL-server에 `0d4b16f`를 배포했다. Control/Data/DB 컨테이너는 running, `http://172.27.253.53:18642/health`는 `ok`, DB head는 `0014_model_no_expiry`다.
+
+## 2026-09-23 — 한글 접근 키 이름 발급 오류 수정
+
+- 원인: `CredentialCreate.name`이 ASCII 영숫자만 허용해 화면에서 입력한 `임시`를 422로 거부했고, Web은 이를 `접근 키 작업을 완료하지 못했습니다.`로만 표시했다.
+- 접근 키 이름은 Unicode 영숫자와 기존 구분자(`_`, `.`, `-`)를 허용하도록 검증을 수정하고, 한글 표시 이름 회귀 테스트를 추가했다.
+- 수정 전 회귀 테스트는 정규식 불일치로 실패했고, 수정 후 단위 테스트는 통과했다. PostgreSQL 통합 테스트는 로컬 fixture 기동이 정체되어 중단했으므로 미검증이다.
+- `952bacc`를 push하고 WSL-server에 재배포했다. Control/Data/DB 컨테이너는 running, DB head는 `0014_model_no_expiry`, 배포 컨테이너에서 `임시` 모델 검증 통과를 확인했다.
+
+## 2026-09-24 — 통합 검증 및 main 병합·ysna-server 배포 인수 상태
+
+- 요청 branch `codex/manual-integrated-revision`의 현재 검증 HEAD는 `46f085a09f32c54b6062a4f9ed384076b5c77762` (`Resolve console lint and request test typing`)이며 원격 branch에 push된 상태다.
+- ysna-server 임시 QA 환경에서 Python 전체 테스트 589 passed, 6 skipped, Ruff 전체 검사, strict mypy(84 source files), compileall이 통과했다. HEAD `a35f53f` 기준 Python gate이며 그 이후 Python 변경은 없다. 최종 HEAD `46f085a`의 Web은 Vitest 41 passed(9 files), ESLint, TypeScript, Vite production build가 통과했다. 실제 외부 Provider 호출은 수행하지 않았다.
+- ysna-server DB migration revision은 `0014_model_no_expiry`로 확인되어 branch의 migration 대상과 일치했다. 운영 DB migration 및 데이터 변경은 수행하지 않았다.
+- GitHub PR 생성은 `cyhuh7950/media-bridge` API의 HTTP 422 `must be a collaborator`로 거부됐다. 로컬 `gh`의 등록 계정 token도 유효하지 않았다. 자격 증명이나 계정을 변경하지 않았고, 정책에 따라 main 직접 push/우회 병합은 하지 않았다. 따라서 PR, main 병합, 앱 재배포는 미완료다.
+- QA DB 컨테이너 `media-bridge-merge-qa-20260924-db` 및 임시 venv `/tmp/media-bridge-merge-qa-20260924`는 정리 확인이 남았다. 정리 명령 전 SSH 별칭 `WSL-server` 접속이 `Could not resolve hostname wsl-server`로 실패해 원격 자원 상태를 확인하거나 삭제하지 못했다. 접근 복구 후 정확히 해당 두 QA 자원만 확인·정리한다.
+- 재개 조건: GitHub에서 collaborator 권한이 있는 계정으로 연결 인증을 복구한다. 그 뒤 이 branch로 PR 생성→검토/필수 gate→병합→merged-main smoke→ysna-server 재배포 및 `http://172.27.253.53:18642/` 사용자 확인 주소 점검을 수행한다. 서버 접근이 복구되면 QA 자원 정리부터 재개한다.

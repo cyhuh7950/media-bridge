@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -54,13 +55,29 @@ def test_validated_draft_is_required_before_snapshot_publish_and_rollback(
     client, csrf, database = _client(migrated_postgres, output_path)
     headers = {"origin": "https://control.test", "x-csrf-token": csrf}
     reviewed = datetime(2026, 8, 24, 6, 0, tzinfo=UTC)
+    provider = client.post(
+        "/admin/v1/providers",
+        headers=headers,
+        json={
+            "name": "solar-provider",
+            "kind": "llm",
+            "catalog_id": "upstage-solar",
+            "model_id": "solar-pro4",
+            "endpoint": "https://api.upstage.ai/v1/chat/completions",
+            "protocol": "openai-chat-completions",
+            "secret_ref": {"kind": "db", "identifier": "provider_api_key"},
+            "api_key": "must-not-enter-snapshot",
+        },
+    )
+    assert provider.status_code == 201
     assert (
         client.post(
             "/admin/v1/models",
             headers=headers,
             json={
-                "model_id": "vendor/text-model",
-                "aliases": [],
+                "model_id": "solar-pro4",
+                "provider_id": provider.json()["id"],
+                "aliases": ["public-text-model"],
                 "input_modalities": ["text"],
                 "evidence": "vendor capability statement",
                 "reviewed_at": reviewed.isoformat(),
@@ -104,5 +121,14 @@ def test_validated_draft_is_required_before_snapshot_publish_and_rollback(
     assert rolled_back.status_code == 201
     assert rolled_back.json()["version"] == 2
     assert output_path.is_file()
+    snapshot = json.loads(output_path.read_text(encoding="utf-8"))
+    snapshot_provider = next(
+        item for item in snapshot["body"]["providers"] if item["id"] == provider.json()["id"]
+    )
+    assert snapshot_provider["reasoning_effort"] is None
+    assert "encrypted_api_key" not in snapshot_provider
+    registry_model = snapshot["body"]["registry"]["models"][0]
+    assert registry_model["provider_id"] == provider.json()["id"]
+    assert registry_model["aliases"] == ["public-text-model"]
     assert [item["version"] for item in client.get("/admin/v1/snapshots").json()] == [2, 1]
     database.close()

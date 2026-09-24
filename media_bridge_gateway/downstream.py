@@ -9,14 +9,18 @@ import secrets
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from typing import cast
 from urllib.parse import urlsplit
 
 import httpx
 
-from media_bridge.backends import SecretConfigurationError, load_secret
-from media_bridge.backends import AnalysisBackend, BackendStatus
+from media_bridge.backends import (
+    AnalysisBackend,
+    BackendStatus,
+    SecretConfigurationError,
+    load_secret,
+)
 from media_bridge.receipts import GateReceiptSigner, ReceiptValidationError
 from media_bridge_gateway.contracts import (
     DownstreamError,
@@ -25,6 +29,11 @@ from media_bridge_gateway.contracts import (
     SealedGatewayRequest,
 )
 from media_bridge_gateway.normalizer import digest_gateway_payload
+from media_bridge_gateway.provider_selection import (
+    ProviderRouteCandidate,
+    ProviderSelectionError,
+    select_provider,
+)
 
 _RESPONSE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _REQUEST_NONCE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
@@ -427,15 +436,25 @@ def _text_from_responses_payload(payload: dict[str, object]) -> str:
 
 
 class ProviderResponsesDownstream:
-    """Receipt-guarded Responses facade backed by the DB-selected LLM adapter."""
+    """Resolve a model through one verified snapshot before text-only execution."""
 
     def __init__(
         self,
         *,
-        backend: AnalysisBackend,
         receipt_signer: GateReceiptSigner,
-        model: str,
+        snapshot: Mapping[str, object] | None = None,
+        backend_factory: Callable[[dict[str, object]], AnalysisBackend] | None = None,
+        backend: AnalysisBackend | None = None,
+        model: str | None = None,
     ) -> None:
+        if snapshot is None and (backend is None or not model):
+            raise ValueError("a snapshot resolver or legacy backend/model pair is required")
+        if snapshot is not None and backend_factory is None:
+            raise ValueError("snapshot downstream requires a backend factory")
+        if snapshot is None and backend is not None and not model:
+            raise ValueError("legacy downstream requires a model")
+        self._snapshot = snapshot
+        self._backend_factory = backend_factory
         self._backend = backend
         self._receipt_signer = receipt_signer
         self._model = model
@@ -450,6 +469,33 @@ class ProviderResponsesDownstream:
     async def invoke(self, request: SealedGatewayRequest) -> GatewayResponse:
         _verify_seal(request, self._receipt_signer)
         self._replay_guard.consume(request.receipt)
+        backend = self._backend
+        output_model = self._model or request.target_id
+        if self._snapshot is not None:
+            provider = self._provider_for_target(request.target_id)
+            requested_effort = request.payload.get("reasoning_effort")
+            if requested_effort is None:
+                defaults = self._snapshot.get("defaults")
+                if isinstance(defaults, Mapping):
+                    requested_effort = defaults.get("reasoning_effort")
+            if requested_effort is not None:
+                if requested_effort not in {"low", "medium", "high"}:
+                    raise DownstreamError(
+                        "reasoning_effort_invalid",
+                        "The requested reasoning effort is invalid.",
+                        http_status=400,
+                    )
+                provider = dict(provider)
+                provider["reasoning_effort"] = requested_effort
+            assert self._backend_factory is not None
+            try:
+                backend = self._backend_factory(provider)
+            except (TypeError, ValueError) as error:
+                raise DownstreamError(
+                    "model_provider_unavailable",
+                    "The configured Provider cannot serve this model.",
+                ) from error
+            output_model = request.target_id
         prompt = _text_from_responses_payload(request.payload)
         if not prompt:
             raise DownstreamError(
@@ -457,7 +503,8 @@ class ProviderResponsesDownstream:
                 "Downstream request did not contain text input.",
                 http_status=400,
             )
-        result = await self._backend.analyze(context=prompt, user_request="")
+        assert backend is not None
+        result = await backend.analyze(context=prompt, user_request="")
         if result.status is not BackendStatus.SUCCESS or not result.analysis:
             code = result.error_code or "upstream"
             raise DownstreamError(
@@ -469,7 +516,7 @@ class ProviderResponsesDownstream:
             {
                 "id": response_id,
                 "object": "response",
-                "model": self._model,
+                "model": output_model,
                 "status": "completed",
                 "output": [
                     {
@@ -486,3 +533,118 @@ class ProviderResponsesDownstream:
             response_id=response_id,
             status_code=200,
         )
+
+    def _provider_for_target(self, target_id: str) -> dict[str, object]:
+        assert self._snapshot is not None
+        registry = self._snapshot.get("registry")
+        models = registry.get("models") if isinstance(registry, Mapping) else None
+        providers = self._snapshot.get("providers")
+        if not isinstance(models, list) or not isinstance(providers, list):
+            raise DownstreamError(
+                "model_provider_unavailable",
+                "No unique Provider is configured for the target model.",
+            )
+        model_matches: list[Mapping[str, object]] = []
+        for item in models:
+            if not isinstance(item, Mapping):
+                continue
+            aliases = item.get("aliases", [])
+            if item.get("id") == target_id or (
+                isinstance(aliases, list) and target_id in aliases
+            ):
+                model_matches.append(item)
+        if len(model_matches) != 1:
+            raise DownstreamError(
+                "model_provider_unavailable",
+                "No unique Provider is configured for the target model.",
+            )
+        model = model_matches[0]
+        routing_profile_id = model.get("routing_profile_id")
+        routing_profiles = self._snapshot.get("routing_profiles")
+        if not isinstance(routing_profile_id, str) and isinstance(routing_profiles, list):
+            default_profile = next(
+                (
+                    item
+                    for item in routing_profiles
+                    if isinstance(item, Mapping) and item.get("enabled") is not False
+                ),
+                None,
+            )
+            if isinstance(default_profile, Mapping):
+                routing_profile_id = default_profile.get("id")
+        provider_ids = {
+            item.get("provider_id")
+            for item in model_matches
+            if isinstance(item.get("provider_id"), str)
+        }
+        if isinstance(routing_profile_id, str) and isinstance(routing_profiles, list):
+            profile = next(
+                (
+                    item
+                    for item in routing_profiles
+                    if isinstance(item, Mapping) and item.get("id") == routing_profile_id
+                ),
+                None,
+            )
+            if isinstance(profile, Mapping) and isinstance(profile.get("llm_provider_ids"), list):
+                provider_ids = {
+                    item for item in profile["llm_provider_ids"] if isinstance(item, str)
+                }
+        provider_matches = [
+            item
+            for item in providers
+            if isinstance(item, dict)
+            and item.get("id") in provider_ids
+            and item.get("kind") == "llm"
+            and item.get("enabled") is True
+        ]
+        if not provider_matches:
+            raise DownstreamError(
+                "model_provider_unavailable",
+                "No unique Provider is configured for the target model.",
+            )
+        strategy = "priority"
+        if isinstance(routing_profile_id, str) and isinstance(routing_profiles, list):
+            profile = next(
+                (
+                    item
+                    for item in routing_profiles
+                    if isinstance(item, Mapping) and item.get("id") == routing_profile_id
+                ),
+                None,
+            )
+            if isinstance(profile, Mapping) and profile.get("strategy") in {
+                "priority", "fallback", "health", "cost"
+            }:
+                strategy = cast(str, profile["strategy"])
+        try:
+            chosen = select_provider(
+                [
+                    ProviderRouteCandidate(
+                        provider_id=str(item["id"]),
+                        enabled=bool(item.get("enabled")),
+                        capabilities=frozenset(
+                            item.get("capabilities", [])
+                            or (["text"] if item.get("kind") == "llm" else [])
+                        ),
+                    )
+                    for item in provider_matches
+                ],
+                required_capability="text",
+                strategy=strategy,  # type: ignore[arg-type]
+            )
+        except ProviderSelectionError as error:
+            raise DownstreamError(
+                "model_provider_unavailable",
+                "No healthy Provider can serve this model.",
+            ) from error
+        provider = next(item for item in provider_matches if str(item["id"]) == chosen.provider_id)
+        if not all(
+            isinstance(provider.get(key), str) and provider[key]
+            for key in ("catalog_id", "protocol", "endpoint", "model_id")
+        ):
+            raise DownstreamError(
+                "model_provider_unavailable",
+                "No unique Provider is configured for the target model.",
+            )
+        return cast(dict[str, object], provider)

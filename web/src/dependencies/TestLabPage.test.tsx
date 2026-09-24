@@ -1,10 +1,119 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TestLabPage } from "./TestLabPage";
-function jsonResponse(body: unknown): Response { return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }); }
-function requestUrl(input: RequestInfo | URL): string { return typeof input === "string" ? input : input instanceof URL ? input.href : input.url; }
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+}
+function requestUrl(input: RequestInfo | URL): string {
+  return typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+}
+function selectAt<T extends HTMLElement>(items: T[], index: number): T {
+  const item = items[index];
+  if (!item) throw new Error(`Expected element at index ${String(index)}`);
+  return item;
+}
+function submit(button: HTMLElement | null): void {
+  const form = button?.closest("form");
+  if (!form) throw new Error("Expected submit button inside a form");
+  fireEvent.submit(form);
+}
+function requestBody(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>, url: string): Record<string, unknown> {
+  const call = fetchMock.mock.calls.find(([input]) => requestUrl(input) === url);
+  const body = call?.[1]?.body;
+  if (typeof body !== "string") throw new Error(`Expected JSON request body for ${url}`);
+  const value: unknown = JSON.parse(body);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`Expected object request body for ${url}`);
+  }
+  return value as Record<string, unknown>;
+}
 const image = () => new File([new Uint8Array([137, 80, 78, 71])], "error.png", { type: "image/png" });
-it("runs one whole test with a route, file, and question", async () => { const user = userEvent.setup(); const fetchMock = vi.fn<typeof fetch>((input) => requestUrl(input).endsWith("/routing-profiles") ? Promise.resolve(jsonResponse([{ id: "route-1", name: "기본 문서 분석", enabled: true }])) : Promise.resolve(jsonResponse({ action: "preview", status: "validated" }))); vi.stubGlobal("fetch", fetchMock); render(<TestLabPage role="operator" csrfToken="csrf-value" />); expect(screen.queryByText("Gateway Connection")).not.toBeInTheDocument(); expect(screen.queryByText(/DB에 저장된 Connection/)).not.toBeInTheDocument(); await user.selectOptions(await screen.findByLabelText("라우팅 프로필"), "route-1"); await user.type(screen.getByLabelText("질문"), "이 이미지의 내용을 설명해줘"); await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image()); const form = screen.getByRole("button", { name: "전체 파이프라인 시험" }).closest("form"); if (!form) throw new Error("form unavailable"); fireEvent.submit(form); expect(await screen.findByText(/validated/)).toBeInTheDocument(); const call = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/preview"); const body = JSON.parse(String((call?.[1] as RequestInit).body)); expect(body.connection_id).toBeUndefined(); expect(body.routing_profile_id).toBe("route-1"); expect(body.target_model).toBe("auto"); });
-it("clears the result after its TTL", async () => { const user = userEvent.setup(); vi.stubGlobal("fetch", vi.fn<typeof fetch>((input) => requestUrl(input).endsWith("/routing-profiles") ? Promise.resolve(jsonResponse([{ id: "route-1", name: "기본 문서 분석", enabled: true }])) : Promise.resolve(jsonResponse({ result: "TTL RESULT" })))); render(<TestLabPage role="operator" csrfToken="csrf-value" resultTtlMs={100} />); await user.selectOptions(await screen.findByLabelText("라우팅 프로필"), "route-1"); await user.type(screen.getByLabelText("질문"), "expire me"); await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image()); const form = screen.getByRole("button", { name: "전체 파이프라인 시험" }).closest("form"); if (!form) throw new Error("form unavailable"); fireEvent.submit(form); expect(await screen.findByText(/TTL RESULT/)).toBeInTheDocument(); await waitFor(() => expect(screen.queryByText(/TTL RESULT/)).not.toBeInTheDocument(), { timeout: 1000 }); });
-it("hides test controls from viewer", () => { render(<TestLabPage role="viewer" csrfToken="csrf-value" />); expect(screen.getByText(/viewer는 시험을 실행할 수 없습니다/)).toBeInTheDocument(); expect(screen.queryByLabelText(/질문에 첨부할 이미지/)).not.toBeInTheDocument(); });
-it("runs the OmniRoute to Media Bridge whole flow without changing the existing test", async () => { const user = userEvent.setup(); const fetchMock = vi.fn<typeof fetch>((input) => requestUrl(input).endsWith("/routing-profiles") ? Promise.resolve(jsonResponse([{ id: "route-1", name: "기본 문서 분석", enabled: true }])) : requestUrl(input).endsWith("/connections") ? Promise.resolve(jsonResponse([{ id: "connection-1", name: "Primary Gateway", status: "ready" }])) : Promise.resolve(jsonResponse({ id: "resp_1", output: [{ type: "message" }] }))); vi.stubGlobal("fetch", fetchMock); render(<TestLabPage role="operator" csrfToken="csrf-value" />); await user.selectOptions(await screen.findByLabelText("라우팅 프로필"), "route-1"); await user.type(screen.getByLabelText("질문"), "이 이미지의 내용을 설명해줘"); await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image()); await user.clear(screen.getByLabelText(/OmniRoute가 호출할 Media Bridge endpoint/)); await user.type(screen.getByLabelText(/OmniRoute가 호출할 Media Bridge endpoint/), "https://media-bridge.sinsan.kr"); await user.type(screen.getByLabelText(/Media Bridge 접근 키 원문/), "mbc_test_key"); fireEvent.submit(screen.getByRole("button", { name: "OmniRoute 전체 흐름 시험" }).closest("form")!); expect(await screen.findByText(/resp_1/)).toBeInTheDocument(); const call = fetchMock.mock.calls.find(([input]) => requestUrl(input) === "/admin/v1/test-lab/run"); const body = JSON.parse(String((call?.[1] as RequestInit).body)); expect(body.routing_profile_id).toBe("route-1"); expect(body.gateway_url).toBe("https://media-bridge.sinsan.kr"); expect(body.target_model).toBe("auto"); expect(body.execute_downstream).toBe(true); });
+
+it("sends the selected public model and standard reasoning effort", async () => {
+  const user = userEvent.setup();
+  const fetchMock = vi.fn<typeof fetch>((input) => requestUrl(input).endsWith("/models")
+    ? Promise.resolve(jsonResponse([{ model_id: "upstage/solar-pro4" }]))
+    : Promise.resolve(jsonResponse({ action: "preview", status: "validated" })));
+  vi.stubGlobal("fetch", fetchMock);
+  render(<TestLabPage role="operator" csrfToken="csrf-value" />);
+  await screen.findAllByRole("option", { name: "upstage/solar-pro4" });
+  await user.selectOptions(selectAt(screen.getAllByLabelText("공개 모델"), 0), "upstage/solar-pro4");
+  await user.selectOptions(selectAt(screen.getAllByLabelText("추론 등급"), 0), "high");
+  await user.type(screen.getByLabelText("질문"), "이 이미지의 내용을 설명해줘");
+  await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image());
+  submit(screen.getByRole("button", { name: "전체 파이프라인 시험" }));
+  expect(await screen.findByText(/validated/)).toBeInTheDocument();
+  const body = requestBody(fetchMock, "/admin/v1/test-lab/preview");
+  expect(body.routing_profile_id).toBeUndefined();
+  expect(body.target_model).toBe("upstage/solar-pro4");
+  expect(body.reasoning_effort).toBe("high");
+});
+
+it("labels an unspecified public model as auto in both test flows", async () => {
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>(() => Promise.resolve(jsonResponse([]))));
+  render(<TestLabPage role="operator" csrfToken="csrf-value" />);
+  await waitFor(() => { expect(screen.getAllByRole("option", { name: "미지정(auto)" })).toHaveLength(2); });
+  expect(screen.queryByRole("option", { name: "auto(자동 선택)" })).not.toBeInTheDocument();
+});
+
+it("sends external-client model and reasoning settings", async () => {
+  const user = userEvent.setup();
+  const fetchMock = vi.fn<typeof fetch>((input) => requestUrl(input).endsWith("/models")
+    ? Promise.resolve(jsonResponse([{ model_id: "upstage/solar-pro4" }, { model_id: "openai/gpt-5" }]))
+    : Promise.resolve(jsonResponse({ action: "external", status: "validated" })));
+  vi.stubGlobal("fetch", fetchMock);
+  render(<TestLabPage role="operator" csrfToken="csrf-value" />);
+  await screen.findAllByRole("option", { name: "openai/gpt-5" });
+  await user.selectOptions(selectAt(screen.getAllByLabelText("공개 모델"), 1), "openai/gpt-5");
+  await user.selectOptions(selectAt(screen.getAllByLabelText("추론 등급"), 1), "high");
+  await user.type(screen.getByLabelText("질문"), "외부 클라이언트 설정 시험");
+  await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image());
+  await user.type(screen.getByLabelText("Media Bridge 접근 키 원문"), "mbc-test-key");
+  submit(screen.getByRole("button", { name: "외부 클라이언트 전체 흐름 시험" }));
+  expect(await screen.findByText(/external/)).toBeInTheDocument();
+  const body = requestBody(fetchMock, "/admin/v1/test-lab/run");
+  expect(body.target_model).toBe("openai/gpt-5");
+  expect(body.reasoning_effort).toBe("high");
+});
+
+it.each([
+  { name: "미지정(auto)는 Gateway 자동 선택으로 전달한다", selected: "", expected: undefined },
+  { name: "명시 모델은 선택한 ID로 전달한다", selected: "vendor/public-model", expected: "vendor/public-model" },
+])("$name", async ({ selected, expected }) => {
+  const user = userEvent.setup();
+  const fetchMock = vi.fn<typeof fetch>((input) => requestUrl(input).endsWith("/models")
+    ? Promise.resolve(jsonResponse([{ model_id: "vendor/public-model" }]))
+    : Promise.resolve(jsonResponse({ result: "ok" })));
+  vi.stubGlobal("fetch", fetchMock);
+  render(<TestLabPage role="operator" csrfToken="csrf-value" />);
+  const modelSelect = selectAt(screen.getAllByLabelText("공개 모델"), 1);
+  await screen.findAllByRole("option", { name: "vendor/public-model" });
+  if (selected) await user.selectOptions(modelSelect, selected);
+  await user.type(screen.getByLabelText("질문"), "모델 라우팅 시험");
+  await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image());
+  await user.type(screen.getByLabelText("Media Bridge 접근 키 원문"), "mbc-test-key");
+  submit(screen.getByRole("button", { name: "외부 클라이언트 전체 흐름 시험" }));
+  await screen.findByText(/시험 결과/);
+  const body = requestBody(fetchMock, "/admin/v1/test-lab/run");
+  expect(body.target_model).toBe(expected);
+});
+
+it("clears the result after its TTL", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>((input) => requestUrl(input).endsWith("/models")
+    ? Promise.resolve(jsonResponse([]))
+    : Promise.resolve(jsonResponse({ result: "TTL RESULT" }))));
+  render(<TestLabPage role="operator" csrfToken="csrf-value" resultTtlMs={100} />);
+  await user.type(screen.getByLabelText("질문"), "expire me");
+  await user.upload(screen.getByLabelText(/질문에 첨부할 이미지/), image());
+  submit(screen.getByRole("button", { name: "전체 파이프라인 시험" }));
+  expect(await screen.findByText(/TTL RESULT/)).toBeInTheDocument();
+  await waitFor(() => { expect(screen.queryByText(/TTL RESULT/)).not.toBeInTheDocument(); }, { timeout: 1000 });
+});
+
+it("hides test controls from viewer", () => {
+  render(<TestLabPage role="viewer" csrfToken="csrf-value" />);
+  expect(screen.getByText(/viewer는 시험을 실행할 수 없습니다/)).toBeInTheDocument();
+  expect(screen.queryByLabelText(/질문에 첨부할 이미지/)).not.toBeInTheDocument();
+});

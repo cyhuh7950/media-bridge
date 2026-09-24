@@ -80,6 +80,9 @@ class FakeDownstream:
             status_code=200,
         )
 
+    async def close(self) -> None:
+        return None
+
 
 def _transaction(
     tmp_path: Path,
@@ -174,12 +177,16 @@ async def test_product_neutral_transaction_handles_text_image_and_pdf(
     sealed = downstream.requests[0]
     assert sealed.snapshot_version == 7
     serialized = json.dumps(sealed.payload)
-    if "data:" in json.dumps(payload):
+    raw_payload = json.dumps(payload)
+    if "data:" in raw_payload:
         assert "data:" not in serialized
         assert "input_image" not in serialized
         assert "input_file" not in serialized
         assert "ERROR 104" in serialized
-        assert "red terminal" in serialized
+        if "input_file" in raw_payload:
+            assert "red terminal" not in serialized
+        else:
+            assert "red terminal" in serialized
     else:
         assert sealed.payload == payload
 

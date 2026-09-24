@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
+from sqlalchemy import select
 
 from media_bridge_control.db import Database
 from media_bridge_control.gateway_client import GatewayClient, GatewayClientError
@@ -78,10 +79,9 @@ class TestLabService:
 
     async def preview(self, request: TestLabPreviewRequest) -> dict[str, object]:
         data = self._decode(request.media_base64)
-        if request.routing_profile_id is None:
-            raise TestLabError("routing_profile_required")
+        profile_id = request.routing_profile_id or self._default_profile_id()
         try:
-            profile, analysis, llm = self._providers(request.routing_profile_id)
+            profile, analysis, llm = self._providers(profile_id)
             analysis_key = self._provider_key(analysis)
             llm_key = self._provider_key(llm)
             async with httpx.AsyncClient(
@@ -92,7 +92,9 @@ class TestLabService:
                     f"{request.user_request.strip()}\n\n"
                     f"[미디어에서 추출한 텍스트]\n{extracted}"
                 ).strip()
-                answer = await self._answer(client, llm, llm_key, forwarded)
+                answer = await self._answer(
+                    client, llm, llm_key, forwarded, request.reasoning_effort
+                )
         except (httpx.HTTPError, ValueError, KeyError, SecretResolutionError) as error:
             logger.exception(
                 "test lab routed provider call failed",
@@ -108,13 +110,26 @@ class TestLabService:
             "answer": answer,
         }
 
+    def _default_profile_id(self) -> Any:
+        with self._database.session() as session:
+            profile = session.scalar(
+                select(RoutingProfile).where(RoutingProfile.enabled.is_(True)).order_by(RoutingProfile.name)
+            )
+            if profile is None:
+                raise TestLabError("routing_profile_unavailable")
+            return profile.id
+
     def _providers(self, profile_id: Any) -> tuple[RoutingProfile, Provider, Provider]:
         with self._database.session() as session:
             profile = session.get(RoutingProfile, profile_id)
             if profile is None or not profile.enabled:
                 raise TestLabError("routing_profile_unavailable")
-            analysis_id = (profile.analysis_provider_ids or [None])[0]
-            llm_id = (profile.llm_provider_ids or [None])[0]
+            analysis_id = (
+                profile.analysis_provider_ids[0]
+                if profile.analysis_provider_ids
+                else None
+            )
+            llm_id = profile.llm_provider_ids[0] if profile.llm_provider_ids else None
             analysis = session.get(Provider, analysis_id) if analysis_id else None
             llm = session.get(Provider, llm_id) if llm_id else None
             if analysis is None or llm is None or not analysis.enabled or not llm.enabled:
@@ -126,7 +141,13 @@ class TestLabService:
             return self._security.decrypt_secret(provider.encrypted_api_key)
         return self._secret_resolver.resolve(
             SecretReference(
-                kind=provider.secret_ref_kind, identifier=provider.secret_ref_identifier
+                kind=SecretReference.model_validate(
+                    {
+                        "kind": provider.secret_ref_kind,
+                        "identifier": provider.secret_ref_identifier,
+                    }
+                ).kind,
+                identifier=provider.secret_ref_identifier,
             )
         )
 
@@ -151,7 +172,7 @@ class TestLabService:
         response.raise_for_status()
         body = response.json()
         if isinstance(body, dict) and isinstance(body.get("text"), str):
-            return body["text"].strip()
+            return str(body["text"]).strip()
         pages = body.get("pages") if isinstance(body, dict) else None
         if isinstance(pages, list):
             page_text = "\n".join(
@@ -172,7 +193,8 @@ class TestLabService:
         raise ValueError("upstream_invalid_response")
 
     async def _answer(
-        self, client: httpx.AsyncClient, provider: Provider, key: str, prompt: str
+        self, client: httpx.AsyncClient, provider: Provider, key: str, prompt: str,
+        reasoning_effort: str = "provider_default",
     ) -> str:
         protocol = provider.protocol or "openai-chat-completions"
         if protocol == "openai-responses":
@@ -187,6 +209,8 @@ class TestLabService:
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
             }
+        if reasoning_effort != "provider_default":
+            payload["reasoning_effort"] = reasoning_effort
         response = await client.post(
             self._llm_endpoint(provider.endpoint, protocol),
             headers={"Authorization": f"Bearer {key}"},
@@ -220,7 +244,10 @@ class TestLabService:
     async def run(self, request: TestLabRunRequest) -> dict[str, object]:
         if request.gateway_url is None or request.api_key is None:
             raise TestLabError("downstream_credentials_required")
-        target_model = self._run_target_model(request)
+        # Use the OpenAI-compatible ``auto`` model for the UI's unspecified
+        # choice. The target Gateway resolves it against its own active
+        # snapshot; Control must not guess from its local model catalog.
+        target_model = request.target_model or "auto"
         data = self._decode(request.media_base64)
         asset_id: str | None = None
         primary_error: TestLabError | None = None
@@ -256,21 +283,6 @@ class TestLabService:
         if result is None:
             raise TestLabError("gateway_unavailable")
         return result
-
-    def _run_target_model(self, request: TestLabRunRequest) -> str:
-        """Resolve the selected route's downstream model for the external hop.
-
-        The UI deliberately sends ``auto`` so the OmniRoute test exercises the
-        same routing profile selected in the existing whole-pipeline test.
-        """
-        if request.target_model != "auto":
-            return request.target_model
-        if request.routing_profile_id is None:
-            raise TestLabError("routing_profile_required")
-        _, _, llm = self._providers(request.routing_profile_id)
-        if not llm.model_id:
-            raise TestLabError("routing_model_unavailable")
-        return llm.model_id
 
     @staticmethod
     def _decode(value: str) -> bytes:
@@ -309,7 +321,7 @@ class TestLabService:
     def _responses_payload(
         request: TestLabRunRequest,
         asset_id: str,
-        target_model: str,
+        target_model: str | None,
     ) -> dict[str, Any]:
         media_part: dict[str, object]
         if request.media_type == "image":
@@ -321,7 +333,12 @@ class TestLabService:
                 "filename": request.filename,
             }
         return {
-            "model": target_model,
+            **({"model": target_model} if target_model is not None else {}),
+            **(
+                {"reasoning_effort": request.reasoning_effort}
+                if request.reasoning_effort != "provider_default"
+                else {}
+            ),
             "input": [
                 {
                     "role": "user",

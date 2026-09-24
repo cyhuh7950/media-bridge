@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -15,7 +13,6 @@ def private_key_pem() -> bytes:
 
 
 def snapshot_body(*, model_id: str = "vendor/text-model") -> dict[str, object]:
-    now = datetime(2026, 8, 24, 4, 0, tzinfo=UTC)
     return {
         "registry": {
             "version": "registry-1",
@@ -23,7 +20,6 @@ def snapshot_body(*, model_id: str = "vendor/text-model") -> dict[str, object]:
                 {
                     "id": model_id,
                     "input_modalities": ["text"],
-                    "expires_at": (now + timedelta(days=30)).isoformat(),
                     "pdf_passthrough_verified": False,
                 }
             ],

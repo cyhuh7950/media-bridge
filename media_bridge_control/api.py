@@ -13,6 +13,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from media_bridge.reasoning import reasoning_capability
 from media_bridge_control.audit import AuditEventWriter, OperationalEventWriter
 from media_bridge_control.bootstrap import (
     AuthenticationError,
@@ -28,7 +29,7 @@ from media_bridge_control.gateway_client import (
     GatewayClientError,
     HttpGatewayClient,
 )
-from media_bridge_control.provider_catalog import provider_catalog_payload
+from media_bridge_control.provider_catalog import ProviderKind, provider_catalog_payload
 from media_bridge_control.schemas import (
     ConnectionCreate,
     ConnectionUpdate,
@@ -90,12 +91,14 @@ def build_control_app(
     service: ControlPlaneService,
     allowed_origin: str,
     allowed_host: str,
+    allow_insecure_http: bool = False,
     snapshot_publisher: SnapshotPublisher | None = None,
     gateway_client: GatewayClient | None = None,
     secret_resolver: GatewaySecretResolver | None = None,
     action_rate_limiter: AdminActionRateLimiter | None = None,
 ) -> Starlette:
     configuration = ConfigurationService(service.database, service.security)
+    connections = ConnectionService(service.database)
     credentials = CredentialService(
         database=service.database,
         security=service.security,
@@ -115,7 +118,7 @@ def build_control_app(
 
     def secure_request(request: Request) -> Response | None:
         host = request.headers.get("host", "").partition(":")[0].lower()
-        if request.url.scheme != "https":
+        if request.url.scheme != "https" and not allow_insecure_http:
             return _error("https_required", 400)
         if host != allowed_host.lower() or request.headers.get("origin") != allowed_origin:
             return _error("origin_rejected", 403)
@@ -158,7 +161,7 @@ def build_control_app(
             result.session_token,
             max_age=int(service.SESSION_TTL.total_seconds()),
             path="/admin/v1",
-            secure=True,
+            secure=not allow_insecure_http,
             httponly=True,
             samesite="strict",
         )
@@ -211,7 +214,7 @@ def build_control_app(
             result.session_token,
             max_age=int(service.SESSION_TTL.total_seconds()),
             path="/admin/v1",
-            secure=True,
+            secure=not allow_insecure_http,
             httponly=True,
             samesite="strict",
         )
@@ -428,7 +431,7 @@ def build_control_app(
 
     async def providers(request: Request) -> Response:
         writable = request.method == "POST"
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}) if writable else frozenset(
                 {"admin", "operator", "viewer"}
@@ -437,11 +440,17 @@ def build_control_app(
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         if not writable:
             return JSONResponse(await run_in_threadpool(configuration.list_providers))
         try:
             body = await _json(request, ProviderCreate)
-            result = await run_in_threadpool(configuration.create_provider, body)
+            result = await run_in_threadpool(
+                configuration.create_provider,
+                body,
+                updated_by=principal.username,
+            )
         except ControlPlaneError as error:
             return _error(error.code, 400)
         except ConfigurationError as error:
@@ -456,9 +465,28 @@ def build_control_app(
         if rejected is not None:
             return rejected
         kind = request.query_params.get("kind", "analysis")
-        if kind not in {"analysis", "llm"}:
+        if kind not in ("analysis", "llm"):
             return _error("invalid_provider_catalog_kind", 400)
-        return JSONResponse(provider_catalog_payload(kind))
+        catalog_kind: ProviderKind = "llm" if kind == "llm" else "analysis"
+        return JSONResponse(provider_catalog_payload(catalog_kind))
+
+    async def provider_reasoning_options(request: Request) -> Response:
+        _, rejected = await authorize(
+            request,
+            roles=frozenset({"admin", "operator", "viewer"}),
+        )
+        if rejected is not None:
+            return rejected
+        catalog_id = request.query_params.get("catalog_id")
+        protocol = request.query_params.get("protocol")
+        model_id = request.query_params.get("model_id")
+        if not catalog_id or not protocol or not model_id:
+            return _error("provider_reasoning_query_required", 400)
+        capability = reasoning_capability(catalog_id, protocol, model_id)
+        efforts = ["provider_default"]
+        if capability is not None:
+            efforts.extend(capability.efforts)
+        return JSONResponse({"efforts": efforts})
 
     async def provider_item(request: Request) -> Response:
         principal, rejected = await authorize(
@@ -480,6 +508,7 @@ def build_control_app(
                     configuration.update_provider,
                     provider_id,
                     body,
+                    updated_by=principal.username,
                 )
                 return JSONResponse(result)
             await run_in_threadpool(configuration.delete_provider, provider_id)
@@ -492,7 +521,7 @@ def build_control_app(
 
     async def routing_profiles(request: Request) -> Response:
         writable = request.method == "POST"
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}) if writable else frozenset(
                 {"admin", "operator", "viewer"}
@@ -501,11 +530,17 @@ def build_control_app(
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         if not writable:
             return JSONResponse(await run_in_threadpool(configuration.list_routing_profiles))
         try:
             body = await _json(request, RoutingProfileCreate)
-            result = await run_in_threadpool(configuration.create_routing_profile, body)
+            result = await run_in_threadpool(
+                configuration.create_routing_profile,
+                body,
+                updated_by=principal.username,
+            )
         except ControlPlaneError as error:
             return _error(error.code, 400)
         except ConfigurationError as error:
@@ -513,13 +548,15 @@ def build_control_app(
         return JSONResponse(result, status_code=201)
 
     async def routing_profile_item(request: Request) -> Response:
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}),
             require_csrf=True,
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         try:
             if request.method == "DELETE":
                 await run_in_threadpool(
@@ -532,6 +569,7 @@ def build_control_app(
                 configuration.update_routing_profile,
                 request.path_params["item_id"],
                 body,
+                updated_by=principal.username,
             )
         except ControlPlaneError as error:
             return _error(error.code, 400)
@@ -542,7 +580,7 @@ def build_control_app(
 
     async def models(request: Request) -> Response:
         writable = request.method == "POST"
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}) if writable else frozenset(
                 {"admin", "operator", "viewer"}
@@ -551,11 +589,19 @@ def build_control_app(
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
+        if principal is None:
+            return _error("unauthorized", 401)
         if not writable:
             return JSONResponse(await run_in_threadpool(configuration.list_models))
         try:
             body = await _json(request, ModelCapabilityCreate)
-            result = await run_in_threadpool(configuration.create_model, body)
+            result = await run_in_threadpool(
+                configuration.create_model,
+                body,
+                updated_by=principal.username,
+            )
         except ControlPlaneError as error:
             return _error(error.code, 400)
         except ConfigurationError as error:
@@ -563,13 +609,15 @@ def build_control_app(
         return JSONResponse(result, status_code=201)
 
     async def model_item(request: Request) -> Response:
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}),
             require_csrf=True,
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         model_id = request.path_params["item_id"]
         try:
             if request.method == "PATCH":
@@ -578,6 +626,7 @@ def build_control_app(
                     configuration.update_model,
                     model_id,
                     body,
+                    updated_by=principal.username,
                 )
                 return JSONResponse(result)
             await run_in_threadpool(configuration.delete_model, model_id)
@@ -590,7 +639,7 @@ def build_control_app(
 
     async def policies(request: Request) -> Response:
         writable = request.method == "POST"
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}) if writable else frozenset(
                 {"admin", "operator", "viewer"}
@@ -599,11 +648,19 @@ def build_control_app(
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
+        if principal is None:
+            return _error("unauthorized", 401)
         if not writable:
             return JSONResponse(await run_in_threadpool(configuration.list_policies))
         try:
             body = await _json(request, PolicyCreate)
-            result = await run_in_threadpool(configuration.create_policy, body)
+            result = await run_in_threadpool(
+                configuration.create_policy,
+                body,
+                updated_by=principal.username,
+            )
         except ControlPlaneError as error:
             return _error(error.code, 400)
         except ConfigurationError as error:
@@ -611,13 +668,15 @@ def build_control_app(
         return JSONResponse(result, status_code=201)
 
     async def policy_item(request: Request) -> Response:
-        _, rejected = await authorize(
+        principal, rejected = await authorize(
             request,
             roles=frozenset({"admin", "operator"}),
             require_csrf=True,
         )
         if rejected is not None:
             return rejected
+        if principal is None:
+            return _error("unauthorized", 401)
         policy_id = request.path_params["item_id"]
         try:
             if request.method == "PATCH":
@@ -626,6 +685,7 @@ def build_control_app(
                     configuration.update_policy,
                     policy_id,
                     body,
+                    updated_by=principal.username,
                 )
                 return JSONResponse(result)
             await run_in_threadpool(configuration.delete_policy, policy_id)
@@ -1131,6 +1191,11 @@ def build_control_app(
             ),
             Route("/admin/v1/providers", providers, methods=["GET", "POST"]),
             Route("/admin/v1/provider-catalog", provider_catalog, methods=["GET"]),
+            Route(
+                "/admin/v1/provider-reasoning-options",
+                provider_reasoning_options,
+                methods=["GET"],
+            ),
             Route("/admin/v1/routing-profiles", routing_profiles, methods=["GET", "POST"]),
             Route(
                 "/admin/v1/routing-profiles/{item_id:uuid}",

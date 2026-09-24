@@ -94,3 +94,15 @@ def test_credential_api_is_admin_only(migrated_postgres: str) -> None:
         assert admin is None
     assert client.get("/admin/v1/credentials").status_code == 200
     database.close()
+
+
+def test_credential_name_accepts_korean_display_name(migrated_postgres: str) -> None:
+    client, csrf, _, database = _setup(migrated_postgres)
+    created = client.post(
+        "/admin/v1/credentials",
+        headers={"origin": "https://control.test", "x-csrf-token": csrf},
+        json={"name": "임시", "scopes": ["mcp:invoke"]},
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["name"] == "임시"
+    database.close()

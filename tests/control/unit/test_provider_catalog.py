@@ -22,12 +22,11 @@ def test_analysis_catalog_contains_real_media_analysis_contracts() -> None:
     assert entries[0].capabilities == ("ocr", "pdf")
 
 
-def test_non_vision_catalog_contains_omniroute_and_supported_text_targets() -> None:
+def test_non_vision_catalog_contains_supported_text_targets_but_no_router() -> None:
     entries = get_provider_catalog("llm")
 
     provider_ids = {entry.provider_id for entry in entries}
     assert {
-        "omniroute",
         "openai",
         "anthropic",
         "gemini",
@@ -35,7 +34,6 @@ def test_non_vision_catalog_contains_omniroute_and_supported_text_targets() -> N
         "mistral",
         "groq",
         "deepseek",
-        "openrouter",
         "ollama",
         "vllm",
         "lm-studio",
@@ -52,8 +50,9 @@ def test_image_generation_provider_is_not_an_analysis_provider() -> None:
     assert "black-forest-labs" not in provider_ids
 
 
-def test_provider_catalog_entry_is_lookupable_and_unknown_id_is_safe() -> None:
-    assert get_provider_catalog_entry("omniroute").kind == "llm"
+def test_provider_catalog_entry_rejects_router_as_upstream_provider() -> None:
+    with pytest.raises(ProviderCatalogError, match="provider_catalog_entry_unknown"):
+        get_provider_catalog_entry("omniroute")
 
     with pytest.raises(ProviderCatalogError, match="provider_catalog_entry_unknown"):
         get_provider_catalog_entry("does-not-exist")
@@ -62,15 +61,5 @@ def test_provider_catalog_entry_is_lookupable_and_unknown_id_is_safe() -> None:
 def test_provider_catalog_payload_is_safe_for_admin_api() -> None:
     payload = provider_catalog_payload("llm")
 
-    omniroute = next(item for item in payload if item["provider_id"] == "omniroute")
-    assert omniroute == {
-        "provider_id": "omniroute",
-        "display_name": "OmniRoute",
-        "kind": "llm",
-        "protocol": "openai-responses",
-        "capabilities": ["text"],
-        "default_endpoint": None,
-        "secret_env": "MEDIA_BRIDGE_OMNIROUTE_API_KEY",
-        "default_model_id": "auto",
-    }
+    assert all(item["provider_id"] not in {"omniroute", "openrouter"} for item in payload)
     assert all("api_key" not in item for item in payload)

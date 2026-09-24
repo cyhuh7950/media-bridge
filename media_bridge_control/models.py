@@ -70,7 +70,7 @@ class BootstrapToken(Base):
 
     selector: Mapped[str] = mapped_column(String(32), primary_key=True)
     token_digest: Mapped[str] = mapped_column(String(128))
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -83,6 +83,7 @@ class AdminSession(Base):
     selector: Mapped[str] = mapped_column(String(32), primary_key=True)
     session_digest: Mapped[str] = mapped_column(String(128))
     csrf_digest: Mapped[str] = mapped_column(String(128))
+    previous_csrf_digest: Mapped[str | None] = mapped_column(String(128))
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -144,6 +145,7 @@ class Provider(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(128), unique=True)
+    alias: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     kind: Mapped[str] = mapped_column(String(16))
     catalog_id: Mapped[str | None] = mapped_column(String(128))
     model_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -153,6 +155,7 @@ class Provider(Base):
     secret_ref_kind: Mapped[str] = mapped_column(String(32))
     secret_ref_identifier: Mapped[str] = mapped_column(String(255))
     encrypted_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reasoning_effort: Mapped[str | None] = mapped_column(String(16), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -160,6 +163,7 @@ class Provider(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class RoutingProfile(Base):
@@ -180,6 +184,7 @@ class RoutingProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class ModelCapability(Base):
@@ -189,19 +194,26 @@ class ModelCapability(Base):
     provider_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("providers.id"), nullable=True
     )
+    routing_profile_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("routing_profiles.id"), nullable=True
+    )
     model_id: Mapped[str] = mapped_column(String(128), unique=True)
     aliases: Mapped[list[str]] = mapped_column(JSONB, default=list)
     input_modalities: Mapped[list[str]] = mapped_column(JSONB)
-    evidence: Mapped[str] = mapped_column(String(1024))
+    evidence: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     pdf_passthrough_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    reasoning_effort: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class Policy(Base):
@@ -216,6 +228,7 @@ class Policy(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    updated_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class ConfigDraft(Base):

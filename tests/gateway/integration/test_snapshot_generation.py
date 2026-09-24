@@ -14,6 +14,7 @@ from starlette.testclient import TestClient
 from media_bridge.acquisition import MediaAcquirer
 from media_bridge.assets import AssetStore
 from media_bridge.backends import BackendStatus, OcrResult, VisionResult
+from media_bridge.capabilities import CapabilityState
 from media_bridge.config_snapshot import (
     SignedSnapshot,
     SnapshotVerificationError,
@@ -23,7 +24,7 @@ from media_bridge.gate import PreRequestGate
 from media_bridge.receipts import GateReceiptSigner
 from media_bridge.runtime_snapshot import capability_registry_from_snapshot
 from media_bridge_control.snapshots import SnapshotSigner
-from media_bridge_gateway.app import build_gateway_app
+from media_bridge_gateway.app import _resolve_public_request, build_gateway_app
 from media_bridge_gateway.auth import CredentialAuthenticationError
 from media_bridge_gateway.contracts import (
     DataPlaneSubject,
@@ -98,6 +99,57 @@ def _subject() -> DataPlaneSubject:
         credential_selector="mbc-selector",
         tenant_id="tenant-a",
         scopes=frozenset({"responses:invoke"}),
+    )
+
+
+def test_auto_resolves_to_llm_model_not_first_analysis_model() -> None:
+    signer = SnapshotSigner(key_id="gateway-key", private_key_pem=private_key_pem())
+    receipt_signer = GateReceiptSigner(secret=b"r" * 32)
+    body = snapshot_body(model_id="document-parse")
+    first_model = body["registry"]["models"][0]
+    first_model["provider_id"] = "analysis-provider"
+    body["providers"][0].update({"id": "analysis-provider", "enabled": True})
+    body["registry"]["models"].append(
+        {
+            "id": "solar-pro4",
+            "provider_id": "llm-provider",
+            "input_modalities": ["text"],
+            "expires_at": "2026-10-23T00:00:00+00:00",
+            "pdf_passthrough_verified": False,
+        }
+    )
+    body["providers"].append(
+        {
+            "id": "llm-provider",
+            "kind": "llm",
+            "enabled": True,
+            "endpoint": "https://provider.test/v1/responses",
+            "secret_ref": {
+                "kind": "env",
+                "identifier": "MEDIA_BRIDGE_TEST_LLM_KEY",
+            },
+        }
+    )
+    snapshot = signer.sign(
+        snapshot_id=UUID("00000000-0000-0000-0000-000000000001"),
+        version=1,
+        issued_at=datetime(2026, 8, 24, 4, 0, tzinfo=UTC),
+        body=body,
+    )
+    factory = GatewayTransactionFactory(
+        gate_factory=lambda _snapshot: object(),
+        downstream_factory=lambda _snapshot: object(),
+        receipt_signer=receipt_signer,
+        state_store_factory=GatewayStateStore,
+        credential_pepper=b"p" * 32,
+    )
+
+    generation = factory.build(snapshot)
+
+    assert _resolve_public_request({"model": "auto"}, generation)["model"] == "solar-pro4"
+    assert (
+        capability_registry_from_snapshot(snapshot).resolve("solar-pro4").state
+        is CapabilityState.NON_VISION
     )
 
 

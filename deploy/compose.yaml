@@ -32,6 +32,8 @@ services:
 
   media-bridge-control:
     <<: *runtime-security
+    ports:
+      - "${MEDIA_BRIDGE_CONTROL_BIND_ADDRESS:-127.0.0.1}:${MEDIA_BRIDGE_CONTROL_HOST_PORT:-18642}:8081"
     image: ${MEDIA_BRIDGE_CONTROL_IMAGE:-media-bridge-control:0.1.0}
     build:
       context: ..
@@ -44,6 +46,7 @@ services:
       MEDIA_BRIDGE_SNAPSHOT_PATH: /var/lib/media-bridge/snapshots/active.json
       MEDIA_BRIDGE_CONTROL_ORIGIN: ${MEDIA_BRIDGE_CONTROL_ORIGIN:-https://localhost}
       MEDIA_BRIDGE_CONTROL_HOST: ${MEDIA_BRIDGE_CONTROL_HOST:-localhost}
+      MEDIA_BRIDGE_CONTROL_ALLOW_INSECURE_HTTP: ${MEDIA_BRIDGE_CONTROL_ALLOW_INSECURE_HTTP:-false}
       MEDIA_BRIDGE_CONTROL_BIND_HOST: 0.0.0.0
       MEDIA_BRIDGE_CONTROL_PORT: "8081"
       MEDIA_BRIDGE_CONSOLE_STATIC_ROOT: /opt/media-bridge/web
@@ -86,21 +89,12 @@ services:
       MEDIA_BRIDGE_CONTROL_DATABASE_URL_FILE: /run/secrets/control_database_url
       MEDIA_BRIDGE_RECEIPT_SECRET_FILE: /run/secrets/receipt_secret
       MEDIA_BRIDGE_ASSET_ROOT: /var/lib/media-bridge/assets
-      MEDIA_BRIDGE_OCR_ENDPOINT: ${MEDIA_BRIDGE_OCR_ENDPOINT:-https://api.upstage.ai/v1/document-digitization}
-      MEDIA_BRIDGE_OCR_API_KEY_FILE: /run/secrets/ocr_api_key
-      MEDIA_BRIDGE_VISION_ENDPOINT: ${MEDIA_BRIDGE_VISION_ENDPOINT:-https://api.openai.com/v1/chat/completions}
-      MEDIA_BRIDGE_VISION_MODEL: ${MEDIA_BRIDGE_VISION_MODEL:-gpt-4.1-mini}
-      MEDIA_BRIDGE_VISION_API_KEY_FILE: /run/secrets/vision_api_key
-      MEDIA_BRIDGE_SOLAR_API_KEY_FILE: /run/secrets/solar_api_key
       MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL: ${MEDIA_BRIDGE_DOWNSTREAM_RESPONSES_URL:-https://localhost/v1/responses}
     secrets:
       - control_database_url
       - snapshot_public_key
       - gateway_auth_pepper
       - receipt_secret
-      - ocr_api_key
-      - vision_api_key
-      - solar_api_key
     networks: [database, product, egress]
     volumes:
       - snapshots:/var/lib/media-bridge/snapshots:ro
@@ -140,9 +134,3 @@ secrets:
     file: ${MEDIA_BRIDGE_GATEWAY_AUTH_PEPPER_FILE:-./secrets/control-security-pepper.secret}
   receipt_secret:
     file: ${MEDIA_BRIDGE_RECEIPT_SECRET_FILE:-./secrets/receipt-secret.secret}
-  ocr_api_key:
-    file: ${MEDIA_BRIDGE_OCR_API_KEY_FILE:-./secrets/ocr-api-key.secret}
-  vision_api_key:
-    file: ${MEDIA_BRIDGE_VISION_API_KEY_FILE:-./secrets/vision-api-key.secret}
-  solar_api_key:
-    file: ${MEDIA_BRIDGE_SOLAR_API_KEY_FILE:-./secrets/solar-api-key.secret}

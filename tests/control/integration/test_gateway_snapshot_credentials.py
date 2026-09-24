@@ -74,7 +74,7 @@ def test_control_snapshot_publishes_only_data_plane_credential_digest(
             ]
         )
 
-    body = ConfigurationService(database).snapshot_body()
+    body = ConfigurationService(database, security).snapshot_body()
     serialized = json.dumps(body)
     entry = body["data_plane_auth"]["entries"][0]
 
@@ -164,7 +164,7 @@ def test_snapshot_body_uses_one_repeatable_read_view(
 
     event.listen(database.engine, "after_cursor_execute", mutate_after_provider_read)
     try:
-        body = ConfigurationService(database).snapshot_body()
+        body = ConfigurationService(database, security).snapshot_body()
     finally:
         event.remove(database.engine, "after_cursor_execute", mutate_after_provider_read)
 

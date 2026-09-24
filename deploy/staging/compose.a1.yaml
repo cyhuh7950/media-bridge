@@ -94,6 +94,12 @@ networks:
     internal: true
 
 secrets:
+  ocr_api_key:
+    file: ${MEDIA_BRIDGE_OCR_API_KEY_FILE:-${MEDIA_BRIDGE_STAGING_ROOT:?Set MEDIA_BRIDGE_STAGING_ROOT}/secrets/ocr-api-key.secret}
+  vision_api_key:
+    file: ${MEDIA_BRIDGE_VISION_API_KEY_FILE:-${MEDIA_BRIDGE_STAGING_ROOT:?Set MEDIA_BRIDGE_STAGING_ROOT}/secrets/vision-api-key.secret}
+  solar_api_key:
+    file: ${MEDIA_BRIDGE_SOLAR_API_KEY_FILE:-${MEDIA_BRIDGE_STAGING_ROOT:?Set MEDIA_BRIDGE_STAGING_ROOT}/secrets/solar-api-key.secret}
   gateway_client_credential:
     file: ${MEDIA_BRIDGE_STAGING_ROOT:?Set MEDIA_BRIDGE_STAGING_ROOT}/secrets/client-credential.secret
   downstream_api_key:
