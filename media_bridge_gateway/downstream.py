@@ -478,6 +478,8 @@ class ProviderResponsesDownstream:
                 defaults = self._snapshot.get("defaults")
                 if isinstance(defaults, Mapping):
                     requested_effort = defaults.get("reasoning_effort")
+            if requested_effort == "provider_default":
+                requested_effort = None
             if requested_effort is not None:
                 if requested_effort not in {"low", "medium", "high"}:
                     raise DownstreamError(

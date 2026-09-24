@@ -1,5 +1,12 @@
 # Media Bridge 작업현황
 
+## 2026-09-24 — 외부 클라이언트 시험 `reasoning_effort_invalid` 수정 진행
+
+- 화면에서 추론 등급 `미지정(기본값)`을 선택한 요청이 Gateway에서 `reasoning_effort_invalid`로 거부되는 경로를 재현했다. 외부 시험 요청에서는 해당 필드를 생략하며, Gateway는 snapshot `defaults.reasoning_effort`에 기록된 `provider_default`를 유효 등급으로 취급해 거부하고 있었다.
+- 회귀 테스트를 먼저 추가해 수정 전 실패를 확인했다. Gateway에서 snapshot 기본값 `provider_default`를 명시적 덮어쓰기 없음으로 처리하도록 수정했다. Provider에 저장된 자체 추론 설정을 유지한다.
+- 검증: 신규 회귀 포함 Gateway 전체 `71 passed`; 배포/브라우저 재확인 및 사용자가 직접 실행하는 실제 Provider 호출은 아직 남아 있다.
+- 기준: 원격 `main` `ee0ca8bc758067f6acf36f2db17b8f8ff04596e0`, ysna-server checkout `474110a9c774443f5144ba7234e8de3f4af3a22a`; 다음 조치는 지정 SSH 별칭으로 변경 반영·배포 및 health/UI smoke다.
+
 ## 2026-09-24 — codex/manual-integrated-revision main 반영·ysna-server 배포 완료
 
 - 신산님 직접 승인에 따라 PR을 생략하고 `github-cyhuh7950` SSH 별칭으로 원격 `main`에 병합 커밋 `474110a9c774443f5144ba7234e8de3f4af3a22a`를 반영했다. 원격 `main`과 ysna-server checkout 모두 해당 SHA를 확인했다.

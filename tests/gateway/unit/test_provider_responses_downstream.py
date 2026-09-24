@@ -143,6 +143,29 @@ async def test_downstream_uses_default_routing_when_model_has_no_route_binding()
 
 
 @pytest.mark.asyncio
+async def test_provider_default_snapshot_effort_keeps_provider_setting() -> None:
+    signer = GateReceiptSigner(secret=b"r" * 32)
+    backend = CaptureBackend()
+    seen_providers: list[dict[str, Any]] = []
+
+    def build(provider: dict[str, Any]) -> CaptureBackend:
+        seen_providers.append(provider)
+        return backend
+
+    snapshot = _snapshot()
+    snapshot["defaults"] = {"reasoning_effort": "provider_default"}
+    downstream = ProviderResponsesDownstream(
+        snapshot=snapshot,
+        backend_factory=build,
+        receipt_signer=signer,
+    )
+
+    await downstream.invoke(_request(signer, "solar-alias"))
+
+    assert seen_providers[0]["reasoning_effort"] == "high"
+
+
+@pytest.mark.asyncio
 async def test_downstream_rejects_ambiguous_model_provider_before_backend_creation() -> None:
     signer = GateReceiptSigner(secret=b"r" * 32)
     created: list[bool] = []
