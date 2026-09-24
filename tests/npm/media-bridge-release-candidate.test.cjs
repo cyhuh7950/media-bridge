@@ -77,6 +77,13 @@ test('public release workflow is version-driven and npm publication requires its
   assert.doesNotMatch(workflow, /VERSION:\s*0\.1\.13|TAG:\s*v0\.1\.13|SOURCE_COMMIT:\s*5e0f295|workflow_dispatch:[\s\S]{0,250}contents:\s*write/);
 });
 
+test('npm release integration does not restore unrelated desktop package workflows', () => {
+  for (const name of ['release-deb.yml', 'release-deb-arm64.yml', 'release-windows-msi.yml']) {
+    assert.equal(fs.existsSync(path.join(workflowRoot, name)), false,
+      `${name} was intentionally removed from main and is outside the npm release approval`);
+  }
+});
+
 test('candidate assembly binds all runtime archives to one version, source commit, and verified evidence', async (context) => {
   assert.ok(fs.existsSync(candidateScript), 'candidate assembler must exist');
   const { assembleCandidate } = require(candidateScript);
