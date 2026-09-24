@@ -10,6 +10,16 @@ on:
         description: Runtime version in x.y.z format
         required: true
         default: 0.1.13
+  workflow_call:
+    inputs:
+      version:
+        description: Runtime version in x.y.z format
+        required: true
+        type: string
+      source_commit:
+        description: Exact 40-character source commit SHA
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -18,12 +28,10 @@ jobs:
   build-runtime:
     runs-on: ubuntu-24.04-arm
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Resolve runtime version
+      - name: Validate runtime inputs
         env:
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}
         run: |
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             RUNTIME_VERSION="${GITHUB_REF_NAME#runtime-v}"
@@ -31,7 +39,13 @@ jobs:
             RUNTIME_VERSION="$INPUT_VERSION"
           fi
           [[ "$RUNTIME_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid runtime version: $RUNTIME_VERSION" >&2; exit 2; }
+          [[ "$INPUT_SOURCE_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "source_commit must be a full 40-character SHA" >&2; exit 2; }
           echo "RUNTIME_VERSION=$RUNTIME_VERSION" >> "$GITHUB_ENV"
+          echo "SOURCE_COMMIT=${INPUT_SOURCE_COMMIT,,}" >> "$GITHUB_ENV"
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit || github.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -68,7 +82,7 @@ jobs:
           packaging/runtime/verify-linux-arm64.sh \
             --artifact-dir "$RUNTIME_OUTPUT" \
             --test-root "$RUNNER_TEMP/media-bridge-runtime-verification" \
-            --source-commit '${{ github.sha }}'
+            --source-commit "$SOURCE_COMMIT"
 
       - name: Retain private workflow artifact
         uses: actions/upload-artifact@v4

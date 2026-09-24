@@ -151,13 +151,16 @@ if (!result.managedInstall || result.managedPython !== false || !result.checksum
 NODE
 
 inventory_entries="$(wc -l < "$inventory_path" | tr -d ' ')"
-node - "$artifact_dir/verification-result.json" "$source_commit" "$artifact_name" "$actual_sha" "$port" "$health_body" "$inventory_entries" "$managed_json" <<'NODE'
+node - "$artifact_dir/verification-result.json" "$manifest_path" "$source_commit" "$artifact_name" "$actual_sha" "$port" "$health_body" "$inventory_entries" "$managed_json" <<'NODE'
 const fs = require('node:fs');
-const [resultPath, sourceCommit, artifactName, sha256, port, healthBody, inventoryEntries, managedJson] = process.argv.slice(2);
+const [resultPath, manifestPath, sourceCommit, artifactName, sha256, port, healthBody, inventoryEntries, managedJson] = process.argv.slice(2);
 const managed = JSON.parse(managedJson);
+const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const result = {
   schemaVersion: 1,
   sourceCommit: sourceCommit.toLowerCase(),
+  packageVersion: manifest.packageVersion,
+  runtimeVersion: manifest.artifacts['linux-arm64'].version,
   artifactName,
   sha256,
   platform: 'linux-arm64',

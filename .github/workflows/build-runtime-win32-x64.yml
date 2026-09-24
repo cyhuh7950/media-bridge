@@ -10,6 +10,16 @@ on:
         description: Runtime version in x.y.z format
         required: true
         default: 0.1.13
+  workflow_call:
+    inputs:
+      version:
+        description: Runtime version in x.y.z format
+        required: true
+        type: string
+      source_commit:
+        description: Exact 40-character source commit SHA
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -18,24 +28,29 @@ jobs:
   build-runtime:
     runs-on: windows-2022
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Resolve runtime version
+      - name: Validate runtime inputs
         shell: pwsh
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = '${{ inputs.version }}'
           if ($env:GITHUB_REF_TYPE -eq 'tag') {
             if ($env:GITHUB_REF_NAME -notmatch '^runtime-v(?<version>[0-9]+\.[0-9]+\.[0-9]+)$') {
               throw "invalid runtime tag: $env:GITHUB_REF_NAME"
             }
             $version = $Matches.version
+          } else {
+            $version = $env:INPUT_VERSION
           }
-          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') {
-            throw "invalid runtime version: $version"
-          }
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw "invalid runtime version: $version" }
+          if ($env:INPUT_SOURCE_COMMIT -notmatch '^[0-9a-fA-F]{40}$') { throw 'source_commit must be a full 40-character SHA' }
           "RUNTIME_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SOURCE_COMMIT=$($env:INPUT_SOURCE_COMMIT.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit || github.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -84,7 +99,7 @@ jobs:
           ./packaging/runtime/verify-win32-x64.ps1 `
             -ArtifactDirectory $env:RUNTIME_OUTPUT `
             -TestRoot (Join-Path $env:RUNNER_TEMP 'media-bridge-runtime-verification') `
-            -SourceCommit '${{ github.sha }}'
+            -SourceCommit $env:SOURCE_COMMIT
 
       - name: Retain private workflow artifact
         uses: actions/upload-artifact@v4
