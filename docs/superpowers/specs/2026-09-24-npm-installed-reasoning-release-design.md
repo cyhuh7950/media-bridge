@@ -40,7 +40,7 @@
 
 조정 workflow는 세 빌드 산출물의 이름·checksum·검증 evidence가 모두 동일 source commit 및 `0.1.14`에 대응하는지 확인한 후 후보 manifest를 생성한다. manifest의 URL은 추후 공개 Release asset 경로를 사용하지만, 후보 검증에서는 manifest를 임시 loopback URL로 치환해 공개 URL 없이 실제 checksum/download/install 경로를 시험한다.
 
-후보 manifest, 플랫폼 산출물, `npm pack` tarball 및 검증 결과는 GitHub Actions private artifact로만 보관한다. 저장소의 release manifest/버전 메타데이터를 자동 변경하지 않는다. 후보 산출물은 검토 가능한 evidence이며 공개 배포물이 아니다.
+후보 manifest, 플랫폼 산출물, `npm pack` tarball 및 검증 결과는 GitHub Actions workflow artifact로 보관한다. artifact 접근 범위는 저장소 visibility와 GitHub 권한을 따르며, 이를 private이라고 가정하지 않는다. 후보 산출물에는 Secret을 포함하지 않는다. 저장소의 release manifest/버전 메타데이터를 자동 변경하지 않는다. 후보 산출물은 정식 GitHub Release asset 또는 npm 배포물이 아니다.
 
 ### 3.3 격리 설치 검증
 
@@ -79,4 +79,3 @@
 4. hard-coded `0.1.13` release assumptions를 version/source/artifact evidence 검사로 교체
 5. package/release 계약 테스트와 전체 관련 검증 수행
 6. 후보 artifact evidence와 제한 사항을 `docs/WORK_STATUS.md`에 기록
-
