@@ -120,7 +120,7 @@
 
 - [x] **Step 1: Update version contract tests** to use an explicit candidate version input rather than freezing every future release to `0.1.13`; retain historical `0.1.13` metadata expectations only in tests that explicitly validate that published release.
 - [x] **Step 2: Change npm package version to `0.1.14`** and make candidate assembly generate its runtime manifest in a temporary package staging directory; do not mark unpublished placeholder hashes as published in tracked source or modify the tracked `runtime-manifest.json`.
-- [ ] **Step 3: Run `npm pack --dry-run` and `npm pack`** in `packaging/npm` with isolated npm cache/temp output; inspect the exact tarball file list to ensure it contains CLI, manifest, library, docs, and no tests, secrets, caches, or build intermediates.
+- [x] **Step 3: Run `npm pack --dry-run` and `npm pack`** in `packaging/npm` with isolated npm cache/temp output; inspect the exact tarball file list to ensure it contains CLI, manifest, library, docs, and no tests, secrets, caches, or build intermediates.
 - [ ] **Step 4: Install the resulting tarball into an isolated local prefix** where a native runtime artifact is available, then run CLI health/settings UI/API assertions without touching the existing 8642 installation.
 - [ ] **Step 5: Update `docs/WORK_STATUS.md`** with source SHA, candidate version, per-platform artifact evidence, actual npm tarball/install results, failures, and all remaining unverified/publication boundaries.
 
@@ -142,4 +142,4 @@
 - [x] **Step 3: Run package lint/type/build checks** only where configured for the npm runtime; inspect `package.json` scripts and execute the exact repository commands.
 - [x] **Step 4: Run `git diff --check`, inspect all workflow permissions/triggers and package contents, and verify the branch contains no secret, temporary file, release tag, or public publication side effect.
 - [x] **Step 5: Commit and push each completed checkpoint** using `github-cyhuh7950`; verify local branch HEAD equals `origin/codex/installed-reasoning-level-config` and leave unrelated branches/worktrees untouched.
-- [ ] **Step 6: Report candidate evidence and limitations**. If GitHub Actions native runners are unavailable, state that the three-platform candidate is not complete; do not call the local `npm pack` result a successful multi-platform npm install.
+- [x] **Step 6: Report candidate evidence and limitations**. If GitHub Actions native runners are unavailable, state that the three-platform candidate is not complete; do not call the local `npm pack` result a successful multi-platform npm install.
