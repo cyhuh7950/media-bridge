@@ -12,6 +12,7 @@ on:
       - 'media_bridge_personal/**'
       - 'packaging/npm/**'
       - 'packaging/runtime/**'
+      - 'tests/packaging/test_runtime_artifact_contract.py'
       - 'tests/npm/**'
 
 permissions:

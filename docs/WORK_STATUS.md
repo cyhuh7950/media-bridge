@@ -474,6 +474,6 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 
 - Actions 실행 `36014733494` (`d909374`)에서 Linux x64·ARM64 runtime build는 성공했고 Windows x64 job은 `Run artifact contract tests` 단계에서 실패했다. assemble/install 후속 job은 실패 선행조건 때문에 skip됐다. 익명 Actions 화면은 테스트 출력 대신 일반 exit code만 보여 상세 로그는 확인할 수 없었다. GitHub 계정으로 로그인하지 않았다.
 - Windows에서 동일한 `tests/packaging/test_runtime_artifact_contract.py`를 재현했다. 두 계약 테스트가 reusable workflow 방식 이전의 `run-id`, workflow 내부 manifest 검증, 직접 `github.sha` 인자와 옛 npm publish 문자열을 계속 요구해 현재 pipeline과 불일치했다.
-- 회귀 계약 테스트를 현재 구조에 맞췄다: 세 reusable build의 exact source SHA 전달, 5개 artifact 다운로드, `assemble-candidate.cjs`의 source/digest/manifest 검증, verifier로부터 전달된 source SHA 및 실제 npm tarball publish command를 검사한다. runtime/workflow 동작은 바꾸지 않았다.
+- 회귀 계약 테스트를 현재 구조에 맞췄다: 세 reusable build의 exact source SHA 전달, 5개 artifact 다운로드, `assemble-candidate.cjs`의 source/digest/manifest 검증, verifier로부터 전달된 source SHA 및 실제 npm tarball publish command를 검사한다. 이 계약 테스트 파일 변경도 후보 workflow를 다시 실행하도록 경로 필터에 등록했다.
 - 검증: Windows 호스트에서 `tests/packaging/test_runtime_artifact_contract.py` 전체 14 passed. Actions 로그에서 보인 실패 job 단계를 로컬에서 재현하고, 수정 후 전체 계약 suite를 통과했다. native artifact 재빌드·후보 조립·격리 설치는 새 Actions 실행으로 재확인해야 한다.
 - 다음 조치: 변경을 기존 SSH alias로 push해 path-filtered candidate workflow를 다시 실행하고 세 플랫폼 build, assembly 및 native install 결과를 확인한다. 공개 publish, main 병합, 로컬 runtime 변경, ysna 배포는 계속 범위 밖이다.
