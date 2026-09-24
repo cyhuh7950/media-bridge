@@ -234,6 +234,13 @@ def _section(config: dict[str, Any], name: str) -> dict[str, Any]:
 def _normalize_npm_config(config: dict[str, Any]) -> dict[str, Any]:
     """Read both the 0.1.10 schema and the role-based provider schema."""
     result = dict(config)
+    configured_llm = _section(result, "textLlm")
+    default_effort = (
+        "provider_default"
+        if configured_llm.get("preset") == "custom"
+        else "medium"
+    )
+    result["reasoningEffort"] = str(result.get("reasoningEffort", default_effort))
     host = str(result.get("host", "127.0.0.1"))
     port = int(result.get("port", 8642))
     legacy_agent = _section(result, "opencodex")
@@ -300,9 +307,17 @@ def _validated_generic_settings(payload: object, current: dict[str, Any]) -> dic
         conversion = dict(payload["conversion"])
         failure_policy = dict(payload["failurePolicy"])
         max_bytes = int(conversion["maxBytes"])
+        current_effort = str(
+            _normalize_npm_config(current).get("reasoningEffort", "medium")
+        )
+        media_bridge_effort = str(payload.get("reasoningEffort", current_effort))
     except (KeyError, TypeError, ValueError) as error:
         raise PersonalRuntimeConfigurationError("settings are invalid") from error
-    if not 1 <= port <= 65_535 or max_bytes < 1:
+    if (
+        not 1 <= port <= 65_535
+        or max_bytes < 1
+        or media_bridge_effort not in {"provider_default", "low", "medium", "high"}
+    ):
         raise PersonalRuntimeConfigurationError("settings are invalid")
     agent_preset = str(coding_agent.get("preset", "")).strip()
     agent_protocol = str(coding_agent.get("protocol", "")).strip()
@@ -351,12 +366,16 @@ def _validated_generic_settings(payload: object, current: dict[str, Any]) -> dic
         llm_protocol,
         llm_model,
     )
-    if llm_effort != "provider_default" and (
-        capability is None or llm_effort not in capability.efforts
+    effective_effort = (
+        llm_effort if llm_effort != "provider_default" else media_bridge_effort
+    )
+    if effective_effort != "provider_default" and (
+        capability is None or effective_effort not in capability.efforts
     ):
         raise PersonalRuntimeConfigurationError("reasoning effort is unsupported")
     result = _normalize_npm_config(current)
     result.update({"runtimeMode": "personal", "host": "127.0.0.1", "port": port})
+    result["reasoningEffort"] = media_bridge_effort
     result["codingAgent"] = {
         "preset": agent_preset,
         "protocol": agent_protocol,
@@ -416,8 +435,17 @@ def _public_settings(config: dict[str, Any], store: CredentialStore) -> dict[str
         "mediaProcessor": dict(_section(normalized, "mediaProcessor")),
         "conversion": dict(_section(normalized, "conversion")),
         "failurePolicy": dict(_section(normalized, "failurePolicy")),
+        "reasoningEffort": normalized.get("reasoningEffort", "medium"),
         "credentials": store.status(),
     }
+
+
+def _effective_reasoning_effort(config: dict[str, Any]) -> str:
+    normalized = _normalize_npm_config(config)
+    override = str(
+        _section(normalized, "textLlm").get("reasoningEffort", "provider_default")
+    )
+    return override if override != "provider_default" else str(normalized["reasoningEffort"])
 
 
 def _validated_settings(payload: dict[str, str], current: dict[str, Any]) -> dict[str, Any]:
@@ -427,11 +455,16 @@ def _validated_settings(payload: dict[str, str], current: dict[str, Any]) -> dic
         opencodex_base_url = payload["opencodex_base_url"].strip()
         solar_model = payload["solar_model"].strip()
         solar_effort = payload.get("reasoning_effort", "provider_default").strip()
+        media_bridge_effort = payload.get("media_bridge_reasoning_effort", "medium").strip()
         solar_endpoint = payload["solar_endpoint"].strip()
         ocr_endpoint = payload["ocr_endpoint"].strip()
     except (KeyError, TypeError, ValueError) as error:
         raise PersonalRuntimeConfigurationError("settings are invalid") from error
-    if not 1 <= port <= 65_535 or max_bytes < 1:
+    if (
+        not 1 <= port <= 65_535
+        or max_bytes < 1
+        or media_bridge_effort not in {"provider_default", "low", "medium", "high"}
+    ):
         raise PersonalRuntimeConfigurationError("settings are invalid")
     for endpoint, loopback_allowed in (
         (opencodex_base_url, True),
@@ -459,12 +492,16 @@ def _validated_settings(payload: dict[str, str], current: dict[str, Any]) -> dic
     solar_capability = reasoning_capability(
         "upstage-solar", "openai-chat-completions", solar_model
     )
-    if solar_effort != "provider_default" and (
-        solar_capability is None or solar_effort not in solar_capability.efforts
+    effective_effort = (
+        solar_effort if solar_effort != "provider_default" else media_bridge_effort
+    )
+    if effective_effort != "provider_default" and (
+        solar_capability is None or effective_effort not in solar_capability.efforts
     ):
         raise PersonalRuntimeConfigurationError("reasoning effort is unsupported")
     result = dict(current)
     result.update({"runtimeMode": "personal", "host": "127.0.0.1", "port": port})
+    result["reasoningEffort"] = media_bridge_effort
     result["opencodex"] = {"baseUrl": opencodex_base_url}
     result["solar"] = {
         "model": solar_model,
@@ -548,6 +585,7 @@ def _settings_page(config: dict[str, Any], *, saved: bool = False) -> str:
     checked_block = (
         " checked" if policy.get("blockSolarOnPreparationFailure") is not False else ""
     )
+    media_bridge_effort = str(normalized.get("reasoningEffort", "medium"))
     notice = (
         '<p class="notice" role="status">설정을 저장했습니다. 현재 시험 화면에는 즉시 반영되며 '
         '일반 요청에는 <code>mb service restart</code> 후 적용됩니다.</p>'
@@ -577,6 +615,7 @@ input[type=checkbox]{{display:inline;width:auto;margin-right:8px}} button{{borde
 <section><h2>Media Bridge</h2>
 <label>포트<input name="port" type="number" min="1" max="65535" required value="{value(normalized.get('port', 8642))}"></label>
 <label>변환 최대 크기(bytes)<input name="max_bytes" type="number" min="1" required value="{value(conversion.get('maxBytes', 8_388_608))}"></label>
+<label>기본 추론 등급<select name="media_bridge_reasoning_effort"><option value="provider_default"{selected(media_bridge_effort,'provider_default')}>미지정 (Provider 기본값)</option><option value="low"{selected(media_bridge_effort,'low')}>낮음</option><option value="medium"{selected(media_bridge_effort,'medium')}>중간</option><option value="high"{selected(media_bridge_effort,'high')}>높음</option></select></label>
 <label><input name="ocr_enabled" type="checkbox" value="true"{checked_ocr}>OCR 변환 사용</label>
 <label><input name="vision_enabled" type="checkbox" value="true"{checked_vision}>Vision 보강 사용</label>
 <label><input name="block_solar_on_failure" type="checkbox" value="true"{checked_block}>미디어 처리 실패 시 LLM 전송 차단</label></section>
@@ -590,7 +629,7 @@ input[type=checkbox]{{display:inline;width:auto;margin-right:8px}} button{{borde
 <label>API 방식<select name="text_llm_protocol"><option value="openai-chat-completions"{selected(text_llm.get('protocol'),'openai-chat-completions')}>Chat Completions</option><option value="openai-responses"{selected(text_llm.get('protocol'),'openai-responses')}>Responses</option></select></label>
 <label>Endpoint<input name="solar_endpoint" type="url" required value="{value(text_llm.get('endpoint','https://api.upstage.ai/v1/chat/completions'))}"></label>
 <label>모델<input name="solar_model" required value="{value(text_llm.get('model','solar-pro4'))}"></label>
-<label data-reasoning-setting>추론 등급<select name="reasoning_effort"><option value="provider_default"{selected(text_llm.get('reasoningEffort','provider_default'),'provider_default')}>Provider 기본값</option><option value="low"{selected(text_llm.get('reasoningEffort'),'low')}>낮음</option><option value="medium"{selected(text_llm.get('reasoningEffort'),'medium')}>중간</option><option value="high"{selected(text_llm.get('reasoningEffort'),'high')}>높음</option></select></label>
+<label data-reasoning-setting>추론 등급<select name="reasoning_effort"><option value="provider_default"{selected(text_llm.get('reasoningEffort','provider_default'),'provider_default')}>미지정 (Media Bridge 등급 사용)</option><option value="low"{selected(text_llm.get('reasoningEffort'),'low')}>낮음</option><option value="medium"{selected(text_llm.get('reasoningEffort'),'medium')}>중간</option><option value="high"{selected(text_llm.get('reasoningEffort'),'high')}>높음</option></select></label>
 <label>API Key<input name="text_llm_api_key" type="password" autocomplete="new-password" placeholder="저장된 키는 다시 표시하지 않습니다"></label>
 <p class="secret-state" data-secret="text-llm">저장 상태를 확인하는 중…</p><button class="secondary" type="button" data-action="text-llm">LLM 연결 시험</button><div id="text-llm-result" class="result" aria-live="polite"></div></section>
 <section><h2>Vision / OCR 처리 엔진</h2>
@@ -616,6 +655,7 @@ const field=(name)=>form.elements.namedItem(name);
 const show=(id,value)=>{document.querySelector(`#${id}`).textContent=typeof value==='string'?value:JSON.stringify(value,null,2)};
 const payload=()=>({
  port:Number(field('port').value),
+ reasoningEffort:field('media_bridge_reasoning_effort').value,
  codingAgent:{preset:field('coding_agent_preset').value,protocol:field('coding_agent_protocol').value,baseUrl:field('opencodex_base_url').value},
  textLlm:{preset:field('text_llm_preset').value,protocol:field('text_llm_protocol').value,endpoint:field('solar_endpoint').value,model:field('solar_model').value,reasoningEffort:field('reasoning_effort').value,credentialRef:'text-llm',apiKey:field('text_llm_api_key').value},
  mediaProcessor:{preset:field('media_processor_preset').value,protocol:'upstage-document-parse',endpoint:field('ocr_endpoint').value,model:field('media_processor_model').value,credentialRef:'media-processor',apiKey:field('media_processor_api_key').value},
@@ -657,7 +697,7 @@ class ProviderTester:
         protocol = str(profile.get("protocol", ""))
         model = str(profile.get("model", ""))
         endpoint = str(profile.get("endpoint", ""))
-        effort = str(profile.get("reasoningEffort", "provider_default"))
+        effort = _effective_reasoning_effort(config)
         capability = reasoning_capability(
             "upstage-solar" if profile.get("preset") == "upstage-solar" else None,
             protocol,
@@ -1350,7 +1390,7 @@ def build_personal_runtime_from_config(
             api_key_env="",
             credential_loader=lambda: credential_store.resolve(text_reference),
             protocol=text_protocol,
-            reasoning_effort=str(text_llm.get("reasoningEffort", "provider_default")),
+            reasoning_effort=_effective_reasoning_effort(config),
             provider_name=(
                 "Solar" if text_llm.get("preset") == "upstage-solar" else "Text LLM"
             ),

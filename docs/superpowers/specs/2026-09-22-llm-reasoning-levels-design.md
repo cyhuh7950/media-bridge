@@ -31,16 +31,17 @@
 
 ### 설정 단위와 정본
 
-- 전역 단일 값이 아니라 **Provider와 모델 조합별** 설정으로 한다. 현재 데이터 모델에서 Provider가 모델 ID 하나를 보유하므로 Provider 설정에 귀속시키고, 모델 ID가 바뀌면 지원 선택지도 다시 검증한다.
+- 배포형은 **Provider와 모델 조합별** 설정으로 한다. 현재 데이터 모델에서 Provider가 모델 ID 하나를 보유하므로 Provider 설정에 귀속시키고, 모델 ID가 바뀌면 지원 선택지도 다시 검증한다.
+- 설치형은 신산님의 2026-09-24 지시에 따라 두 단계 설정을 사용한다. Media Bridge 설정의 `reasoningEffort`는 기본 등급이며, Non‑Vision LLM 설정의 `textLlm.reasoningEffort`는 선택적 고정값이다. LLM 값이 `provider_default`이면 Media Bridge 등급을 사용하고, 등급을 직접 지정하면 Media Bridge 값보다 우선한다.
 - 배포형 정본은 기존 DB Provider 설정이다. 선택값은 해당 Non‑Vision LLM Provider/모델 설정에 저장되고, snapshot을 통해 실행 가능한 Data Plane downstream까지 전달된다. Secret 원문은 기존 DB credential 경로만 사용하며 snapshot에 넣지 않는다.
-- 설치형 정본은 기존 `~/.media-bridge/config.json`의 `textLlm` 설정이다. 개인용 credential 저장 위치와 기존 설정 파일 포맷을 유지한다.
+- 설치형 정본은 기존 `~/.media-bridge/config.json`이다. 기본 등급은 최상위 `reasoningEffort`, LLM 고정값은 `textLlm.reasoningEffort`에 저장하며 개인용 credential 저장 위치와 기존 설정 파일 포맷을 유지한다.
 - 설치형 및 배포형의 설정명은 `reasoningEffort`(JSON API wire name `reasoning_effort`)로 통일한다. 값이 없거나 `provider_default`이면 제공사 기본 동작을 보존한다.
 
 ### UI 동작
 
-- 배포형의 Non‑Vision LLM Provider/모델 설정과 설치형 Solar 설정에 `추론 등급` selector를 제공한다. 분석 Provider 설정에는 표시하지 않는다.
+- 배포형의 Non‑Vision LLM Provider/모델 설정과 설치형 Media Bridge 및 Non‑Vision LLM 설정 양쪽에 `추론 등급` selector를 제공한다. 설치형에서는 Non‑Vision LLM의 직접 지정값이 Media Bridge 기본값보다 우선한다. 분석 Provider 설정에는 표시하지 않는다.
 - 지원 선택은 `Provider 기본값`과 현재 Provider/API/모델에서 검증된 등급의 교집합으로 제한한다. `없음/최소/낮음/보통/높음/최대`처럼 보편 enum을 모든 Provider에 강제로 보여주지 않는다.
-- 기존 설정을 불러올 때 필드가 없으면 `Provider 기본값`으로 표시한다. 저장 시에도 선택값을 명시적으로 유지한다.
+- 기존 설정을 불러올 때 필드가 없으면 설치형 Solar는 Media Bridge `medium`과 LLM `provider_default`를 사용한다. reasoning capability가 확인되지 않은 기존 사용자 정의 LLM은 Media Bridge `provider_default`를 사용해 기존 요청을 유지한다. 저장 시에는 선택값을 명시적으로 유지한다.
 - 설정 저장은 기존 인증·권한·CSRF 경계와 local-origin 경계를 그대로 따른다. credential 원문을 새로 요구하거나 노출하지 않는다.
 
 ## 4. Provider 요청 변환

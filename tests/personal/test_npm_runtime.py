@@ -421,6 +421,7 @@ async def test_personal_settings_page_saves_non_secret_npm_config(
             "ocr_endpoint": "https://api.upstage.ai/v1/document-digitization",
             "ocr_api_key_env": "UPSTAGE_API_KEY",
             "max_bytes": "4194304",
+            "media_bridge_reasoning_effort": "high",
             "ocr_enabled": "true",
             "vision_enabled": "true",
             "block_solar_on_failure": "true",
@@ -462,6 +463,7 @@ async def test_personal_settings_page_saves_non_secret_npm_config(
     assert '환경변수 대체 입력' not in page.text
     assert "apiKey" not in persisted["solar"]
     assert persisted["textLlm"]["reasoningEffort"] == "provider_default"
+    assert persisted["reasoningEffort"] == "high"
 
 
 class FakeProviderTester:
@@ -552,6 +554,7 @@ async def test_provider_console_saves_generic_profiles_and_secrets_without_echo(
     )
     payload = {
         "port": 8642,
+        "reasoningEffort": "provider_default",
         "codingAgent": {
             "preset": "eoul-gateway",
             "protocol": "openai-responses",
@@ -583,6 +586,13 @@ async def test_provider_console_saves_generic_profiles_and_secrets_without_echo(
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1:8642"
         ) as client:
+            unsupported = json.loads(json.dumps(payload))
+            unsupported["reasoningEffort"] = "low"
+            rejected = await client.post(
+                "/api/settings",
+                json=unsupported,
+                headers={"origin": "http://127.0.0.1:8642"},
+            )
             saved = await client.post(
                 "/api/settings",
                 json=payload,
@@ -602,14 +612,17 @@ async def test_provider_console_saves_generic_profiles_and_secrets_without_echo(
         await runtime.close()
 
     assert saved.status_code == 200
+    assert rejected.status_code == 400
     assert loaded.status_code == 200
     assert options.json() == {"options": ["low", "medium", "high"]}
     assert denied_options.status_code == 403
     assert 'name="reasoning_effort"' in page.text
+    assert 'name="media_bridge_reasoning_effort"' in page.text
     assert '환경변수 대체 입력' not in page.text
     assert 'solar_api_key_env' not in npm_runtime_module._settings_script()
     assert 'ocr_api_key_env' not in npm_runtime_module._settings_script()
     assert loaded.json()["credentials"] == {"text-llm": True, "media-processor": True}
+    assert loaded.json()["reasoningEffort"] == "provider_default"
     serialized = json.dumps(loaded.json()) + page.text + config_file.read_text(encoding="utf-8")
     assert "llm-secret-value" not in serialized
     assert "ocr-secret-value" not in serialized
@@ -622,7 +635,16 @@ async def test_provider_console_saves_generic_profiles_and_secrets_without_echo(
     assert persisted["codingAgent"]["preset"] == "eoul-gateway"
     assert persisted["textLlm"]["model"] == "text-model"
     assert persisted["textLlm"]["reasoningEffort"] == "provider_default"
+    assert persisted["reasoningEffort"] == "provider_default"
     assert persisted["mediaProcessor"]["protocol"] == "upstage-document-parse"
+
+
+def test_normalize_custom_llm_keeps_provider_default_when_effort_is_absent() -> None:
+    normalized = npm_runtime_module._normalize_npm_config(
+        {"textLlm": {"preset": "custom", "model": "my-model"}}
+    )
+
+    assert normalized["reasoningEffort"] == "provider_default"
 
 
 @pytest.mark.asyncio
@@ -764,6 +786,7 @@ async def test_real_provider_tester_runs_ocr_then_text_without_forwarding_media(
             "credentialRef": "text-llm",
             "credentialEnv": "MISSING_LLM_KEY",
         },
+        "reasoningEffort": "low",
         "mediaProcessor": {
             "protocol": "upstage-document-parse",
             "endpoint": "https://api.example.test/v1/document-digitization",
@@ -788,6 +811,41 @@ async def test_real_provider_tester_runs_ocr_then_text_without_forwarding_media(
         "/v1/document-digitization",
         "/v1/chat/completions",
     ]
+
+
+@pytest.mark.asyncio
+async def test_provider_tester_uses_media_bridge_effort_when_llm_effort_is_unset(
+    tmp_path: Path,
+) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}}]},
+        )
+
+    store = CredentialStore(tmp_path / "providers.json")
+    store.set("text-llm", "test-provider-secret")
+    tester = ProviderTester(store, transport=httpx.MockTransport(handler))
+
+    await tester.test_text_llm(
+        {
+            "reasoningEffort": "medium",
+            "textLlm": {
+                "preset": "upstage-solar",
+                "protocol": "openai-chat-completions",
+                "endpoint": "https://api.example.test/v1/chat/completions",
+                "model": "solar-pro4",
+                "reasoningEffort": "provider_default",
+                "credentialRef": "text-llm",
+            },
+        },
+        "test",
+    )
+
+    assert json.loads(requests[0].content)["reasoning_effort"] == "medium"
 
 @pytest.mark.asyncio
 async def test_missing_config_opens_initial_settings(tmp_path: Path) -> None:

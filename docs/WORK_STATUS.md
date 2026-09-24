@@ -1,5 +1,14 @@
 # Media Bridge 작업현황
 
+## 2026-09-24 — 설치형 Media Bridge 추론 등급 우선순위 설정 진행
+
+- 신산님 지시: 설치형 Settings의 `Media Bridge`와 `Non-Vision LLM` 두 카드에서 등급을 설정한다. Non‑Vision LLM에 구체 등급이 지정되면 Media Bridge 등급보다 우선하고, `미지정 (Media Bridge 등급 사용)`이면 Media Bridge 설정을 사용한다. 배포형은 범위에 포함하지 않는다.
+- 작업 branch/worktree: `codex/installed-reasoning-level-config`, `.worktrees/installed-reasoning-level-config`, 시작 HEAD `e45b0c9`. 설치형 `npm_runtime.py` 저장·조회·UI·Provider 시험·실제 downstream 구성 경로와 회귀 테스트를 수정 중이며 DB migration은 없다.
+- RED→GREEN: 새 미지원 조합/기존 custom 설정 호환성 검사가 구현 전 실패했다. 변경 후 설치형 테스트 `16 passed`, `npm_runtime` + `solar_responses` 회귀 `27 passed`, 변경 파일 Ruff 통과.
+- 전체 검증: Windows Python full suite `585 passed, 7 skipped, 5 failed`. Windows에 `os.O_DIRECTORY`가 없어 snapshot 원자 기록 통합 테스트 3건이 실패했다. 나머지 2건은 PowerShell subprocess stderr의 cp949 decode 문제였고 UTF‑8 모드 재검증에서는 `2 passed`다. 이 5건은 수정 파일·기능과 무관하다.
+- 미검증: 실제 Upstage 요청·설치 artifact 재빌드·현재 `127.0.0.1:8642` 런타임 반영/브라우저 확인, Linux 전용 snapshot 통합 테스트. 운영/배포형은 건드리지 않았다.
+- 다음: 이 branch에 checkpoint commit/push하고 원격과 로컬 SHA 일치를 확인한다. 현재 branch 외 branch/worktree 정리, main 병합, 배포·설치 런타임 교체는 수행하지 않는다.
+
 ## 2026-09-24 — 외부 Responses의 image/PDF 전처리 경로 수정·배포
 
 - 장애 원인: 모델 등록 `input_modalities`를 downstream LLM의 원본 Vision 지원으로 오해해 이미지/PDF를 Solar에 passthrough하거나 PDF를 차단했다. 반면 Control Test Lab은 분석 Provider OCR 후 Non-Vision LLM을 호출했다.
