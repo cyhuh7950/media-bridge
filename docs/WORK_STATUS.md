@@ -494,3 +494,12 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 - 수정 commit `c331daf`를 기존 SSH alias `github-cyhuh7950`로 push했다. Actions run `36032355848`은 3분 52초 만에 전체 성공했으며, Linux x64·Linux ARM64·Windows x64 runtime build, 후보 조립, 각 플랫폼의 격리 npm install 및 설정 저장 검증이 모두 성공했다.
 - Actions는 actions/checkout@v4, setup-node@v4, setup-python@v5, upload-artifact@v4 및 download-artifact@v4에 대해 Node.js 20 deprecation warning을 표시했고 Node.js 24로 실행했다. 이번 후보 검증은 통과했으며 warning 자체는 별도 추적 항목이다.
 - 후보 artifact는 run `36032355848`에 생성됐다. 이는 검증 후보이며 공개 release나 npm publish가 아니다. 공개 publish, main 병합, 로컬 runtime 변경, ysna 배포는 하지 않았다.
+
+## 2026-09-25 — 공개 npm 배포·main 병합 승인 및 통합 검증
+
+- 신산님이 공개 npm 배포와 `main` 병합을 명시 승인했다. 설치형 npm `0.1.14`에 한해 진행하며 ysna-server와 사용자 PC의 `127.0.0.1:8642`는 변경하지 않는다.
+- 최신 `origin/main`은 `7687bdb22b5ad9d2b85b2e342b74961f339144f5`로 갱신됐고 로컬 `main`도 fast-forward하여 같은 SHA다. 원격 변경은 runtime builders 3개, npm publish workflow, `.deb` 2개와 Windows MSI workflow 삭제다.
+- 승인 범위에 따라 기능 브랜치에서 npm 관련 네 workflow만 유지해 충돌을 해결했다: linux-arm64, linux-x64, win32-x64 runtime builder와 `publish-npm-runtime-release.yml`. 원격 `main`에서 제거된 `.deb`/`.msi` workflow 3개는 복원하지 않는다.
+- 최신 `origin/main`을 기능 브랜치에 병합 중이다. 통합 후 `node --test tests/npm/*.test.cjs`는 82 passed, 4 skipped, 0 failed; Python `tests/personal/test_npm_runtime.py tests/packaging/test_runtime_artifact_contract.py`는 30 passed; 관련 Ruff 검사는 통과했다. Python test 실행은 저장소 venv(`D:\Project\Media-Bridge\.venv`)를 사용했다.
+- 이전 검증의 pytest 임시 폴더 2개는 정확한 worktree 내부 경로임을 확인했지만 Windows ACL access denied로 삭제되지 않아 보존했다. 이 외 소스·workflow 테스트에는 영향을 주지 않는다.
+- 다음: 통합된 feature commit을 기존 SSH alias로 push하고, 해당 exact SHA의 세 플랫폼 candidate/native install workflow가 통과하는지 확인한다. 그 후 승인된 `main` 병합을 push하고 merged-main 상태에서 검증한 뒤 `release-v0.1.14` 태그를 만들어 GitHub Release/npm OIDC publish를 실행한다. registry의 `0.1.14` 선점 여부와 release/tag 충돌을 게시 직전 다시 확인한다.

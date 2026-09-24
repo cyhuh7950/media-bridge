@@ -1,10 +1,10 @@
-# npm Installed Reasoning Release Candidate Implementation Plan
+# npm Installed Reasoning Release Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build and validate an unpublished `@cyhuh/media-bridge@0.1.14` installation candidate that contains the installed reasoning-level settings on Windows x64, Linux x64, and Linux ARM64.
+**Goal:** Validate and publicly release `@cyhuh/media-bridge@0.1.14` with the installed reasoning-level settings on Windows x64, Linux x64, and Linux ARM64, then merge the verified work into `main`.
 
-**Architecture:** Reuse the three native runtime workflows with version and source-revision inputs, then orchestrate them from the approved feature branch. Assemble a candidate-only runtime manifest and npm tarball from matching artifacts, and install/test the tarball in isolated runner environments without creating a public release or publishing to npm.
+**Architecture:** Reuse the three native runtime workflows with version and source-revision inputs. Assemble a candidate runtime manifest and npm tarball from matching artifacts and verify native installs. Following 신산님's explicit approval on 2026-09-25, restore only the npm runtime builders and npm release workflow, merge the verified branch into `main`, and publish the exact `0.1.14` tag through the repository's OIDC release workflow.
 
 **Tech Stack:** GitHub Actions YAML, Node.js 22/24, npm, Python 3.13, existing runtime builder/verifier scripts, Node `node:test`, npm tarballs.
 
@@ -14,9 +14,10 @@
 
 - Candidate version is `0.1.14`.
 - All three runtime artifacts must use the same source commit and candidate version.
-- The candidate package and manifest are GitHub Actions workflow artifacts, not formal Release assets or npm publication; their access follows repository visibility and GitHub permissions, and no Secret may be included.
+- Candidate packages and manifests are temporary GitHub Actions workflow artifacts until formal publication; their access follows repository visibility and GitHub permissions, and no Secret may be included.
 - Candidate manifest URLs use the future release asset path; candidate verification overrides downloads to loopback.
-- No public release, tag, asset upload, npm publish, `main` merge, ysna/server deployment, or modification of the user's `127.0.0.1:8642` installation.
+- Public release, tag, asset upload, npm publish, and `main` merge are explicitly approved for version `0.1.14`; ysna/server deployment and modification of the user's `127.0.0.1:8642` installation remain out of scope.
+- Preserve the latest `main` deletion of the unrelated `.deb` and `.msi` release workflows; only restore the four npm-related workflows required by this approved release.
 - Do not use a personal GitHub login, PAT, or alternate account; Git operations use the configured `github-cyhuh7950` alias.
 - Tests use a separate HOME, npm prefix, synthetic secret, temporary ports, and temporary runtime/config paths.
 
@@ -121,8 +122,8 @@
 - [x] **Step 1: Update version contract tests** to use an explicit candidate version input rather than freezing every future release to `0.1.13`; retain historical `0.1.13` metadata expectations only in tests that explicitly validate that published release.
 - [x] **Step 2: Change npm package version to `0.1.14`** and make candidate assembly generate its runtime manifest in a temporary package staging directory; do not mark unpublished placeholder hashes as published in tracked source or modify the tracked `runtime-manifest.json`.
 - [x] **Step 3: Run `npm pack --dry-run` and `npm pack`** in `packaging/npm` with isolated npm cache/temp output; inspect the exact tarball file list to ensure it contains CLI, manifest, library, docs, and no tests, secrets, caches, or build intermediates.
-- [ ] **Step 4: Install the resulting tarball into an isolated local prefix** where a native runtime artifact is available, then run CLI health/settings UI/API assertions without touching the existing 8642 installation.
-- [ ] **Step 5: Update `docs/WORK_STATUS.md`** with source SHA, candidate version, per-platform artifact evidence, actual npm tarball/install results, failures, and all remaining unverified/publication boundaries.
+- [x] **Step 4: Install the resulting tarball into isolated prefixes on native runners** and run CLI health/settings UI/API assertions without touching the existing 8642 installation (native evidence: Actions run `36032355848`; rerun for the integrated release source before tagging).
+- [x] **Step 5: Update `docs/WORK_STATUS.md`** with source SHA, candidate version, per-platform artifact evidence, actual npm tarball/install results, failures, and remaining unverified/publication boundaries.
 
 ### Task 6: Run the full approved verification gate and checkpoint
 
@@ -135,10 +136,10 @@
 
 **Interfaces:**
 - Consumes: Completed implementation and candidate workflow evidence.
-- Produces: An auditable verification report tied to the exact source SHA and a clean, pushed feature branch; no public release or server deployment.
+- Produces: An auditable verification report tied to the exact source SHA, a clean pushed feature branch, approved public npm release and `main` integration; no server deployment.
 
 - [x] **Step 1: Run the complete npm test suite** with `node --test tests/npm/*.test.cjs`; record actual pass/fail/skip totals.
-- [ ] **Step 2: Run Python packaging tests** with the repository's supported environment and the project's configured pytest command; record platform-specific skips/failures rather than masking them.
+- [x] **Step 2: Run Python packaging tests** with the repository's supported environment and the project's configured pytest command; record platform-specific skips/failures rather than masking them.
 - [x] **Step 3: Run package lint/type/build checks** only where configured for the npm runtime; inspect `package.json` scripts and execute the exact repository commands.
 - [x] **Step 4: Run `git diff --check`, inspect all workflow permissions/triggers and package contents, and verify the branch contains no secret, temporary file, release tag, or public publication side effect.
 - [x] **Step 5: Commit and push each completed checkpoint** using `github-cyhuh7950`; verify local branch HEAD equals `origin/codex/installed-reasoning-level-config` and leave unrelated branches/worktrees untouched.

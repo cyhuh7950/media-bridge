@@ -2,11 +2,11 @@
 
 ## 상태
 
-- 상태: 신산님 설계 승인
+- 상태: 후보 설계 승인 및 2026-09-25 신산님 공개 npm 배포·main 병합 승인
 - 작업 브랜치: `codex/installed-reasoning-level-config`
 - 후보 버전: `0.1.14`
-- 범위: 설치형 `@cyhuh/media-bridge`의 후보 패키지 준비 및 설치 검증
-- 제외: ysna/서버 배포, `main` 병합, 공개 GitHub Release/tag 생성, npm 공개 등록
+- 범위: 설치형 `@cyhuh/media-bridge@0.1.14`의 후보 준비·검증, 공개 GitHub Release/tag 및 npm 공개 등록, `main` 병합
+- 제외: ysna/서버 배포 및 사용자 PC `127.0.0.1:8642` 변경
 
 ## 1. 목적과 완료 조건
 
@@ -52,7 +52,7 @@
 
 기존 공개 릴리스 workflow는 동적 버전·source commit·후보 artifact run을 입력으로 검증할 수 있게 고친다. npm publish job은 명시적 `release-v<version>` tag에서만 실행되도록 유지한다. 후보 build/tag만으로 GitHub Release 생성, public asset 업로드 또는 npm 게시가 일어나지 않도록 후보 workflow와 공개 workflow를 분리한다.
 
-이 작업 단계에서는 공개 release workflow의 검증과 후보 설치까지 준비하지만, 공개 tag 생성·`npm publish`는 실행하지 않는다. 해당 공개 변경은 신산님의 별도 승인 후 진행한다.
+후보 workflow는 계속 public release나 npm publish를 수행하지 않는다. 신산님이 2026-09-25 별도 승인한 공개 배포는 기능 브랜치를 최신 `main`에 통합한 뒤 `release-v0.1.14` exact tag로만 시작하며, 통합된 source SHA의 세 플랫폼 artifact 검증과 npm tarball 검증이 완료되어야 한다.
 
 ## 4. 검증 기준
 
