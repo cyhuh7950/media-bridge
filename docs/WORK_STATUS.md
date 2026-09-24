@@ -484,3 +484,11 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 - `verify-native-installs`의 격리 설치·실행 단계는 세 플랫폼 모두 실패했다. 익명 run/job 화면은 `Process completed with exit code 1`만 표시하고 로그 링크는 로그인으로 제한된다. 비인증 공개 logs endpoint도 HTTP 403이었다. GitHub 계정·토큰은 사용하지 않았다.
 - 공통 설치/검증 구간의 상세 stderr와 실패 명령을 확인할 수 없어 원인은 아직 미확정이다. runtime 설치 성공으로 판정하지 않으며, 추정 수정·추가 재실행은 하지 않는다.
 - 다음 조치: 로그 열람 가능한 환경에서 해당 실패 step의 `npm install` 및 `verify-candidate-install.cjs` 출력 원문(토큰·Secret은 제거)을 확보한 뒤, 최초 오류부터 재현·수정한다. 공개 publish, main 병합, 로컬 runtime 변경, ysna 배포는 계속 범위 밖이다.
+
+## 2026-09-25 — npm 후보 설정 저장 403 수정
+
+- 신산님이 공유한 Actions 상세 로그에서 세 플랫폼 공통 실패는 health 확인이 아니라 `POST /api/settings`의 `403 !== 200`이었다. 설치형 runtime은 기존 same-origin 보호에서 `Origin`이 없는 설정 저장 요청을 거부한다.
+- 제품의 인증·보안 규칙은 변경하지 않았다. 후보 설치 검증기에서 settings POST에 실제 loopback base URL의 Origin을 포함하도록 수정하고, loopback HTTP 서버가 수신 Origin·응답·JSON body를 확인하는 회귀 테스트를 추가했다.
+- TDD 증거: 신규 회귀 테스트는 수정 전에 `postSameOriginJson is not a function`으로 실패했고, 수정 후 통과했다.
+- 검증: `node --test tests/npm/media-bridge-release-candidate.test.cjs` 15 passed; `node --test tests/npm/*.test.cjs` 82 passed, 4 skipped, 0 failed; `git diff --check` 통과.
+- 다음 조치: 수정 checkpoint를 기존 SSH alias로 작업 branch에 push해 Windows x64·Linux x64·Linux ARM64 native install 검증을 다시 실행한다. Actions 재실행 전이므로 실제 native 설치 결과는 아직 미검증이다. 공개 publish, main 병합, 로컬 runtime 변경, ysna 배포는 하지 않는다.

@@ -72,6 +72,17 @@ async function waitForHealth(url, timeoutMs = 30_000) {
   throw new Error(`candidate runtime did not become healthy: ${lastError?.message || 'timeout'}`);
 }
 
+function postSameOriginJson(url, payload) {
+  return fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      origin: new URL(url).origin,
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 async function runCandidateInstall({ installPrefix, artifactDirectory, testRoot }) {
   const tempBase = path.resolve(process.env.RUNNER_TEMP || os.tmpdir());
   for (const [label, target] of [['test-root', testRoot], ['install-prefix', installPrefix]]) {
@@ -202,11 +213,7 @@ async function runCandidateInstall({ installPrefix, artifactDirectory, testRoot 
       reasoningEffort: 'high',
       textLlm: { ...initialSettings.textLlm, reasoningEffort: 'low' },
     };
-    const saveResponse = await fetch(`${baseUrl}/api/settings`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(update),
-    });
+    const saveResponse = await postSameOriginJson(`${baseUrl}/api/settings`, update);
     assert.equal(saveResponse.status, 200);
     const savedSettings = await saveResponse.json();
     assert.equal(savedSettings.reasoningEffort, 'high');
@@ -256,4 +263,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createLoopbackManifest, runCandidateInstall };
+module.exports = { createLoopbackManifest, postSameOriginJson, runCandidateInstall };

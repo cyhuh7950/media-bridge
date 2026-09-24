@@ -1,8 +1,10 @@
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
+const http = require('node:http');
 const path = require('node:path');
 const test = require('node:test');
+const { once } = require('node:events');
 
 const root = path.resolve(__dirname, '../..');
 const workflowRoot = path.join(root, '.github', 'workflows');
@@ -256,4 +258,26 @@ test('candidate install verification rewrites only the selected platform URL to 
   assert.match(actual.artifacts['linux-x64'].url, /^https:\/\//);
   assert.match(manifest.artifacts['win32-x64'].url, /^https:\/\//, 'input manifest must not be mutated');
   assert.throws(() => createLoopbackManifest({ manifest, platform: 'win32-x64', url: 'https://example.com/runtime.tgz' }), /loopback/i);
+});
+
+test('candidate settings POST sends its same-origin Origin header', async () => {
+  const { postSameOriginJson } = require(installVerifierScript);
+  let receivedOrigin;
+  const server = http.createServer((request, response) => {
+    receivedOrigin = request.headers.origin;
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ saved: true }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const url = `http://127.0.0.1:${server.address().port}/api/settings`;
+
+  try {
+    const response = await postSameOriginJson(url, { reasoningEffort: 'high' });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { saved: true });
+    assert.equal(receivedOrigin, `http://127.0.0.1:${server.address().port}`);
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });
