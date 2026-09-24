@@ -6,7 +6,8 @@
 npm install -g @cyhuh/media-bridge
 ```
 
-현재 패키지 공개와 플랫폼별 runtime artifact 배포는 별도 release 검증 대상입니다.
+최신 공개 버전은 `0.1.14`이며 Windows x64, Linux x64, Linux ARM64용 관리 runtime을 포함합니다.
+설치 명령은 최신 공개 버전을 설치합니다.
 
 ## 최초 설정
 

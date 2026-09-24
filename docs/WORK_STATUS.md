@@ -502,4 +502,16 @@ Git: `codex/manual-integrated-revision` / 원격 추적 `origin/codex/manual-int
 - 승인 범위에 따라 기능 브랜치에서 npm 관련 네 workflow만 유지해 충돌을 해결했다: linux-arm64, linux-x64, win32-x64 runtime builder와 `publish-npm-runtime-release.yml`. 원격 `main`에서 제거된 `.deb`/`.msi` workflow 3개는 복원하지 않는다.
 - 최신 `origin/main`을 기능 브랜치에 병합 중이다. 통합 후 `node --test tests/npm/*.test.cjs`는 82 passed, 4 skipped, 0 failed; Python `tests/personal/test_npm_runtime.py tests/packaging/test_runtime_artifact_contract.py`는 30 passed; 관련 Ruff 검사는 통과했다. Python test 실행은 저장소 venv(`D:\Project\Media-Bridge\.venv`)를 사용했다.
 - 이전 검증의 pytest 임시 폴더 2개는 정확한 worktree 내부 경로임을 확인했지만 Windows ACL access denied로 삭제되지 않아 보존했다. 이 외 소스·workflow 테스트에는 영향을 주지 않는다.
-- 다음: 통합된 feature commit을 기존 SSH alias로 push하고, 해당 exact SHA의 세 플랫폼 candidate/native install workflow가 통과하는지 확인한다. 그 후 승인된 `main` 병합을 push하고 merged-main 상태에서 검증한 뒤 `release-v0.1.14` 태그를 만들어 GitHub Release/npm OIDC publish를 실행한다. registry의 `0.1.14` 선점 여부와 release/tag 충돌을 게시 직전 다시 확인한다.
+- 다음: exact integrated SHA의 세 플랫폼 candidate 검증 후 `main` 반영과 승인된 공개 npm release를 진행한다. 게시 여부는 registry와 public Release로 사후 확인한다.
+
+## 2026-09-25 — Media Bridge 0.1.14 공개 npm 배포 및 main 통합 완료
+
+- 최신 main을 포함한 통합 branch SHA `6d0b7a1fd7613352e26167ec580f11c1a86eccc6`에서 candidate Actions run `36037001746`이 성공했다. Linux x64, Linux ARM64, Windows x64 빌드, 후보 assembly 및 세 native runner의 격리 npm 설치·health·설정 저장 검증이 모두 통과했다.
+- 통합 직전 npm suite `83 passed, 4 skipped, 0 failed`; Python 설치형/packaging 검증 `30 passed`; 관련 Ruff 및 `git diff --check` 통과. local main에서 npm suite를 다시 실행해 `83 passed, 4 skipped, 0 failed`를 확인했다.
+- 최신 원격 `main`의 workflow 삭제 변경을 보존했다. npm runtime builders 3개와 npm release workflow만 복구했으며 `.deb` 2개 및 Windows MSI workflow는 삭제 상태로 유지했다.
+- 원격 main은 검증된 `6d0b7a1`로 SSH alias `github-cyhuh7950`를 통해 fast-forward 반영됐다. 정확한 release tag `release-v0.1.14`도 같은 SHA를 가리킨다.
+- Release workflow run `36037747821`은 세 플랫폼 runtime build, release assembly, GitHub Release asset 업로드 및 `publish-npm-package` OIDC step까지 모두 success다. 공개 GitHub Release는 [v0.1.14](https://github.com/cyhuh7950/media-bridge/releases/tag/v0.1.14)다.
+- npm registry를 cache-bypass로 재조회해 `0.1.14` 존재, latest dist-tag `0.1.14`, tarball endpoint HTTP 200을 확인했다. Integrity: `sha512-GQuWUtTBMDjr1cdSBLnTq8QpNzI0WaJMtARtj3tvv2M17QVlfR3FWwgExY4ugl31vjzCx4C1XicrRI/7Iq3Q6A==`. 일반 캐시 조회는 잠시 `0.1.13`을 반환했으나 registry version endpoint와 cache-bypass metadata에서는 게시를 확인했다.
+- README형 사용 매뉴얼의 공개 상태 설명을 0.1.14로 갱신했다. ysna-server와 사용자 PC `127.0.0.1:8642`는 배포·수정하지 않았다.
+- 한계: 공개 registry에서 내려받은 tarball을 별도 새 local prefix에 설치하는 검증은 수행하지 않았다. 동일 release workflow의 공개 tarball을 만들기 전 exact integrated source candidate는 세 native runners에서 설치·기동·설정 저장까지 검증했고, 게시된 tarball URL은 HTTP 200이다.
+- 정리 보류: 기능 worktree의 pytest 산출물 임시 폴더 3개는 Windows ACL access denied로 제거할 수 없어 보존 중이다. worktree와 기능 브랜치는 강제 삭제하지 않았다.

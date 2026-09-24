@@ -104,7 +104,7 @@
 - [x] **Step 1: Add failing tests** for version/tag mismatch, source SHA mismatch, artifact identity mismatch, manual dispatch safety, and the requirement that `npm publish` is reachable only for an exact release tag after release asset validation.
 - [x] **Step 2: Replace hard-coded `0.1.13`, source SHA, and Actions run IDs** with validated workflow/tag inputs and artifact names tied to the verified source SHA; retain the existing release metadata wording for historical release records only.
 - [x] **Step 3: Preserve the exact tag gate** on the npm publishing job and narrow permissions so candidate workflows cannot inherit release write or npm OIDC permissions.
-- [x] **Step 4: Run release contract tests** for both candidate/manual paths and exact tag paths; do not dispatch a release workflow, create a tag, or publish.
+- [x] **Step 4: Run release contract tests** for both candidate/manual paths and exact tag paths. Public release was initially held for approval and subsequently authorized by 신산님 on 2026-09-25.
 
 ### Task 5: Prepare version `0.1.14` candidate metadata and verify packed package
 
@@ -144,3 +144,11 @@
 - [x] **Step 4: Run `git diff --check`, inspect all workflow permissions/triggers and package contents, and verify the branch contains no secret, temporary file, release tag, or public publication side effect.
 - [x] **Step 5: Commit and push each completed checkpoint** using `github-cyhuh7950`; verify local branch HEAD equals `origin/codex/installed-reasoning-level-config` and leave unrelated branches/worktrees untouched.
 - [x] **Step 6: Report candidate evidence and limitations**. If GitHub Actions native runners are unavailable, state that the three-platform candidate is not complete; do not call the local `npm pack` result a successful multi-platform npm install.
+
+### Task 7: Publish the approved release and integrate into main
+
+- [x] Confirm the npm registry had no `0.1.14`, and `release-v0.1.14` / `v0.1.14` refs were absent before publication.
+- [x] Merge latest `origin/main` into the feature branch; retain the four npm workflows only and keep unrelated `.deb`/`.msi` workflow deletions from main.
+- [x] Verify the exact integrated source on all three native runners (Actions run `36037001746`) and fast-forward/push `main` at `6d0b7a1fd7613352e26167ec580f11c1a86eccc6` through `github-cyhuh7950`.
+- [x] Tag the verified commit `release-v0.1.14`; publish GitHub Release runtime assets and npm package through OIDC (Actions run `36037747821`).
+- [x] Verify public GitHub release `v0.1.14`, npm registry `0.1.14`, latest dist-tag, and tarball HTTP 200. No ysna-server or local `127.0.0.1:8642` deployment.
