@@ -141,5 +141,5 @@
 - [ ] **Step 2: Run Python packaging tests** with the repository's supported environment and the project's configured pytest command; record platform-specific skips/failures rather than masking them.
 - [x] **Step 3: Run package lint/type/build checks** only where configured for the npm runtime; inspect `package.json` scripts and execute the exact repository commands.
 - [x] **Step 4: Run `git diff --check`, inspect all workflow permissions/triggers and package contents, and verify the branch contains no secret, temporary file, release tag, or public publication side effect.
-- [ ] **Step 5: Commit and push each completed checkpoint** using `github-cyhuh7950`; verify local branch HEAD equals `origin/codex/installed-reasoning-level-config` and leave unrelated branches/worktrees untouched.
+- [x] **Step 5: Commit and push each completed checkpoint** using `github-cyhuh7950`; verify local branch HEAD equals `origin/codex/installed-reasoning-level-config` and leave unrelated branches/worktrees untouched.
 - [ ] **Step 6: Report candidate evidence and limitations**. If GitHub Actions native runners are unavailable, state that the three-platform candidate is not complete; do not call the local `npm pack` result a successful multi-platform npm install.
