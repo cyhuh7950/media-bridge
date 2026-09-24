@@ -56,7 +56,7 @@ async def test_ordinary_responses_request_automatically_uses_shared_core_gate(
     assert len(downstream.requests) == 1
     serialized = json.dumps(downstream.requests[0].payload)
     assert "ERROR 104" in serialized
-    assert "red terminal" in serialized
+    assert "red terminal" not in serialized
     assert "input_image" not in serialized
     assert "data:image" not in serialized
     assert runtime.current().service is not None

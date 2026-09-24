@@ -153,29 +153,27 @@ class PreRequestGate:
                     "unsupported_media_modality",
                     "Target does not support every requested media modality.",
                 )
-            if detection.contains_pdf and not resolution.capability.pdf_passthrough_verified:
-                return self._blocked(
+            if (
+                detection.modalities == frozenset({"pdf"})
+                and resolution.capability.pdf_passthrough_verified
+            ):
+                try:
+                    normalized_vision_content = await self._normalize_vision_content(
+                        request.content,
+                        tenant_id=tenant_id,
+                    )
+                except GateFailureError as failure:
+                    return self._blocked(request, failure.code, failure.safe_message)
+                return self._ready(
                     request,
-                    "pdf_passthrough_unverified",
-                    "Target PDF passthrough capability is not verified.",
+                    content=normalized_vision_content,
+                    capability=resolution.state,
+                    action="passthrough",
+                    sanitized_text=self._join_text(request.content),
+                    original_image_removed=False,
                 )
-            try:
-                normalized_vision_content = await self._normalize_vision_content(
-                    request.content,
-                    tenant_id=tenant_id,
-                )
-            except GateFailureError as failure:
-                return self._blocked(request, failure.code, failure.safe_message)
-            return self._ready(
-                request,
-                content=normalized_vision_content,
-                capability=resolution.state,
-                action="passthrough",
-                sanitized_text=self._join_text(request.content),
-                original_image_removed=False,
-            )
 
-        if resolution.state is CapabilityState.NON_VISION and detection.media_count:
+        if detection.media_count:
             try:
                 converted = await self.extract_context(
                     request.content,
@@ -193,7 +191,7 @@ class PreRequestGate:
             return self._ready(
                 request,
                 content=(TextPart(text=converted.structured_context),),
-                capability=resolution.state,
+                capability=CapabilityState.NON_VISION,
                 action="converted",
                 sanitized_text=converted.structured_context,
                 original_image_removed=True,

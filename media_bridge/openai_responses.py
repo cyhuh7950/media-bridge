@@ -266,7 +266,7 @@ def normalize_responses_request(
                 isinstance(part, MediaPart) and part.media_type == "pdf"
                 for part in current_parts
             )
-            else "generic"
+            else "error_screenshot"
         )
         request = PrepareForModelRequest(
             content=content,

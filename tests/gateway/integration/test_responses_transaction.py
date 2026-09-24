@@ -93,7 +93,14 @@ def _transaction(
     now = datetime(2026, 8, 24, tzinfo=UTC)
     signer = GateReceiptSigner(secret=b"r" * 32, clock=lambda: now.timestamp())
     registry = CapabilityRegistry(
-        [ModelCapability("text-model", {"text"}, now + timedelta(hours=1))],
+        [
+            ModelCapability(
+                "text-model",
+                {"text", "image", "pdf"},
+                now + timedelta(hours=1),
+                pdf_passthrough_verified=False,
+            )
+        ],
         version="gateway-neutral-test",
     )
     gate = PreRequestGate(
@@ -186,7 +193,7 @@ async def test_product_neutral_transaction_handles_text_image_and_pdf(
         if "input_file" in raw_payload:
             assert "red terminal" not in serialized
         else:
-            assert "red terminal" in serialized
+            assert "red terminal" not in serialized
     else:
         assert sealed.payload == payload
 

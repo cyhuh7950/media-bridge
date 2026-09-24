@@ -1,5 +1,12 @@
 # Media Bridge 작업현황
 
+## 2026-09-24 — 외부 Responses의 image/PDF 전처리 경로 수정
+
+- 장애 원인: 모델 등록 `input_modalities`를 downstream LLM의 원본 Vision 지원으로 오해해 이미지/PDF를 Solar에 passthrough하거나 PDF를 차단했다. 반면 Control Test Lab은 분석 Provider OCR 후 Non-Vision LLM을 호출했다.
+- 수정: 등록된 image/PDF는 입력 허용 여부만 확인하고 기본적으로 분석·텍스트 변환 후 전달한다. 이미지 외부 `/v1/responses` 기본 profile은 Control 시험과 같은 OCR 전용 `error_screenshot`, PDF는 `document`다. 원본 PDF 전달은 `pdf_passthrough_verified`가 있고 PDF만 요청한 경우로 한정한다. DB schema 변경·migration은 없다.
+- 검증: Gateway 전체 및 연관 통합/단위 회귀 `119 passed`, 수정 파일 Ruff 통과. Control/실제 Provider 외부 호출과 서버 배포는 아직 미수행이다.
+- 다음: 검증된 변경을 alias 기반 main 반영·ysna-server 배포하고 사용자 URL에서 외부 image/PDF 호출을 확인한다.
+
 ## 2026-09-24 — 외부 클라이언트 시험 `reasoning_effort_invalid` 수정·배포 완료
 
 - 화면에서 추론 등급 `미지정(기본값)`을 선택한 요청이 Gateway에서 `reasoning_effort_invalid`로 거부되는 경로를 재현했다. 외부 시험 요청에서는 해당 필드를 생략하며, Gateway는 snapshot `defaults.reasoning_effort`에 기록된 `provider_default`를 유효 등급으로 취급해 거부하고 있었다.

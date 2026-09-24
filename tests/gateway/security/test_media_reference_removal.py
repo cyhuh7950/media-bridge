@@ -50,7 +50,7 @@ async def test_nonvision_sealed_payload_has_no_media_locator_or_filename(
 
 
 @pytest.mark.asyncio
-async def test_exact_active_vision_model_preserves_validated_native_media(
+async def test_registered_image_modality_is_preprocessed_before_nonvision_downstream(
     tmp_path: Path,
 ) -> None:
     runtime, downstream, _asset_store = build_test_runtime(tmp_path)
@@ -74,8 +74,9 @@ async def test_exact_active_vision_model_preserves_validated_native_media(
     )
 
     assert result.status == "completed"
-    assert downstream.requests[0].capability == "vision"
-    assert downstream.requests[0].action == "passthrough"
+    assert downstream.requests[0].capability == "non_vision"
+    assert downstream.requests[0].action == "converted"
     sealed = json.dumps(downstream.requests[0].payload).lower()
-    assert "input_image" in sealed
-    assert "data:image/png;base64," in sealed
+    assert "input_image" not in sealed
+    assert "data:image/png;base64," not in sealed
+    assert "error 104" in sealed

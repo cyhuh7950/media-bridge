@@ -454,7 +454,9 @@ async def test_followup_and_subagent_handoff_are_fresh_text_only_inputs(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_vision_passthrough_requires_exact_active_modality_support(tmp_path: Path) -> None:
+async def test_media_capability_converts_unverified_media_and_only_verified_pdf_passes(
+    tmp_path: Path,
+) -> None:
     now = datetime(2026, 8, 23, tzinfo=UTC)
     gate, signer = _gate(tmp_path, now=now)
     spy = SpyDownstream()
@@ -464,12 +466,25 @@ async def test_vision_passthrough_requires_exact_active_modality_support(tmp_pat
         target=TargetModel(registry_id="vision-model"),
     )
 
-    passed = await router.invoke(vision_request, tenant_id="tenant-a")
+    converted_image = await router.invoke(vision_request, tenant_id="tenant-a")
 
-    assert passed.gate_result.action == "passthrough"
-    assert passed.gate_result.original_image_removed is False
+    assert converted_image.gate_result.action == "converted"
+    assert converted_image.gate_result.original_image_removed is True
     assert len(spy.calls) == 1
-    assert spy.calls[0].media_count == 1
+    assert spy.calls[0].media_count == 0
+    assert "ERROR 104: timeout" in spy.calls[0].content[0].text
+
+    verified_pdf = await router.invoke(
+        PrepareForModelRequest(
+            content=[_pdf_part()],
+            target=TargetModel(registry_id="vision-model"),
+        ),
+        tenant_id="tenant-a",
+    )
+    assert verified_pdf.gate_result.action == "passthrough"
+    assert verified_pdf.gate_result.original_image_removed is False
+    assert len(spy.calls) == 2
+    assert spy.calls[1].media_count == 1
 
     pdf_for_image_only = PrepareForModelRequest.model_validate(
         {
@@ -485,21 +500,22 @@ async def test_vision_passthrough_requires_exact_active_modality_support(tmp_pat
     )
     blocked = await router.invoke(pdf_for_image_only, tenant_id="tenant-a")
     assert blocked.gate_result.action == "blocked"
-    assert len(spy.calls) == 1
+    assert len(spy.calls) == 2
 
     unverified_pdf = PrepareForModelRequest(
         content=[_pdf_part()],
         target=TargetModel(registry_id="unverified-pdf-model"),
     )
     unverified = await router.invoke(unverified_pdf, tenant_id="tenant-a")
-    assert unverified.gate_result.action == "blocked"
-    assert unverified.gate_result.error is not None
-    assert unverified.gate_result.error.code == "pdf_passthrough_unverified"
-    assert len(spy.calls) == 1
+    assert unverified.gate_result.action == "converted"
+    assert unverified.gate_result.original_image_removed is True
+    assert len(spy.calls) == 3
+    assert spy.calls[2].media_count == 0
+    assert "ERROR 104: timeout" in spy.calls[2].content[0].text
 
 
 @pytest.mark.asyncio
-async def test_vision_passthrough_still_validates_media_source(tmp_path: Path) -> None:
+async def test_media_conversion_still_validates_media_source(tmp_path: Path) -> None:
     now = datetime(2026, 8, 23, tzinfo=UTC)
     gate, signer = _gate(tmp_path, now=now)
     spy = SpyDownstream()

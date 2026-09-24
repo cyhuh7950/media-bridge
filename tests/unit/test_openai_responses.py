@@ -97,6 +97,25 @@ def test_normalize_current_user_image_pdf_and_https_sources() -> None:
     assert pdf.filename == "report.pdf"
 
 
+def test_normalize_image_for_nonvision_external_client_uses_ocr_profile() -> None:
+    normalized = normalize_responses_request(
+        {
+            "model": "us/solar-pro4",
+            "input": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_image", "image_url": _data_uri("image/png", b"png")}
+                    ],
+                }
+            ],
+        },
+        state=None,
+    )
+
+    assert normalized.request.conversion_profile == "error_screenshot"
+
+
 @pytest.mark.parametrize(
     ("part", "code"),
     [

@@ -36,7 +36,7 @@ async def test_unknown_and_stale_capability_make_zero_downstream_calls(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure_stage", ["ocr", "vision", "sanitizer", "cleanup"])
+@pytest.mark.parametrize("failure_stage", ["ocr", "sanitizer", "cleanup"])
 async def test_conversion_failure_matrix_makes_zero_downstream_calls(
     tmp_path: Path,
     failure_stage: str,

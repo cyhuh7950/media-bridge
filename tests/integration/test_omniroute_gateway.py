@@ -155,7 +155,7 @@ async def test_image_nonvision_reaches_omniroute_as_text_only(
     assert "input_image" not in serialized
     assert "data:image" not in serialized
     assert "ERROR 104" in serialized
-    assert "red terminal" in serialized
+    assert "red terminal" not in serialized
     assert downstream_payloads[0]["tools"] == payload["tools"]
     record = state_store.resolve("resp_image", tenant_id="tenant-a")
     assert record.media_tainted is False
@@ -326,7 +326,7 @@ async def test_unknown_and_stale_capability_make_zero_omniroute_calls(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure_stage", ["ocr", "vision", "sanitizer", "cleanup"])
+@pytest.mark.parametrize("failure_stage", ["ocr", "sanitizer", "cleanup"])
 async def test_every_conversion_failure_makes_zero_omniroute_calls(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

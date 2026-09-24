@@ -125,7 +125,8 @@ Media Bridge 카탈로그는 OmniRoute 전체 348개를 복사하지 않고, 실
 - Provider, 모델, capability, tenant, 분석기 조합을 참조하는 라우팅 프로필을 생성·수정·비활성화한다.
 - 기본 대상과 fallback 순서를 명시하고 health·quota·cost 정책에 따라 선택한다.
 - `active` Provider와 모델만 발행된 snapshot에 포함한다.
-- Vision-capable downstream으로 원본 media를 전달하는 경우와 Non-Vision 변환 경로를 명확히 구분한다.
+- 모델 등록의 `input_modalities`는 Media Bridge가 받아 분석할 수 있는 입력 범위이며 downstream LLM의 원본 미디어 처리 capability를 뜻하지 않는다. 이미지/PDF는 연결된 분석 Provider로 변환·정제한 뒤 Non-Vision LLM에 전달한다.
+- 원본 PDF 직접 전달은 `pdf_passthrough_verified`가 명시적으로 확인된 경우에만 허용한다. 이미지 입력에는 원본 직접 전달 검증 필드가 없으므로 분석 단계를 거친다.
 
 ### 분석·비용·모니터링
 
