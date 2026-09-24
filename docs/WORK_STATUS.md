@@ -1,5 +1,13 @@
 # Media Bridge 작업현황
 
+## 2026-09-24 — codex/manual-integrated-revision main 반영·ysna-server 배포 완료
+
+- 신산님 직접 승인에 따라 PR을 생략하고 `github-cyhuh7950` SSH 별칭으로 원격 `main`에 병합 커밋 `474110a9c774443f5144ba7234e8de3f4af3a22a`를 반영했다. 원격 `main`과 ysna-server checkout 모두 해당 SHA를 확인했다.
+- 검증된 코드 HEAD `46f085a` 기준 ysna-server Linux 전체 Python suite `589 passed, 6 skipped`, Ruff, strict mypy(84 source files), compileall, Web Vitest(41 passed), ESLint, TypeScript 및 production build가 통과했다. 뒤의 `06cde11`과 merge commit은 WORK_STATUS 기록만 추가했다. Windows 임시 checkout 재실행은 `583 passed, 7 skipped, 5 failed`; 세 건은 Windows의 `os.O_DIRECTORY` 미지원, 두 건은 PowerShell subprocess 출력 인코딩 환경 차이였다.
+- 배포 전 DB는 `0008_model_provider`였고 alias 충돌 사전검사는 0건이었다. 운영 DB dump를 `/home/ubuntu/deploy/backups/media-bridge/pre-474110a-0008.dump`에 mode 600으로 생성하고 PostgreSQL archive 목록 검증을 통과한 뒤 `0009`~`0014`를 순차 적용했다. DB revision은 `0014_model_no_expiry`다.
+- ysna-server `/home/ubuntu/deploy/media-bridge-7281f08` checkout에서 Control/Data 이미지를 커밋 `474110a` 기준으로 빌드·재기동했다. DB, snapshots, assets volume과 별도 `compose.ysna.yaml` override는 보존했다. Control/Data/DB 모두 healthy다. Control image digest `sha256:9ac8e18130b4ba190e3d52e2937ea4f3daadf38698cc2d1be944aafb3f8889a4`, Data image digest `sha256:bb14e5899d0e233bbce65f1013ffc9c612c984083d6eef943bbae35b597c0785`.
+- `https://media-bridge.sinsan.kr/`, `/providers`, `/models`, `/routing-profiles`, `/credentials`, `/policies`, `/test-lab` 모두 HTTP 200을 확인했다. 실제 외부 Provider 호출은 하지 않았다.
+
 ## 2026-09-24 — main 병합·ysna-server 배포 게이트 재확인
 
 - 후속 전체 테스트에서 `540 passed, 6 skipped, 7 failed, 42 errors`를 확인했다. 격리 DB 부재(42), MCP 테스트의 error_screenshot와 generic Vision 기대 불일치, 0400 Secret 권한 fixture 누락, 현 Compose 네트워크 및 내부 docs 정본과 어긋난 기존 packaging assertion, A1 staging overlay에서 제거된 mock Secret 선언 누락으로 분류했다.
