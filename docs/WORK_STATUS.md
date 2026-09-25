@@ -1,5 +1,13 @@
 # Media Bridge 작업현황
 
+## 2026-09-25 — 독립 검증 보고서 9차 근거·집계 보완
+
+- 신산님 요청으로 `docs/test_reports/FINAL_INDEPENDENT_VALIDATION_REPORT.md`를 검토·보완했다. 작업 기준은 `main`/`origin/main` `9933dd2`; 작업 branch/worktree는 `codex/revise-independent-validation-report` / `.worktrees/revise-independent-validation-report`다. 이전 `installed-reasoning-level-config` 잔여 폴더는 접근·수정·삭제하지 않았다.
+- 사용자 제공 보고서 원본은 main checkout의 미추적 파일이므로 보존했다. 동일 파일을 새 worktree에 복사해 그 사본을 수정한다.
+- 반영: 추론 등급 브라우저 확인과 mock transport 우선순위 검증을 분리, DEF9-01을 확인된 코드·매뉴얼 불일치로 좁히고 의도/심각도는 미확정, DEF9-02를 제한 시간 무응답 관측으로 한정, OmniRoute 및 운영 server 상태를 미검증으로 표기, 테스트 케이스와 보조 검증의 혼합 합산 제거.
+- 미해결 근거: Python 집계는 보고서 기재상 597 collected이나 `542 passed + 7 skipped + 47 blocked = 596`으로 1건 차이. 기존 실행 원시 로그가 없어 임의 보정하지 않는다. 실 npm 설치, 실제 Provider 적용, PostgreSQL 통합, OmniRoute 흐름, live server는 이번 수정에서 새로 실행하지 않는다.
+- 검증은 보고서의 근거 범위·수치 정합성·diff 및 문서 whitespace 검사를 수행했다. 제품 코드 변경이나 제품 실행 테스트는 하지 않았다. 신산님 요청에 따라 다음 단계로 문서 변경을 commit하고 SSH 별칭으로 작업 branch push를 진행한다. PR/병합은 인증 계정 사용 없이 가능한 저장소 절차에 한정한다.
+
 ## 2026-09-24 — 설치형 Media Bridge 추론 등급 우선순위 설정 진행
 
 - 신산님 지시: 설치형 Settings의 `Media Bridge`와 `Non-Vision LLM` 두 카드에서 등급을 설정한다. Non‑Vision LLM에 구체 등급이 지정되면 Media Bridge 등급보다 우선하고, `미지정 (Media Bridge 등급 사용)`이면 Media Bridge 설정을 사용한다. 배포형은 범위에 포함하지 않는다.
