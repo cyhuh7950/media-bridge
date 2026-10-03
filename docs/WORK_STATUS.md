@@ -6,8 +6,10 @@
 - 기준: `origin/main` `88e2566`, 작업 branch/worktree `codex/fix-external-test-timeout` / `.worktrees/fix-external-test-timeout`. ysna-server 정식 checkout은 `540f335`이며 최신 main과 배포형 제품 코드 차이는 없고, 현재 Control 이미지 digest는 `sha256:cc7e78e43c282c58bc5b6734d327f4cd24e87c4c1a3e2011795b08ea6a2198b6`이다.
 - 원인 근거: Gateway 프록시에서 외부 시험의 asset upload는 201, 이어진 `/v1/responses`는 약 15초 뒤 499였다. 실행 중 Control의 `HttpGatewayClient`는 모든 Gateway 요청에 15초 read timeout을 적용하고 timeout을 `gateway_unavailable`로 표시한다. 다른 Responses 요청과 Chat Completions 요청은 200으로 성공했다.
 - 변경 파일: `media_bridge_control/gateway_client.py`, `tests/control/integration/test_gateway_bff_client.py`. 일반 Gateway 요청의 15초 제한은 유지하고 Responses 응답 읽기만 최대 45초로 늘린다. DB migration, 프록시 설정, 설치형은 변경하지 않는다.
-- 검증: 신규 테스트 RED에서 Responses read timeout이 실제 15초인 것을 확인했고 GREEN에서 관련 통합 2 passed, 관련 Control unit/Gateway 통합 137 passed, 변경 파일 Ruff·mypy·diff check 통과. 전체 Ruff는 기존 migration 파일의 E501 2건, 전체 mypy는 Windows `os.O_DIRECTORY` 1건으로 실패. Windows 전체 pytest는 DB 통합 단계의 무응답으로 약 12%에서 중단했으며 전체 PASS로 취급하지 않는다. 오류 시도 1회: `python` 미설치 경로와 기본 Temp 접근 거부를 기존 `.venv` 및 worktree 안의 ignored `--basetemp`로 해결했다.
-- 다음: Linux QA에서 전체 검증, 정확한 commit push, ysna-server Control-only 이미지 교체 및 health/API 확인. 실제 Provider 비용 호출은 수행하지 않았으므로 사용자 외부 시험 결과는 배포 후 확인이 필요하다.
+- 검증: 신규 테스트 RED에서 Responses read timeout이 실제 15초인 것을 확인했고 GREEN에서 관련 통합 2 passed, Control unit/Gateway 관련 137 passed. Windows 변경 파일 Ruff·mypy·diff check 통과. Windows 전체 mypy는 기존 `os.O_DIRECTORY` 1건, 전체 pytest는 DB 통합 단계 무응답으로 약 12%에서 중단됐다. `python` 경로 및 기본 Temp 접근 거부는 기존 `.venv`와 ignored `--basetemp`로 해결했다.
+- 원격 작업 branch에 제품 커밋 `812fb2fff876ccc4ebfd3cf5ef20e853b2d39881`을 SSH 별칭으로 push했다. WSL 배포형 QA checkout도 해당 exact commit으로 전환해 137 passed, 전체 mypy 84 files 통과, 관련 Ruff 통과를 확인했다. 격리 QA PostgreSQL 사용 Linux 전체 pytest는 `591 passed, 6 skipped, 1 failed`; 실패는 기존 `docs/test_reports/FINAL_INDEPENDENT_VALIDATION_REPORT.md`를 허용하지 않는 `test_public_repository_docs.py` 검사다. 전체 Ruff도 기존 migration 파일 E501 2건으로 실패한다. 두 파일 모두 제품 커밋에서 변경하지 않았다.
+- 동일 커밋의 WSL Control 이미지 build와 Web typecheck/build, Web Vitest 41 passed, ESLint 통과. 격리 이미지에서 일반 Gateway 15초·Responses read 45초를 확인했다. 임시 QA DB project `media-bridge-timeout-qa-812fb2f`, QA 이미지 태그 2개, `/tmp/media-bridge-timeout-qa-F0UeJ9vO` venv는 검증 후 정확한 대상만 제거했고 잔류 0을 확인했다. WSL checkout은 clean이다.
+- 판정: 전체 검증의 기존 결함 2종 처리 방식(최소 수정 또는 명시적 예외)에 대한 신산님 결정을 요청했다. 결정 전 ysna-server 배포·main 병합은 하지 않는다. 운영 DB/Secret과 설치형은 건드리지 않았다. 실제 Provider 비용 호출은 미검증이며 배포 후 사용자 외부 시험 확인이 필요하다.
 
 ## 2026-09-25 — 독립 검증 보고서 9차 근거·집계 보완
 
