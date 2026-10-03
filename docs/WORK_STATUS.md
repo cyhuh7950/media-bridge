@@ -1,5 +1,14 @@
 # Media Bridge 작업현황
 
+## 2026-10-04 — 배포형 외부 Test Lab Responses 대기 시간 수정 진행
+
+- 담당: 어울. 범위: 배포형 Control의 외부 클라이언트 시험만 수정한다. 설치형 소스·서비스와 운영 Secret·DB는 변경하지 않는다.
+- 기준: `origin/main` `88e2566`, 작업 branch/worktree `codex/fix-external-test-timeout` / `.worktrees/fix-external-test-timeout`. ysna-server 정식 checkout은 `540f335`이며 최신 main과 배포형 제품 코드 차이는 없고, 현재 Control 이미지 digest는 `sha256:cc7e78e43c282c58bc5b6734d327f4cd24e87c4c1a3e2011795b08ea6a2198b6`이다.
+- 원인 근거: Gateway 프록시에서 외부 시험의 asset upload는 201, 이어진 `/v1/responses`는 약 15초 뒤 499였다. 실행 중 Control의 `HttpGatewayClient`는 모든 Gateway 요청에 15초 read timeout을 적용하고 timeout을 `gateway_unavailable`로 표시한다. 다른 Responses 요청과 Chat Completions 요청은 200으로 성공했다.
+- 변경 파일: `media_bridge_control/gateway_client.py`, `tests/control/integration/test_gateway_bff_client.py`. 일반 Gateway 요청의 15초 제한은 유지하고 Responses 응답 읽기만 최대 45초로 늘린다. DB migration, 프록시 설정, 설치형은 변경하지 않는다.
+- 검증: 신규 테스트 RED에서 Responses read timeout이 실제 15초인 것을 확인했고 GREEN에서 관련 통합 2 passed, 관련 Control unit/Gateway 통합 137 passed, 변경 파일 Ruff·mypy·diff check 통과. 전체 Ruff는 기존 migration 파일의 E501 2건, 전체 mypy는 Windows `os.O_DIRECTORY` 1건으로 실패. Windows 전체 pytest는 DB 통합 단계의 무응답으로 약 12%에서 중단했으며 전체 PASS로 취급하지 않는다. 오류 시도 1회: `python` 미설치 경로와 기본 Temp 접근 거부를 기존 `.venv` 및 worktree 안의 ignored `--basetemp`로 해결했다.
+- 다음: Linux QA에서 전체 검증, 정확한 commit push, ysna-server Control-only 이미지 교체 및 health/API 확인. 실제 Provider 비용 호출은 수행하지 않았으므로 사용자 외부 시험 결과는 배포 후 확인이 필요하다.
+
 ## 2026-09-25 — 독립 검증 보고서 9차 근거·집계 보완
 
 - 신산님 요청으로 `docs/test_reports/FINAL_INDEPENDENT_VALIDATION_REPORT.md`를 검토·보완했다. 작업 기준은 `main`/`origin/main` `9933dd2`; 작업 branch/worktree는 `codex/revise-independent-validation-report` / `.worktrees/revise-independent-validation-report`다. 이전 `installed-reasoning-level-config` 잔여 폴더는 접근·수정·삭제하지 않았다.
