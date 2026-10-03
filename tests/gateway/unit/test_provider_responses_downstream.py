@@ -26,10 +26,13 @@ def _request(
     target_id: str,
     *,
     client_effort: str | None = None,
+    stream: bool | None = None,
 ) -> SealedGatewayRequest:
     payload = {"model": target_id, "input": "sanitized OCR text"}
     if client_effort is not None:
         payload["reasoning_effort"] = client_effort
+    if stream is not None:
+        payload["stream"] = stream
     nonce = "0123456789abcdef"
     output_digest = digest_gateway_payload({"payload": payload, "request_nonce": nonce})
     binding = ReceiptBinding(
@@ -92,13 +95,51 @@ async def test_downstream_resolves_model_provider_from_snapshot_and_only_passes_
         receipt_signer=signer,
     )
     response = await downstream.invoke(
-        _request(signer, "solar-alias", client_effort="low")
+        _request(signer, "solar-alias", client_effort="low", stream=False)
     )
 
     assert response.status_code == 200
+    assert response.content_type == "application/json"
+    assert response.stream is None
     assert json.loads(response.body)["model"] == "solar-alias"
     assert seen_provider_ids == ["provider-solar"]
     assert backend.context == "sanitized OCR text"
+
+
+@pytest.mark.asyncio
+async def test_provider_downstream_streams_responses_events_when_requested() -> None:
+    signer = GateReceiptSigner(secret=b"r" * 32)
+    downstream = ProviderResponsesDownstream(
+        backend=CaptureBackend(), model="solar-alias", receipt_signer=signer
+    )
+
+    response = await downstream.invoke(_request(signer, "solar-alias", stream=True))
+
+    assert response.content_type == "text/event-stream"
+    assert response.stream is not None
+    wire = b"".join([chunk async for chunk in response.stream]).decode("utf-8")
+    events = []
+    for frame in wire.strip().split("\n\n"):
+        lines = frame.splitlines()
+        assert lines[0].startswith("event: response.")
+        assert lines[1].startswith("data: ")
+        events.append(json.loads(lines[1][6:]))
+    assert [event["type"] for event in events] == [
+        "response.created",
+        "response.in_progress",
+        "response.output_item.added",
+        "response.content_part.added",
+        "response.output_text.delta",
+        "response.output_text.done",
+        "response.content_part.done",
+        "response.output_item.done",
+        "response.completed",
+    ]
+    assert [event["sequence_number"] for event in events] == list(range(len(events)))
+    assert events[4]["delta"] == "test answer"
+    completed = events[-1]["response"]
+    assert completed["status"] == "completed"
+    assert completed["output"][0]["content"][0]["text"] == "test answer"
 
 
 @pytest.mark.asyncio

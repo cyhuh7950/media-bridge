@@ -1,5 +1,14 @@
 # Media Bridge 작업현황
 
+## 2026-10-04 — OmniRoute Responses 스트리밍 호환 수정 진행
+
+- 담당: 어울. 범위: 배포형 Gateway의 `/v1/responses`에서 `stream: true` 요청에 대한 응답 형식만 수정한다. 설치형, DB, 운영 Secret, 일반 JSON 응답은 변경하지 않는다. 기준 `main`/`origin/main`은 `ecc2f2f`; 작업 브랜치/worktree는 `codex/fix-omniroute-responses-stream` / `.worktrees/fix-omniroute-responses-stream`이다.
+- 근거: Test Lab은 `stream: false`로 성공하지만 OmniRoute의 Responses 화면은 빈 답변이었다. 실제 Provider downstream은 `stream: true`를 받아도 `application/json`을 반환했다. OpenAI 공식 Responses 계약은 이 경우 typed SSE를 요구한다. OmniRoute의 실제 요청 본문과 운영 응답은 아직 직접 확보하지 못했으므로 원인 연관성은 운영 재시험 전까지 가설로 둔다.
+- 변경 파일: `media_bridge_gateway/downstream.py`, `tests/gateway/unit/test_provider_responses_downstream.py`, 이 작업현황. Provider 완료 답변을 `response.created`부터 `response.completed`까지 SSE 이벤트로 감싸고, 비스트리밍 JSON 경로를 유지한다. 진정한 토큰 단위 실시간 생성은 이번 범위가 아니다.
+- 테스트: 기존 downstream 6 passed. 새 재현 테스트 RED는 예상대로 `application/json != text/event-stream`, 수정 후 downstream 7 passed, Gateway 전체 71 passed. 변경 파일 Ruff·mypy 및 diff check 통과. 최초 Gateway 전체 시험은 Windows 기본 Temp 접근 거부로 29 passed/42 setup errors; 두 번째는 존재하지 않는 `.pytest_cache` 하위 경로 선택으로 같은 42 setup errors; 존재하는 ignored `.mypy_cache` 하위 임시 경로로 재실행해 71 passed. 두 환경 오류는 제품 코드 실패가 아니다.
+- 이전 timeout 작업의 clean·main 포함 worktree와 로컬 브랜치는 제거했다. 삭제 시 Git 관리 기록 권한 오류 1회가 발생해 권한을 받아 남은 기록만 정상 정리했다. 원격의 기존 branch 상태는 별도 재확인 전이다.
+- 미검증/다음 조치: 전체 Python·Web 검증, WSL exact-SHA QA, 실제 OmniRoute 요청·응답과 사용자 인수 확인, 서버 반영은 아직 수행하지 않았다. 운영 배포·Secret·DB 변경 없음.
+
 ## 2026-10-04 — 배포형 외부 Test Lab Responses 대기 시간 수정 진행
 
 - 담당: 어울. 범위: 배포형 Control의 외부 클라이언트 시험만 수정한다. 설치형 소스·서비스와 운영 Secret·DB는 변경하지 않는다.
