@@ -71,6 +71,9 @@ class HttpGatewayClient:
         if timeout_seconds <= 0 or max_response_bytes < 1:
             raise ValueError("Gateway client limits must be positive")
         self._timeout = httpx.Timeout(timeout_seconds)
+        self._responses_timeout = httpx.Timeout(
+            timeout_seconds, read=max(timeout_seconds, 45.0)
+        )
         self._max_response_bytes = max_response_bytes
         self._transport = transport
 
@@ -146,6 +149,7 @@ class HttpGatewayClient:
             f"{base_url}/v1/responses",
             credential=credential,
             json_body=payload,
+            timeout=self._responses_timeout,
         )
         if not isinstance(response.get("id"), str):
             raise GatewayClientError("gateway_invalid_response")
@@ -179,6 +183,7 @@ class HttpGatewayClient:
         content: bytes | None = None,
         json_body: dict[str, Any] | None = None,
         expect_empty: bool = False,
+        timeout: httpx.Timeout | None = None,
     ) -> dict[str, object]:
         if (
             _CLIENT_CREDENTIAL.fullmatch(credential) is None
@@ -205,6 +210,7 @@ class HttpGatewayClient:
                     headers=request_headers,
                     content=content,
                     json=json_body,
+                    timeout=timeout if timeout is not None else self._timeout,
                 )
         except httpx.HTTPError as error:
             raise GatewayClientError("gateway_unavailable") from error

@@ -10,6 +10,28 @@ from tests.gateway.helpers import TEST_RAW_CREDENTIAL, build_test_runtime, png_b
 
 
 @pytest.mark.asyncio
+async def test_control_bff_waits_longer_for_responses_than_other_gateway_calls() -> None:
+    observed: list[tuple[str, float]] = []
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        observed.append((request.url.path, request.extensions["timeout"]["read"]))
+        if request.url.path == "/status":
+            return httpx.Response(200, json={"status": "ready", "snapshot_version": 1})
+        return httpx.Response(200, json={"id": "resp_test"})
+
+    client = HttpGatewayClient(transport=httpx.MockTransport(handle))
+    base_url = "https://gateway.test"
+    await client.status(base_url=base_url, credential=TEST_RAW_CREDENTIAL)
+    await client.responses(
+        base_url=base_url,
+        credential=TEST_RAW_CREDENTIAL,
+        payload={"model": "auto", "input": "test", "stream": False},
+    )
+
+    assert observed == [("/status", 15.0), ("/v1/responses", 45.0)]
+
+
+@pytest.mark.asyncio
 async def test_control_bff_client_uses_actual_gateway_prepare_and_opt_in_responses(
     tmp_path: Path,
 ) -> None:

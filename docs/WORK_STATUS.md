@@ -1,5 +1,20 @@
 # Media Bridge 작업현황
 
+## 2026-10-04 — 배포형 외부 Test Lab Responses 대기 시간 수정 진행
+
+- 담당: 어울. 범위: 배포형 Control의 외부 클라이언트 시험만 수정한다. 설치형 소스·서비스와 운영 Secret·DB는 변경하지 않는다.
+- 기준: `origin/main` `88e2566`, 작업 branch/worktree `codex/fix-external-test-timeout` / `.worktrees/fix-external-test-timeout`. ysna-server 정식 checkout은 `540f335`이며 최신 main과 배포형 제품 코드 차이는 없고, 현재 Control 이미지 digest는 `sha256:cc7e78e43c282c58bc5b6734d327f4cd24e87c4c1a3e2011795b08ea6a2198b6`이다.
+- 원인 근거: Gateway 프록시에서 외부 시험의 asset upload는 201, 이어진 `/v1/responses`는 약 15초 뒤 499였다. 실행 중 Control의 `HttpGatewayClient`는 모든 Gateway 요청에 15초 read timeout을 적용하고 timeout을 `gateway_unavailable`로 표시한다. 다른 Responses 요청과 Chat Completions 요청은 200으로 성공했다.
+- 변경 파일: `media_bridge_control/gateway_client.py`, `tests/control/integration/test_gateway_bff_client.py`. 일반 Gateway 요청의 15초 제한은 유지하고 Responses 응답 읽기만 최대 45초로 늘린다. DB schema·migration 동작, 프록시 설정, 설치형은 변경하지 않는다.
+- 검증: 신규 테스트 RED에서 Responses read timeout이 실제 15초인 것을 확인했고 GREEN에서 관련 통합 2 passed, Control unit/Gateway 관련 137 passed. Windows 변경 파일 Ruff·mypy·diff check 통과. Windows 전체 mypy는 기존 `os.O_DIRECTORY` 1건, 전체 pytest는 DB 통합 단계 무응답으로 약 12%에서 중단됐다. `python` 경로 및 기본 Temp 접근 거부는 기존 `.venv`와 ignored `--basetemp`로 해결했다.
+- 원격 작업 branch에 제품 커밋 `812fb2fff876ccc4ebfd3cf5ef20e853b2d39881`을 SSH 별칭으로 push했다. WSL 배포형 QA checkout도 해당 exact commit으로 전환해 137 passed, 전체 mypy 84 files 통과, 관련 Ruff 통과를 확인했다. 격리 QA PostgreSQL 사용 Linux 전체 pytest는 `591 passed, 6 skipped, 1 failed`; 실패는 기존 `docs/test_reports/FINAL_INDEPENDENT_VALIDATION_REPORT.md`를 허용하지 않는 `test_public_repository_docs.py` 검사다. 전체 Ruff도 기존 migration 파일 E501 2건으로 실패한다. 두 파일 모두 제품 커밋에서 변경하지 않았다.
+- 동일 커밋의 WSL Control 이미지 build와 Web typecheck/build, Web Vitest 41 passed, ESLint 통과. 격리 이미지에서 일반 Gateway 15초·Responses read 45초를 확인했다. 임시 QA DB project `media-bridge-timeout-qa-812fb2f`, QA 이미지 태그 2개, `/tmp/media-bridge-timeout-qa-F0UeJ9vO` venv는 검증 후 정확한 대상만 제거했고 잔류 0을 확인했다. WSL checkout은 clean이다.
+- 신산님은 기존 검증 결함 2종의 최소 수정과 이후 배포를 승인했다. `tests/packaging/test_public_repository_docs.py`에는 이미 추적된 내부 시험 보고서 디렉터리를 허용했고, `migrations/versions/0014_model_capability_no_expiry.py`에서는 E501 두 줄만 줄바꿈했다(동작·DB schema 변경 없음). 문서 허용 검사 RED에서 기존 보고서 1개를 검출했고 GREEN에서 관련 3 passed, 전체 Ruff 통과를 확인했다.
+- 두 QA 결함 수정 커밋 `87a9204355187cc58d88a7fedec868123310f84f`를 `github-cyhuh7950` 별칭으로 push하고 WSL-server의 clean checkout에서 exact-SHA 검증했다. Python 전체 `592 passed, 6 skipped`, Ruff 전체 PASS, mypy 84 files PASS. Web Vitest 41 PASS, lint PASS, typecheck/Vite build PASS. Control 이미지 빌드 PASS; x64 이미지 내부에서 일반 요청 15초·Responses 읽기 45초를 확인했다. Web 시험 중 기존 React `act(...)`/key 경고가 출력됐으나 테스트 실패는 없었다.
+- 배포: WSL x64 이미지는 ARM64 ysna-server에서 실행할 수 없어 실제 서비스에 연결하지 않았다. 서버의 기존 `/home/ubuntu/deploy/media-bridge`에서 동일 검증 소스 커밋 `87a9204`로 ARM64 Control 이미지를 빌드하고 실행 가능한 15초/45초 설정을 확인한 뒤, `media-bridge-control` 컨테이너만 교체했다. 실행 이미지 ID `sha256:97a9b916eaaa1a0db2a9b89afd510911e294a2dd4c67e5169e0961239c21230e`; 이전 이미지 `sha256:cc7e78e43c282c58bc5b6734d327f4cd24e87c4c1a3e2011795b08ea6a2198b6`는 `media-bridge-control:rollback-540f335-20261004` 태그로 보존했다. Control·Data·DB healthy, DB `schema_current`, 공개 `/health`와 `/test-lab` HTTP 200, 인증 없는 Gateway `/v1/responses` HTTP 401 확인. 기존 비추적 `compose.ysna.yaml`과 `secrets`는 보존했다.
+- 임시 QA PostgreSQL project·x64 이미지 태그·venv·전송 archive·생성된 `web/node_modules`·이번 pytest cache는 정확한 경로에서 제거하고 잔류하지 않음을 확인했다. Web `dist`는 사전 소유 여부가 불명확해 보존했다. `web/node_modules`는 시험 컨테이너가 root 소유로 생성하여 첫 정리 시 권한 거부가 났고, 같은 격리 컨테이너 권한으로 해당 폴더만 제거했다. 잘못 적재된 운영 x64 시험 이미지 태그와 archive도 제거했으며 운영 ARM64/rollback 이미지는 유지한다.
+- 판정: 배포형 timeout 수정은 운영 Control에 반영·기본 smoke 완료. 실제 인증된 이미지/PDF Provider 전체 흐름은 Secret·비용 경로라 이번 자동 검증에 포함하지 않았고 신산님이 `/test-lab`에서 확인해야 한다. 설치형 소스·서비스, 운영 DB 데이터·Secret, Data 컨테이너는 변경하지 않았다. 이 작업 브랜치는 사용자 인수 전까지 유지하며 main 병합은 하지 않았다.
+
 ## 2026-09-25 — 독립 검증 보고서 9차 근거·집계 보완
 
 - 신산님 요청으로 `docs/test_reports/FINAL_INDEPENDENT_VALIDATION_REPORT.md`를 검토·보완했다. 작업 기준은 `main`/`origin/main` `9933dd2`; 작업 branch/worktree는 `codex/revise-independent-validation-report` / `.worktrees/revise-independent-validation-report`다. 이전 `installed-reasoning-level-config` 잔여 폴더는 접근·수정·삭제하지 않았다.

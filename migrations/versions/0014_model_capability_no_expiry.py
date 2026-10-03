@@ -14,9 +14,13 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.alter_column("model_capabilities", "expires_at", existing_type=sa.DateTime(timezone=True), nullable=True)
+    op.alter_column(
+        "model_capabilities", "expires_at", existing_type=sa.DateTime(timezone=True), nullable=True
+    )
 
 
 def downgrade() -> None:
     op.execute("UPDATE model_capabilities SET expires_at = reviewed_at WHERE expires_at IS NULL")
-    op.alter_column("model_capabilities", "expires_at", existing_type=sa.DateTime(timezone=True), nullable=False)
+    op.alter_column(
+        "model_capabilities", "expires_at", existing_type=sa.DateTime(timezone=True), nullable=False
+    )

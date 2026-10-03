@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[2]
 DOCS = ROOT / "docs"
 PUBLISHED_DOC_DIRECTORIES = {"install", "manuals"}
-INTERNAL_DOC_DIRECTORIES = {"design", "superpowers"}
+INTERNAL_DOC_DIRECTORIES = {"design", "superpowers", "test_reports"}
 INTERNAL_DOC_FILES = {"WORK_PLAN.md", "WORK_STATUS.md"}
 
 
