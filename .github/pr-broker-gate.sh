@@ -17,4 +17,4 @@ git update-ref refs/remotes/development/main refs/remotes/origin/main
 git update-ref "refs/remotes/development/$HEAD_BRANCH" "$HEAD_SHA"
 git branch --set-upstream-to="development/$HEAD_BRANCH" "$HEAD_BRANCH"
 
-git diff --check refs/remotes/origin/main
+git diff --check refs/remotes/origin/main...HEAD
