@@ -5,11 +5,12 @@
 - 담당: 어울. 범위: 배포형 Control의 외부 클라이언트 시험만 수정한다. 설치형 소스·서비스와 운영 Secret·DB는 변경하지 않는다.
 - 기준: `origin/main` `88e2566`, 작업 branch/worktree `codex/fix-external-test-timeout` / `.worktrees/fix-external-test-timeout`. ysna-server 정식 checkout은 `540f335`이며 최신 main과 배포형 제품 코드 차이는 없고, 현재 Control 이미지 digest는 `sha256:cc7e78e43c282c58bc5b6734d327f4cd24e87c4c1a3e2011795b08ea6a2198b6`이다.
 - 원인 근거: Gateway 프록시에서 외부 시험의 asset upload는 201, 이어진 `/v1/responses`는 약 15초 뒤 499였다. 실행 중 Control의 `HttpGatewayClient`는 모든 Gateway 요청에 15초 read timeout을 적용하고 timeout을 `gateway_unavailable`로 표시한다. 다른 Responses 요청과 Chat Completions 요청은 200으로 성공했다.
-- 변경 파일: `media_bridge_control/gateway_client.py`, `tests/control/integration/test_gateway_bff_client.py`. 일반 Gateway 요청의 15초 제한은 유지하고 Responses 응답 읽기만 최대 45초로 늘린다. DB migration, 프록시 설정, 설치형은 변경하지 않는다.
+- 변경 파일: `media_bridge_control/gateway_client.py`, `tests/control/integration/test_gateway_bff_client.py`. 일반 Gateway 요청의 15초 제한은 유지하고 Responses 응답 읽기만 최대 45초로 늘린다. DB schema·migration 동작, 프록시 설정, 설치형은 변경하지 않는다.
 - 검증: 신규 테스트 RED에서 Responses read timeout이 실제 15초인 것을 확인했고 GREEN에서 관련 통합 2 passed, Control unit/Gateway 관련 137 passed. Windows 변경 파일 Ruff·mypy·diff check 통과. Windows 전체 mypy는 기존 `os.O_DIRECTORY` 1건, 전체 pytest는 DB 통합 단계 무응답으로 약 12%에서 중단됐다. `python` 경로 및 기본 Temp 접근 거부는 기존 `.venv`와 ignored `--basetemp`로 해결했다.
 - 원격 작업 branch에 제품 커밋 `812fb2fff876ccc4ebfd3cf5ef20e853b2d39881`을 SSH 별칭으로 push했다. WSL 배포형 QA checkout도 해당 exact commit으로 전환해 137 passed, 전체 mypy 84 files 통과, 관련 Ruff 통과를 확인했다. 격리 QA PostgreSQL 사용 Linux 전체 pytest는 `591 passed, 6 skipped, 1 failed`; 실패는 기존 `docs/test_reports/FINAL_INDEPENDENT_VALIDATION_REPORT.md`를 허용하지 않는 `test_public_repository_docs.py` 검사다. 전체 Ruff도 기존 migration 파일 E501 2건으로 실패한다. 두 파일 모두 제품 커밋에서 변경하지 않았다.
 - 동일 커밋의 WSL Control 이미지 build와 Web typecheck/build, Web Vitest 41 passed, ESLint 통과. 격리 이미지에서 일반 Gateway 15초·Responses read 45초를 확인했다. 임시 QA DB project `media-bridge-timeout-qa-812fb2f`, QA 이미지 태그 2개, `/tmp/media-bridge-timeout-qa-F0UeJ9vO` venv는 검증 후 정확한 대상만 제거했고 잔류 0을 확인했다. WSL checkout은 clean이다.
-- 판정: 전체 검증의 기존 결함 2종 처리 방식(최소 수정 또는 명시적 예외)에 대한 신산님 결정을 요청했다. 결정 전 ysna-server 배포·main 병합은 하지 않는다. 운영 DB/Secret과 설치형은 건드리지 않았다. 실제 Provider 비용 호출은 미검증이며 배포 후 사용자 외부 시험 확인이 필요하다.
+- 신산님은 기존 검증 결함 2종의 최소 수정과 이후 배포를 승인했다. `tests/packaging/test_public_repository_docs.py`에는 이미 추적된 내부 시험 보고서 디렉터리를 허용했고, `migrations/versions/0014_model_capability_no_expiry.py`에서는 E501 두 줄만 줄바꿈했다(동작·DB schema 변경 없음). 문서 허용 검사 RED에서 기존 보고서 1개를 검출했고 GREEN에서 관련 3 passed, 전체 Ruff 통과를 확인했다.
+- 다음: 두 QA 결함 수정 커밋을 SSH 별칭으로 push하고 WSL exact-SHA 전체 pytest·Ruff·mypy·Web/Control build를 재검증한다. 모두 통과하면 신산님이 승인한 `/home/ubuntu/deploy/media-bridge`에서 Control만 교체하고 health·timeout 설정·롤백 가능성을 확인한다. 운영 DB/Secret과 설치형은 건드리지 않는다. 실제 Provider 비용 호출은 미검증이며 배포 후 사용자 외부 시험 확인이 필요하다.
 
 ## 2026-09-25 — 독립 검증 보고서 9차 근거·집계 보완
 
