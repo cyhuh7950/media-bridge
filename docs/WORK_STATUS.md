@@ -1,5 +1,21 @@
 # Media Bridge 작업현황
 
+## 2026-10-04 — OmniRoute Responses 스트리밍 호환 수정 진행
+
+- 담당: 어울. 범위: 배포형 Gateway의 `/v1/responses`에서 `stream: true` 요청에 대한 응답 형식만 수정한다. 설치형, DB, 운영 Secret, 일반 JSON 응답은 변경하지 않는다. 기준 `main`/`origin/main`은 `ecc2f2f`; 작업 브랜치/worktree는 `codex/fix-omniroute-responses-stream` / `.worktrees/fix-omniroute-responses-stream`이다.
+- 근거: Test Lab은 `stream: false`로 성공하지만 OmniRoute의 Responses 화면은 빈 답변이었다. 실제 Provider downstream은 `stream: true`를 받아도 `application/json`을 반환했다. OpenAI 공식 Responses 계약은 이 경우 typed SSE를 요구한다. OmniRoute의 실제 요청 본문과 운영 응답은 아직 직접 확보하지 못했으므로 원인 연관성은 운영 재시험 전까지 가설로 둔다.
+- 변경 파일: `media_bridge_gateway/downstream.py`, `tests/gateway/unit/test_provider_responses_downstream.py`, 이 작업현황. Provider 완료 답변을 `response.created`부터 `response.completed`까지 SSE 이벤트로 감싸고, 비스트리밍 JSON 경로를 유지한다. 진정한 토큰 단위 실시간 생성은 이번 범위가 아니다.
+- 테스트: 기존 downstream 6 passed. 새 재현 테스트 RED는 예상대로 `application/json != text/event-stream`, 수정 후 downstream 7 passed, Gateway 전체 71 passed. 변경 파일 Ruff·mypy 및 diff check 통과. 최초 Gateway 전체 시험은 Windows 기본 Temp 접근 거부로 29 passed/42 setup errors; 두 번째는 존재하지 않는 `.pytest_cache` 하위 경로 선택으로 같은 42 setup errors; 존재하는 ignored `.mypy_cache` 하위 임시 경로로 재실행해 71 passed. 두 환경 오류는 제품 코드 실패가 아니다.
+- 원격 작업 브랜치에 제품·테스트 커밋 `cb8a794a3f7f01088a95b815c52ce962b7b4dbc7`을 `github-cyhuh7950` 별칭으로 push했다. WSL QA checkout을 그 exact SHA로 전환하고 격리 PostgreSQL에서 Python 전체 `593 passed, 6 skipped`, Ruff 전체 PASS, mypy 84 source files PASS를 확인했다. 별도 Node 22 QA 복사본에서 Web Vitest 41 passed, lint PASS, typecheck PASS, build PASS. 기존 React `act(...)`/key 경고가 있었고 `npm ci`는 high 취약점 2건을 알렸지만 이번 Gateway 변경과의 연관성은 조사하지 않았다.
+- WSL의 전용 QA PostgreSQL `media-bridge-omniroute-qa-cb8a794-db`와 임시 복사본·venv `/tmp/media-bridge-omniroute-qa-ddee3m`은 정확한 대상 확인 후 제거했다. WSL 원본 QA checkout은 clean이며 이 QA 단계에서 운영 서비스·DB·Secret 변경은 없었다.
+- WSL에서 제품 커밋 `cb8a794`의 Data x64 이미지를 빌드하고 신규 스트리밍 코드 포함을 확인했다. 검증 전용 태그·이미지는 사용 컨테이너가 없음을 확인해 제거했다.
+- 신산님의 앞선 배포 요청에 따라 `ysna-server`의 기존 `/home/ubuntu/deploy/media-bridge`를 작업 브랜치 커밋 `4012739d478c1b3d0b54f40b06fe3c127aa12fff`로 전환하고 ARM64 Data 이미지만 빌드·교체했다. 새 이미지 `sha256:ca367ef65dd017b30f95a389e50b9b185a601c5b28a0da9661eaacfd05550569`, 이전 이미지 `sha256:59487d91c6f8e0f27b8881f824188c8771ed5758b836f288f1219ce26bc51ff8`는 `media-bridge-data:rollback-59487d9-20261004`로 보존했다. Control·DB는 재생성하지 않았고 세 컨테이너 모두 healthy. 공개 Control `/health` HTTP 200, 인증 없는 Gateway `/v1/responses` HTTP 401. 서버 전용 비추적 `compose.ysna.yaml`·`secrets`는 보존했다. DB migration·Secret 변경 없음.
+- 이전 timeout 작업의 clean·main 포함 worktree와 로컬 브랜치는 제거했다. 삭제 시 Git 관리 기록 권한 오류 1회가 발생해 권한을 받아 남은 기록만 정상 정리했다. 원격의 기존 branch 상태는 별도 재확인 전이다.
+- 사용자 확인: 신산님이 OmniRoute의 응답 API 화면에서 `uss/solar-pro4`의 답변 `안녕하세요! 무엇을 도와드릴까요?`가 표시된 스크린샷을 제공하고 정상 동작을 확인했다. 실제 요청의 `stream` 값과 전체 응답 프레임은 확보하지 못했다. 현재 수정은 완성된 Provider 답변을 SSE로 감싸며 실제 토큰 단위 생성은 하지 않는다.
+- 2026-10-04 통합 전 재확인: 작업 브랜치 변경은 Gateway downstream·회귀 테스트·이 작업현황 3개 파일이며, 로컬 Gateway 71 passed, 전체 Ruff PASS, 변경 파일 mypy PASS, diff check PASS. 첫 Windows 시험은 존재하지 않는 `--basetemp` 상위 경로로 29 passed/42 setup errors였고, 존재하는 격리 경로로 재실행해 71 passed. WSL QA checkout은 제품 커밋 `cb8a794`에서 clean이고, 앞서 같은 코드의 전체 Python 593 passed/6 skipped 및 Web 41 passed·lint·typecheck·build를 기록했다. 병합·원격 동기화·브랜치 정리는 신산님 직접 요청에 따라 진행한다.
+- 통합 전 전체 회귀 재시험용 자원: WSL-server에서 `media-bridge-merge-qa-20261004-db` 임시 PostgreSQL 컨테이너를 127.0.0.1:55432로만 열어 `/home/daon/deploy/media-bridge`의 Python 전체 테스트에 사용한다. 시스템 Python에는 SQLAlchemy가 없어 `/tmp/media-bridge-merge-qa-20261004-venv` 전용 venv를 생성해 프로젝트의 검증 의존성을 설치한다. 운영 DB·volume은 사용하지 않으며 시험 직후 이 컨테이너와 venv만 제거하고 잔류 여부를 확인한다.
+- 통합 전 WSL 전체 검증 결과: 제품 커밋 `cb8a794`에서 격리 QA DB 사용 Python 전체 `593 passed, 6 skipped`, Ruff 전체 PASS, strict mypy 84 source files PASS; QA checkout clean. Web 파일은 이 작업에서 변경하지 않았으며 동일 제품 커밋의 앞선 Web 41 passed·lint·typecheck·build 결과를 유지한다. 통합 후 `main`에서 Gateway 회귀를 다시 실행한다.
+
 ## 2026-10-04 — 배포형 외부 Test Lab Responses 대기 시간 수정 진행
 
 - 담당: 어울. 범위: 배포형 Control의 외부 클라이언트 시험만 수정한다. 설치형 소스·서비스와 운영 Secret·DB는 변경하지 않는다.

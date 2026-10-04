@@ -435,6 +435,88 @@ def _text_from_responses_payload(payload: dict[str, object]) -> str:
     return "\n\n".join(text.strip() for text in texts if text.strip())
 
 
+async def _provider_responses_stream(
+    *, response_id: str, model: str, text: str
+) -> AsyncIterator[bytes]:
+    """Wrap a completed Provider answer in Responses SSE events."""
+    created_at = int(time.time())
+    item_id = f"msg_{secrets.token_urlsafe(18)}"
+    empty_response = {
+        "id": response_id,
+        "object": "response",
+        "created_at": created_at,
+        "model": model,
+        "status": "in_progress",
+        "output": [],
+        "error": None,
+        "incomplete_details": None,
+        "usage": None,
+    }
+    output_text = {"type": "output_text", "text": text, "annotations": [], "logprobs": []}
+    output_item = {
+        "id": item_id,
+        "type": "message",
+        "status": "completed",
+        "role": "assistant",
+        "content": [output_text],
+    }
+    completed_response = {
+        **empty_response,
+        "status": "completed",
+        "completed_at": int(time.time()),
+        "output": [output_item],
+    }
+
+    def event(kind: str, sequence_number: int, **payload: object) -> bytes:
+        data = {"type": kind, "sequence_number": sequence_number, **payload}
+        return b"event: " + kind.encode("ascii") + b"\ndata: " + _canonical_json(data) + b"\n\n"
+
+    yield event("response.created", 0, response=empty_response)
+    yield event("response.in_progress", 1, response=empty_response)
+    yield event(
+        "response.output_item.added",
+        2,
+        output_index=0,
+        item={**output_item, "status": "in_progress", "content": []},
+    )
+    yield event(
+        "response.content_part.added",
+        3,
+        item_id=item_id,
+        output_index=0,
+        content_index=0,
+        part={**output_text, "text": ""},
+    )
+    yield event(
+        "response.output_text.delta",
+        4,
+        item_id=item_id,
+        output_index=0,
+        content_index=0,
+        delta=text,
+        logprobs=[],
+    )
+    yield event(
+        "response.output_text.done",
+        5,
+        item_id=item_id,
+        output_index=0,
+        content_index=0,
+        text=text,
+        logprobs=[],
+    )
+    yield event(
+        "response.content_part.done",
+        6,
+        item_id=item_id,
+        output_index=0,
+        content_index=0,
+        part=output_text,
+    )
+    yield event("response.output_item.done", 7, output_index=0, item=output_item)
+    yield event("response.completed", 8, response=completed_response)
+
+
 class ProviderResponsesDownstream:
     """Resolve a model through one verified snapshot before text-only execution."""
 
@@ -529,6 +611,16 @@ class ProviderResponsesDownstream:
                 ],
             }
         )
+        if request.payload.get("stream") is True:
+            return GatewayResponse(
+                body=body,
+                content_type="text/event-stream",
+                response_id=response_id,
+                status_code=200,
+                stream=_provider_responses_stream(
+                    response_id=response_id, model=output_model, text=result.analysis
+                ),
+            )
         return GatewayResponse(
             body=body,
             content_type="application/json",
