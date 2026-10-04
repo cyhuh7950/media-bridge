@@ -11,7 +11,10 @@
 - WSL에서 제품 커밋 `cb8a794`의 Data x64 이미지를 빌드하고 신규 스트리밍 코드 포함을 확인했다. 검증 전용 태그·이미지는 사용 컨테이너가 없음을 확인해 제거했다.
 - 신산님의 앞선 배포 요청에 따라 `ysna-server`의 기존 `/home/ubuntu/deploy/media-bridge`를 작업 브랜치 커밋 `4012739d478c1b3d0b54f40b06fe3c127aa12fff`로 전환하고 ARM64 Data 이미지만 빌드·교체했다. 새 이미지 `sha256:ca367ef65dd017b30f95a389e50b9b185a601c5b28a0da9661eaacfd05550569`, 이전 이미지 `sha256:59487d91c6f8e0f27b8881f824188c8771ed5758b836f288f1219ce26bc51ff8`는 `media-bridge-data:rollback-59487d9-20261004`로 보존했다. Control·DB는 재생성하지 않았고 세 컨테이너 모두 healthy. 공개 Control `/health` HTTP 200, 인증 없는 Gateway `/v1/responses` HTTP 401. 서버 전용 비추적 `compose.ysna.yaml`·`secrets`는 보존했다. DB migration·Secret 변경 없음.
 - 이전 timeout 작업의 clean·main 포함 worktree와 로컬 브랜치는 제거했다. 삭제 시 Git 관리 기록 권한 오류 1회가 발생해 권한을 받아 남은 기록만 정상 정리했다. 원격의 기존 branch 상태는 별도 재확인 전이다.
-- 미검증/다음 조치: 실제 OmniRoute가 `stream: true`를 보내는지, 배포 후 답변이 보이는지, 사용자 인수는 아직 확인하지 못했다. 현재 수정은 완성된 Provider 답변을 SSE로 감싸며 실제 토큰 단위 생성은 하지 않는다. 이 확인 전에는 PR 병합이나 작업 branch/worktree 정리를 완료로 판정하지 않는다.
+- 사용자 확인: 신산님이 OmniRoute의 응답 API 화면에서 `uss/solar-pro4`의 답변 `안녕하세요! 무엇을 도와드릴까요?`가 표시된 스크린샷을 제공하고 정상 동작을 확인했다. 실제 요청의 `stream` 값과 전체 응답 프레임은 확보하지 못했다. 현재 수정은 완성된 Provider 답변을 SSE로 감싸며 실제 토큰 단위 생성은 하지 않는다.
+- 2026-10-04 통합 전 재확인: 작업 브랜치 변경은 Gateway downstream·회귀 테스트·이 작업현황 3개 파일이며, 로컬 Gateway 71 passed, 전체 Ruff PASS, 변경 파일 mypy PASS, diff check PASS. 첫 Windows 시험은 존재하지 않는 `--basetemp` 상위 경로로 29 passed/42 setup errors였고, 존재하는 격리 경로로 재실행해 71 passed. WSL QA checkout은 제품 커밋 `cb8a794`에서 clean이고, 앞서 같은 코드의 전체 Python 593 passed/6 skipped 및 Web 41 passed·lint·typecheck·build를 기록했다. 병합·원격 동기화·브랜치 정리는 신산님 직접 요청에 따라 진행한다.
+- 통합 전 전체 회귀 재시험용 자원: WSL-server에서 `media-bridge-merge-qa-20261004-db` 임시 PostgreSQL 컨테이너를 127.0.0.1:55432로만 열어 `/home/daon/deploy/media-bridge`의 Python 전체 테스트에 사용한다. 시스템 Python에는 SQLAlchemy가 없어 `/tmp/media-bridge-merge-qa-20261004-venv` 전용 venv를 생성해 프로젝트의 검증 의존성을 설치한다. 운영 DB·volume은 사용하지 않으며 시험 직후 이 컨테이너와 venv만 제거하고 잔류 여부를 확인한다.
+- 통합 전 WSL 전체 검증 결과: 제품 커밋 `cb8a794`에서 격리 QA DB 사용 Python 전체 `593 passed, 6 skipped`, Ruff 전체 PASS, strict mypy 84 source files PASS; QA checkout clean. Web 파일은 이 작업에서 변경하지 않았으며 동일 제품 커밋의 앞선 Web 41 passed·lint·typecheck·build 결과를 유지한다. 통합 후 `main`에서 Gateway 회귀를 다시 실행한다.
 
 ## 2026-10-04 — 배포형 외부 Test Lab Responses 대기 시간 수정 진행
 
