@@ -2,6 +2,11 @@
 
 ## 2026-10-16 — S18 소비자 요청의 system·JSON 형식·출력 상한 전달 보정 착수
 
+- WSL 시험 자원 회수: 정확한 QA checkout의 SHA/clean을 확인한 뒤 정상 Git remove로 분리하고 이번 전용 venv·wheel·시험 디렉터리 `/tmp/media-bridge-s18-qa-rx5tt84a`만 제거했다. 해당 디렉터리 잔류0·WSL 소유 checkout clean/a7a447a9 및 원래 등록 checkout1개를 확인했다. QA DB/volume·고정/공개 포트·Data 이미지 생성0이므로 회수 대상도 없었다. 시험 원본은 원격 작업 branch의 b72d722에 보존되어 재현 가능하다. 로컬 main a7a447a9·기존 stash는 보존한다. 현재 작업 branch는 검증 소스 보존 상태이며 아직 운영 배포·PR·병합·추가 유료 시험은 하지 않았다.
+
+- WSL 실제 검증: Git exact `b72d7222c72faf3b3c15505ef6a06c1ca2c0c896`의 격리 checkout에서 **140 passed / 0 skipped / 2.06초 / exit0**, 변경 Ruff6파일·strict mypy3파일·diff check 모두 exit0을 확인했다. 실제 Gateway loopback HTTP/보안 회귀와 합성 Provider MockTransport를 구분하며 실제 외부 모델·DB·사용자 질문 저장 성공으로 확대하지 않는다. Python wheel build exit0, SHA256 `0cc8fdc23218eb07d977bdab5f66f627499963cb264a76122f207233e292dc1d`다.
+- 패키지 smoke 1차 실패와 해소: venv의 최초 pip install은 PYTHONPATH에 있던 source의 build metadata를 이미 설치된 것으로 인식해 exit0이었으나 실제 venv package/metadata는 0개이고 import가 실패했다. 제품 코드를 바꾸지 않고 source PYTHONPATH를 제거한 상태에서 같은 wheel을 전용 venv에 명시적으로 재설치했다. 설치 코드의 import와 source 대조는 모두 성공했고 3파일 LF SHA256은 b69bc211/138674b8/b8ca62a5로 Git source와 일치했다. 기존 140시험을 불필요하게 재실행하거나 첫 실패를 PASS로 바꾸지 않았다. QA checkout clean, Data 이미지 build/기존 서비스 교체·Secret/DB·실제 유료 호출0이다.
+
 - 최종 내부 읽기 리뷰: 기존 별도 reviewer가 baseline a7a447a9 대비 제품/시험6파일 diff 및 고정 지문을 대조해 Critical0/Important0/Minor0으로 보고했다. main의 실제 140PASS와 별도 증거이며 외부 독립 인수나 실제 모델 검증이 아니다. 공식 계약 참고는 OpenAI Chat https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create , Responses 형식 https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses , Upstage https://console.upstage.ai/api/chat 이다. GitHub `cyhuh7950/media-bridge`의 이번 전용 branch로 제품3·직접시험3·이 작업현황만 비강제 동기화해 WSL 격리 검증을 이어간다. 환경파일·Secret·사용자 자료는 포함하지 않고 main/운영 서비스/DB는 변경하지 않는다.
 
 - 로컬 후보 고정·main 독립 실행: 기존 writer STOP 뒤 어울 main이 `tests/unit/test_openai_chat.py`, `tests/unit/test_backends.py`, `tests/gateway`를 새 실행해 **140 passed / 0 skipped / 5.36초 / exit0**을 확인했다. 변경 6파일 Ruff PASS, 제품 3파일 strict mypy PASS, diff check PASS다. 제품 SHA256(openai_chat/llm_backends/downstream)은 6052F973/AD577F1A/04071CA2이며 writer 고정 지문과 동일하다. 서명 요청→실제 backend outgoing body의 지시·JSON schema·cap과 잘못된/미지원 요청의 호출 전 차단을 합성 MockTransport로 검증한 것이며 실제 Provider 성공으로 계산하지 않는다.
@@ -9,6 +14,7 @@
 
 - WSL 자원 사용 계획: `/tmp/media-bridge-s18-qa-*`의 이번 생성 디렉터리 하나와 그 안의 전용 Python venv·시험 임시 파일만 사용한다. 기존 checkout의 lock 의존성을 설치하고 Git exact SHA에서 집중 시험·타입/정적 검사 및 필요 Data 이미지 빌드만 수행한다. DB·volume·포트·기존 서비스는 사용하거나 변경하지 않는다. QA 이미지가 생성되면 사용 컨테이너가 없는지 확인한 뒤 이번 태그/이미지만 회수하고, 전용 디렉터리도 절대 경로 검증 후 제거한다.
 - WSL 준비 실행: 이번 정확한 임시 디렉터리는 `/tmp/media-bridge-s18-qa-rx5tt84a`이며 기존 `requirements.lock` 의존성을 전용 venv에 설치해 exit0을 확인했다. 시스템 Python·DB·서비스 변경0, 아직 제품 후보의 WSL 시험·이미지 빌드는 실행 전이다. 첫 읽기용 Python probe는 PowerShell→SSH 문자열 인용 오류로 실패했고 stdin 전달로 수정해 확인했다(제품 오류 아님, 원문 로그/Secret 출력0).
+- WSL 실행 대상 확정: 원격과 일치한 제품 커밋 `b72d7222c72faf3b3c15505ef6a06c1ca2c0c896`을 기존 공급 checkout에서 Git fetch하고 위 전용 임시 디렉터리 안의 격리 checkout에 둔다. 집중 140시험·변경 Ruff/mypy·Python wheel 빌드/설치 후 설치 코드 지문을 대조한다. Data 이미지/실서비스는 이번 단계에서 만들거나 교체하지 않는다. 앞의 ‘포트 사용0’은 기존 서비스·고정/공개 포트 변경0이라는 뜻으로 정정하며 기존 TCP 회귀는 loopback 임시 포트를 열고 시험 종료 때 닫는다. DB·volume·실제 Provider 호출0은 그대로다.
 
 - 실제 실행 코드 대조: ysna Data image `sha256:ca367ef65dd017b30f95a389e50b9b185a601c5b28a0da9661eaacfd05550569`·서버 checkout 4012739d를 읽기 전용으로 확인했다. 실행 중 openai_chat/downstream/llm_backends의 SHA256은 각각 a29f3a25/e61eb144/1d429340이며 로컬 main a7a447a9의 LF 내용과 일치한다. instructions 미추출·요청 옵션 미전달·고정 system 재생성을 실제 실행 코드에서 확인했고 Secret·요청/응답 원문은 출력하지 않았다. WSL 공급 checkout은 clean/a7a447a9이며 기존 실행 서비스는 변경하지 않았다. 공식 OpenAI Responses의 text.format과 Upstage Chat의 response_format/max_tokens 매핑을 확인했으나 실제 유료 모델 성공은 아직 시험하지 않았다.
 
