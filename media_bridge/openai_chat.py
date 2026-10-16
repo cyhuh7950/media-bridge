@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import AsyncIterator
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, cast
 
 
 class ChatNormalizationError(ValueError):
@@ -17,6 +18,88 @@ class ChatNormalizationError(ValueError):
 
 def _error(message: str) -> ChatNormalizationError:
     return ChatNormalizationError("invalid_request", message)
+
+
+def _json_format(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise _error("JSON response format is malformed.")
+    kind = value.get("type")
+    if not isinstance(kind, str):
+        raise _error("JSON response format type must be text.")
+    if kind in {"text", "json_object"} and set(value) == {"type"}:
+        return dict(value)
+    if kind != "json_schema" or not set(value).issubset(
+        {"type", "name", "schema", "strict", "description"}
+    ):
+        raise _error("JSON response format is unsupported.")
+    if (
+        not isinstance(value.get("name"), str)
+        or not value["name"].strip()
+        or not isinstance(value.get("schema"), dict)
+        or ("strict" in value and type(value["strict"]) is not bool)
+        or ("description" in value and not isinstance(value["description"], str))
+    ):
+        raise _error("JSON schema format is malformed.")
+    try:
+        return cast(dict[str, Any], json.loads(json.dumps(value, allow_nan=False)))
+    except (ValueError, TypeError, RecursionError) as error:
+        raise _error("JSON schema format is malformed.") from error
+
+
+@dataclass(frozen=True, slots=True)
+class TextGenerationOptions:
+    """Validated text generation fields, never media or conversation state."""
+
+    instructions: str | None = field(default=None, repr=False)
+    output_format: dict[str, Any] | None = field(default=None, repr=False)
+    max_output_tokens: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.instructions is not None and not isinstance(self.instructions, str):
+            raise _error("Instructions must be text.")
+        if self.max_output_tokens is not None and (
+            type(self.max_output_tokens) is not int or self.max_output_tokens <= 0
+        ):
+            raise _error("Output token limit must be a positive integer.")
+        if self.output_format is not None:
+            object.__setattr__(self, "output_format", _json_format(self.output_format))
+
+    @property
+    def specified(self) -> bool:
+        return any(
+            value is not None
+            for value in (
+                self.instructions,
+                self.output_format,
+                self.max_output_tokens,
+            )
+        )
+
+
+def responses_generation_options(payload: dict[str, Any]) -> TextGenerationOptions:
+    if set(payload) - {
+        "model",
+        "input",
+        "stream",
+        "reasoning_effort",
+        "instructions",
+        "text",
+        "max_output_tokens",
+    }:
+        raise _error("Text Provider request contains unsupported fields.")
+    instructions = payload.get("instructions")
+    if "instructions" in payload and not isinstance(instructions, str):
+        raise _error("Instructions must be text.")
+    cap = payload.get("max_output_tokens")
+    if "max_output_tokens" in payload and (type(cap) is not int or cap <= 0):
+        raise _error("Output token limit must be a positive integer.")
+    output_format = None
+    if "text" in payload:
+        text = payload["text"]
+        if not isinstance(text, dict) or set(text) != {"format"}:
+            raise _error("Text response format is malformed.")
+        output_format = _json_format(text["format"])
+    return TextGenerationOptions(instructions, output_format, cap)
 
 
 def _text_part(value: object) -> dict[str, str]:
@@ -134,14 +217,39 @@ def chat_request_to_responses(payload: object) -> dict[str, Any]:
     result: dict[str, Any] = {
         key: value
         for key, value in payload.items()
-        if key not in {"messages", "max_tokens"}
+        if key not in {"messages", "max_tokens", "max_completion_tokens", "response_format"}
     }
     result["model"] = model
     result["input"] = input_items
     if instructions:
         result["instructions"] = "\n\n".join(instructions)
-    if "max_tokens" in payload and "max_output_tokens" not in payload:
-        result["max_output_tokens"] = payload["max_tokens"]
+    caps = [
+        payload[key]
+        for key in (
+            "max_tokens",
+            "max_completion_tokens",
+            "max_output_tokens",
+        )
+        if key in payload
+    ]
+    if caps:
+        if any(type(cap) is not int or cap <= 0 for cap in caps) or len(set(caps)) != 1:
+            raise _error("Output token limits are invalid or conflicting.")
+        result["max_output_tokens"] = caps[0]
+    if "response_format" in payload:
+        value = payload["response_format"]
+        if not isinstance(value, dict):
+            raise _error("Chat response format is malformed.")
+        if value.get("type") == "json_schema":
+            if set(value) != {"type", "json_schema"} or not isinstance(value["json_schema"], dict):
+                raise _error("Chat JSON schema format is malformed.")
+            if "type" in value["json_schema"]:
+                raise _error("Chat JSON schema format is malformed.")
+            value = {"type": "json_schema", **value["json_schema"]}
+        normalized_format = _json_format(value)
+        if "text" in result:
+            raise _error("Response format fields conflict.")
+        result["text"] = {"format": normalized_format}
     return result
 
 
@@ -217,9 +325,7 @@ async def chat_stream_from_responses(
         while "\n\n" in buffer:
             event, buffer = buffer.split("\n\n", 1)
             data_lines = [
-                line[5:].strip()
-                for line in event.splitlines()
-                if line.startswith("data:")
+                line[5:].strip() for line in event.splitlines() if line.startswith("data:")
             ]
             if not data_lines:
                 continue

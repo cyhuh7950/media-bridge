@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -14,6 +15,60 @@ from media_bridge.backends import (
     load_secret,
 )
 from media_bridge.llm_backends import build_llm_backend
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"max_output_tokens": True},
+        {"max_output_tokens": 0},
+        {"max_output_tokens": 512.0},
+        {"instructions": ["invalid"]},
+        {"output_format": {"type": []}},
+        {"output_format": {"type": {}}},
+    ],
+)
+def test_s18_internal_generation_options_reject_malformed_values(values: dict[str, Any]) -> None:
+    from media_bridge.openai_chat import ChatNormalizationError, TextGenerationOptions
+
+    with pytest.raises(ChatNormalizationError):
+        TextGenerationOptions(**values)
+
+
+@pytest.mark.asyncio
+async def test_s18_backend_json_object_options_preserve_explicit_system_and_cap() -> None:
+    from media_bridge.openai_chat import TextGenerationOptions
+
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"answer":"ok"}'}}]})
+
+    provider = {
+        "catalog_id": "upstage-solar",
+        "protocol": "openai-chat-completions",
+        "model_id": "solar-pro4",
+        "endpoint": "https://provider.example/v1",
+    }
+    async with _client(httpx.MockTransport(handler)) as client:
+        backend = build_llm_backend(
+            provider, credential_loader=lambda: "synthetic-secret", client=client
+        )
+        result = await backend.analyze_with_options(
+            context="sanitized context",
+            user_request="",
+            options=TextGenerationOptions(
+                instructions="Return a JSON object.",
+                output_format={"type": "json_object"},
+                max_output_tokens=512,
+            ),
+        )
+    assert result.status is BackendStatus.SUCCESS
+    outgoing = json.loads(seen[0].content)
+    assert outgoing["messages"][0] == {"role": "system", "content": "Return a JSON object."}
+    assert outgoing["response_format"] == {"type": "json_object"}
+    assert outgoing["max_tokens"] == 512
 
 
 def _client(handler: httpx.MockTransport) -> httpx.AsyncClient:
@@ -189,9 +244,7 @@ async def test_native_llm_backends_send_provider_specific_effort_and_parse_visib
             )
         assert payload["model"] == model_id
         assert payload["max_tokens"] == 4096
-        assert payload["messages"] == [
-            {"role": "user", "content": "sanitized context"}
-        ]
+        assert payload["messages"] == [{"role": "user", "content": "sanitized context"}]
         assert {key: payload[key] for key in expected_field} == expected_field
         assert request.headers["anthropic-version"] == "2023-06-01"
         return httpx.Response(
@@ -316,8 +369,8 @@ async def test_upstage_ocr_success_uses_header_not_url(monkeypatch: pytest.Monke
         assert request.headers["Authorization"] == "Bearer provider-secret"
         assert "provider-secret" not in str(request.url)
         body = request.content
-        assert b'name="ocr"' in body and b'\r\n\r\nforce' in body
-        assert b'name="model"' in body and b'\r\n\r\ndocument-parse' in body
+        assert b'name="ocr"' in body and b"\r\n\r\nforce" in body
+        assert b'name="model"' in body and b"\r\n\r\ndocument-parse" in body
         assert b'name="output_formats"' in body and b'\r\n\r\n["markdown"]' in body
         return httpx.Response(200, json={"text": "Fatal: connection timeout"})
 

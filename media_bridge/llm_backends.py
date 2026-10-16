@@ -16,6 +16,7 @@ from media_bridge.backends import (
     _chat_content,
     _failure_code,
 )
+from media_bridge.openai_chat import TextGenerationOptions
 from media_bridge.reasoning import (
     ReasoningCapability,
     ReasoningEffort,
@@ -29,6 +30,7 @@ class _ProviderTextBackend:
         self,
         *,
         endpoint: str,
+        catalog_id: str,
         protocol: str,
         model: str,
         effort: ReasoningEffort,
@@ -37,6 +39,7 @@ class _ProviderTextBackend:
         client: httpx.AsyncClient,
     ) -> None:
         self._endpoint = endpoint
+        self._catalog_id = catalog_id
         self._protocol = protocol
         self._model = model
         self._effort = effort
@@ -45,6 +48,26 @@ class _ProviderTextBackend:
         self._client = client
 
     async def analyze(self, *, context: str, user_request: str) -> AnalysisResult:
+        return await self._analyze(context=context, user_request=user_request, options=None)
+
+    async def analyze_with_options(
+        self,
+        *,
+        context: str,
+        user_request: str,
+        options: TextGenerationOptions,
+    ) -> AnalysisResult:
+        if self._protocol not in {"openai-chat-completions", "openai-responses"}:
+            return AnalysisResult(BackendStatus.FAILURE, error_code="unsupported_options")
+        return await self._analyze(context=context, user_request=user_request, options=options)
+
+    async def _analyze(
+        self,
+        *,
+        context: str,
+        user_request: str,
+        options: TextGenerationOptions | None,
+    ) -> AnalysisResult:
         try:
             secret = self._credential_loader().strip()
             if not secret:
@@ -64,15 +87,43 @@ class _ProviderTextBackend:
         elif self._protocol == "openai-responses":
             payload = {"model": self._model, "input": prompt}
         elif self._protocol == "gemini-generate-content":
-            payload = {
-                "contents": [{"role": "user", "parts": [{"text": prompt}]}]
-            }
+            payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
         else:
             payload = {
                 "model": self._model,
                 "max_tokens": 4096,
                 "messages": [{"role": "user", "content": prompt}],
             }
+        if options is not None:
+            if self._protocol == "openai-chat-completions":
+                if options.instructions is not None:
+                    payload["messages"][0]["content"] = options.instructions
+                if options.max_output_tokens is not None:
+                    cap_field = (
+                        "max_completion_tokens" if self._catalog_id == "openai" else "max_tokens"
+                    )
+                    payload[cap_field] = options.max_output_tokens
+                if options.output_format is not None:
+                    kind = options.output_format["type"]
+                    payload["response_format"] = (
+                        {
+                            "type": "json_schema",
+                            "json_schema": {
+                                key: value
+                                for key, value in options.output_format.items()
+                                if key != "type"
+                            },
+                        }
+                        if kind == "json_schema"
+                        else {"type": kind}
+                    )
+            else:
+                if options.instructions is not None:
+                    payload["instructions"] = options.instructions
+                if options.max_output_tokens is not None:
+                    payload["max_output_tokens"] = options.max_output_tokens
+                if options.output_format is not None:
+                    payload["text"] = {"format": options.output_format}
         try:
             payload.update(reasoning_payload_fields(self._capability, self._effort))
         except ValueError:
@@ -251,6 +302,7 @@ def build_llm_backend(
         raise ValueError("provider reasoning effort is unsupported")
     return _ProviderTextBackend(
         endpoint=_endpoint_for(protocol, endpoint, model),
+        catalog_id=catalog_id,
         protocol=protocol,
         model=model,
         effort=effort,  # type: ignore[arg-type]

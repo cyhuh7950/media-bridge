@@ -1,5 +1,20 @@
 # Media Bridge 작업현황
 
+## 2026-10-16 — S18 소비자 요청의 system·JSON 형식·출력 상한 전달 보정 착수
+
+- 최종 내부 읽기 리뷰: 기존 별도 reviewer가 baseline a7a447a9 대비 제품/시험6파일 diff 및 고정 지문을 대조해 Critical0/Important0/Minor0으로 보고했다. main의 실제 140PASS와 별도 증거이며 외부 독립 인수나 실제 모델 검증이 아니다. 공식 계약 참고는 OpenAI Chat https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create , Responses 형식 https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses , Upstage https://console.upstage.ai/api/chat 이다. GitHub `cyhuh7950/media-bridge`의 이번 전용 branch로 제품3·직접시험3·이 작업현황만 비강제 동기화해 WSL 격리 검증을 이어간다. 환경파일·Secret·사용자 자료는 포함하지 않고 main/운영 서비스/DB는 변경하지 않는다.
+
+- 로컬 후보 고정·main 독립 실행: 기존 writer STOP 뒤 어울 main이 `tests/unit/test_openai_chat.py`, `tests/unit/test_backends.py`, `tests/gateway`를 새 실행해 **140 passed / 0 skipped / 5.36초 / exit0**을 확인했다. 변경 6파일 Ruff PASS, 제품 3파일 strict mypy PASS, diff check PASS다. 제품 SHA256(openai_chat/llm_backends/downstream)은 6052F973/AD577F1A/04071CA2이며 writer 고정 지문과 동일하다. 서명 요청→실제 backend outgoing body의 지시·JSON schema·cap과 잘못된/미지원 요청의 호출 전 차단을 합성 MockTransport로 검증한 것이며 실제 Provider 성공으로 계산하지 않는다.
+- writer 결과 수집: 동일 S18 직접시험 RED 16FAIL/33PASS→GREEN 49PASS/27deselected, 관련 회귀 131PASS/0SKIP 및 Ruff/mypy를 수령했다. 내부 `AnalysisBackend.analyze` 계약을 바꾸지 않고 선택적 옵션 경로를 추가했으며 OpenAI Chat은 max_completion_tokens, Upstage Chat은 max_tokens, Responses는 max_output_tokens로 전달한다. malformed format type 배열/객체도 안전 오류로 거부한다. 기존 catalog가 지원하지 않는 Upstage Responses는 새로 개방하지 않았다. writer 환경의 서식 권한/NUL 캐시 오류는 정상 경로로 해소했으며 제품 실패 횟수는 0이다. 최종 내부 읽기 리뷰와 WSL 확인 전으로 실제 배포·추가 유료 호출0이다.
+
+- WSL 자원 사용 계획: `/tmp/media-bridge-s18-qa-*`의 이번 생성 디렉터리 하나와 그 안의 전용 Python venv·시험 임시 파일만 사용한다. 기존 checkout의 lock 의존성을 설치하고 Git exact SHA에서 집중 시험·타입/정적 검사 및 필요 Data 이미지 빌드만 수행한다. DB·volume·포트·기존 서비스는 사용하거나 변경하지 않는다. QA 이미지가 생성되면 사용 컨테이너가 없는지 확인한 뒤 이번 태그/이미지만 회수하고, 전용 디렉터리도 절대 경로 검증 후 제거한다.
+- WSL 준비 실행: 이번 정확한 임시 디렉터리는 `/tmp/media-bridge-s18-qa-rx5tt84a`이며 기존 `requirements.lock` 의존성을 전용 venv에 설치해 exit0을 확인했다. 시스템 Python·DB·서비스 변경0, 아직 제품 후보의 WSL 시험·이미지 빌드는 실행 전이다. 첫 읽기용 Python probe는 PowerShell→SSH 문자열 인용 오류로 실패했고 stdin 전달로 수정해 확인했다(제품 오류 아님, 원문 로그/Secret 출력0).
+
+- 실제 실행 코드 대조: ysna Data image `sha256:ca367ef65dd017b30f95a389e50b9b185a601c5b28a0da9661eaacfd05550569`·서버 checkout 4012739d를 읽기 전용으로 확인했다. 실행 중 openai_chat/downstream/llm_backends의 SHA256은 각각 a29f3a25/e61eb144/1d429340이며 로컬 main a7a447a9의 LF 내용과 일치한다. instructions 미추출·요청 옵션 미전달·고정 system 재생성을 실제 실행 코드에서 확인했고 Secret·요청/응답 원문은 출력하지 않았다. WSL 공급 checkout은 clean/a7a447a9이며 기존 실행 서비스는 변경하지 않았다. 공식 OpenAI Responses의 text.format과 Upstage Chat의 response_format/max_tokens 매핑을 확인했으나 실제 유료 모델 성공은 아직 시험하지 않았다.
+
+- 신산님이 Daon_User 대화에서 Media Bridge 코드 보정·WSL 검증 범위 확대를 승인했다. 기준 main/origin a7a447a934c781137c546068a47756261582031a·clean, 작업 branch `codex/fix-s18-provider-contract-20261016`이며 기존 main·stash·사용자 자료는 보존한다. 수정 목표는 기존 OpenAI 호환 요청의 instructions/JSON schema/출력 cap 전달 누락 복구와 지원 불가 조합의 호출 전 안전 거부다. 새 DB·인증·Secret·라우팅·설치형 기능·원문/응답 로깅은 추가하지 않는다.
+- 실제 서비스는 읽기 전용으로 image/실행 코드/경로만 대조하고, 제품 수정은 로컬 branch→집중 RED/GREEN·영향 회귀→Git 경유 exact SHA WSL 격리 검증으로 진행한다. 운영/Oracle/ysna 서비스 재배포·병합·추가 유료 호출은 승인 범위가 아니다. 현재 실제 호출0이며 실제 배포와 로컬 코드 일치는 아직 미확인이다. 담당 main 어울·기존 단일 writer 사용, 오류/미완료0이다.
+
 ## 2026-10-04 — OmniRoute Responses 스트리밍 호환 수정 진행
 
 - 담당: 어울. 범위: 배포형 Gateway의 `/v1/responses`에서 `stream: true` 요청에 대한 응답 형식만 수정한다. 설치형, DB, 운영 Secret, 일반 JSON 응답은 변경하지 않는다. 기준 `main`/`origin/main`은 `ecc2f2f`; 작업 브랜치/worktree는 `codex/fix-omniroute-responses-stream` / `.worktrees/fix-omniroute-responses-stream`이다.

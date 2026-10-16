@@ -10,16 +10,22 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Callable, Mapping
-from typing import cast
+from typing import Protocol, cast, runtime_checkable
 from urllib.parse import urlsplit
 
 import httpx
 
 from media_bridge.backends import (
     AnalysisBackend,
+    AnalysisResult,
     BackendStatus,
     SecretConfigurationError,
     load_secret,
+)
+from media_bridge.openai_chat import (
+    ChatNormalizationError,
+    TextGenerationOptions,
+    responses_generation_options,
 )
 from media_bridge.receipts import GateReceiptSigner, ReceiptValidationError
 from media_bridge_gateway.contracts import (
@@ -56,15 +62,14 @@ def digest_responses_payload(payload: object) -> str:
 def _contains_media_reference(value: object) -> bool:
     if isinstance(value, str):
         lowered = value.lower()
-        return lowered.startswith("data:image/") or lowered.startswith(
-            "data:application/pdf"
-        )
+        return lowered.startswith("data:image/") or lowered.startswith("data:application/pdf")
     if isinstance(value, list):
         return any(_contains_media_reference(item) for item in value)
     if not isinstance(value, dict):
         return False
     item = cast(dict[object, object], value)
-    if item.get("type") in {"input_image", "input_file", "image_url"}:
+    kind = item.get("type")
+    if isinstance(kind, str) and kind in {"input_image", "input_file", "image_url"}:
         return True
     for key in ("image_url", "file_data", "file_id", "file_url", "asset_id"):
         locator = item.get(key)
@@ -517,6 +522,17 @@ async def _provider_responses_stream(
     yield event("response.completed", 8, response=completed_response)
 
 
+@runtime_checkable
+class _OptionsBackend(Protocol):
+    async def analyze_with_options(
+        self,
+        *,
+        context: str,
+        user_request: str,
+        options: TextGenerationOptions,
+    ) -> AnalysisResult: ...
+
+
 class ProviderResponsesDownstream:
     """Resolve a model through one verified snapshot before text-only execution."""
 
@@ -551,6 +567,14 @@ class ProviderResponsesDownstream:
     async def invoke(self, request: SealedGatewayRequest) -> GatewayResponse:
         _verify_seal(request, self._receipt_signer)
         self._replay_guard.consume(request.receipt)
+        try:
+            options = responses_generation_options(request.payload)
+        except ChatNormalizationError as error:
+            raise DownstreamError(
+                "downstream_payload_invalid",
+                "Text generation options are invalid or unsupported.",
+                http_status=400,
+            ) from error
         backend = self._backend
         output_model = self._model or request.target_id
         if self._snapshot is not None:
@@ -588,7 +612,18 @@ class ProviderResponsesDownstream:
                 http_status=400,
             )
         assert backend is not None
-        result = await backend.analyze(context=prompt, user_request="")
+        if options.specified:
+            if not isinstance(backend, _OptionsBackend):
+                raise DownstreamError(
+                    "downstream_options_unsupported",
+                    "This backend cannot preserve generation options.",
+                    http_status=400,
+                )
+            result = await backend.analyze_with_options(
+                context=prompt, user_request="", options=options
+            )
+        else:
+            result = await backend.analyze(context=prompt, user_request="")
         if result.status is not BackendStatus.SUCCESS or not result.analysis:
             code = result.error_code or "upstream"
             raise DownstreamError(
@@ -643,9 +678,7 @@ class ProviderResponsesDownstream:
             if not isinstance(item, Mapping):
                 continue
             aliases = item.get("aliases", [])
-            if item.get("id") == target_id or (
-                isinstance(aliases, list) and target_id in aliases
-            ):
+            if item.get("id") == target_id or (isinstance(aliases, list) and target_id in aliases):
                 model_matches.append(item)
         if len(model_matches) != 1:
             raise DownstreamError(
@@ -708,7 +741,10 @@ class ProviderResponsesDownstream:
                 None,
             )
             if isinstance(profile, Mapping) and profile.get("strategy") in {
-                "priority", "fallback", "health", "cost"
+                "priority",
+                "fallback",
+                "health",
+                "cost",
             }:
                 strategy = cast(str, profile["strategy"])
         try:
