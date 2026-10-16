@@ -2,6 +2,12 @@
 
 ## 2026-10-16 — S18 소비자 요청의 system·JSON 형식·출력 상한 전달 보정 착수
 
+- Data 반영 후 승인2회 실제 소비자 시험: Daon_User QA-A에서 정상 Run6f9427bb는 Media Bridge/uss/solar-pro4/external_api completed·저장결과1/인용1, 원문346bytes/hash·다른사용자/다른Notebook404·실제화면복귀/새로고침을 확인했다. 자료밖 Runf27a9d9e는 JSON응답 object/필수키타입형성이지만 소비자 TEXT_GENERATION_GROUNDING_INVALID로 저장결과0·accepted다. 이전 nonJSON 실패와 구분하고 이 부족안내 실패를 성공으로 표시하지 않는다. 정확한 검증거부분기는 원응답미보관으로 미확정이다. 두요청모두512/64KiB이하·추가인증각소비1·자동retry0/추가생성0이며 실제usage/청구액은미확인이다. QA default/정책은 원래값12/deny27로회수했고 helper세션철회·DB/Secret/Control변경0이다. S18 전체판정은 [1]이며 Daon_User WORK_STATUS의 상세근거를 따른다.
+
+- 승인 Data 반영 실행: ysna Git exact b72d722의 추적 파일만 Docker context로 보내 ARM64 image `sha256:ef6dc0b34b3a019286b9cf4a092310c0a90e71d26c62f35929dcc73fb7a18d0e`를 빌드exit0했다. revision label 및 실행3파일 LF SHA b69bc211/138674b8/b8ca62a5는 WSL검증본과 일치한다. network-none/read-only 후보 import 뒤 기존Compose의 Data만 교체exit0·healthy, 환경/mount/network 동일·Control/DB ID불변·서버trackedclean을 확인했다. 기존 untracked compose/secrets와 이전 ca367ef65d rollback태그는 보존했다. Secret/DB/Control/PR/병합변경0, 실제 질문2회는 아직실행전이며 결과는 별도 확인한다.
+
+- 신산님 후속 직접 승인: `Media Bridge Data 반영·실제 2회 시험 승인`. 검증 제품 b72d722를 기존 ysna Data에만 반영하고 Daon_User QA-A의 동일 합성 TXT 정상/부족 각1회로 확인한다. 이전 ca367ef65d는 `media-bridge-data:rollback-ca367ef6-20261016`으로 보존하며 새 후보 태그는 `media-bridge-data:s18-b72d722-20261016`이다. Git exact context만 빌드해 기존 untracked compose.ysna.yaml/secrets를 context에 포함하지 않는다. Control/DB·Secret·권한·환경·영속·네트워크·PR/병합은 변경하지 않는다. 최종 질문 결과·설정 회수는 Daon_User WORK_STATUS에 기록하고 현재 신규 유료 호출0/실제 답변 성공 미확인이다.
+
 - WSL 시험 자원 회수: 정확한 QA checkout의 SHA/clean을 확인한 뒤 정상 Git remove로 분리하고 이번 전용 venv·wheel·시험 디렉터리 `/tmp/media-bridge-s18-qa-rx5tt84a`만 제거했다. 해당 디렉터리 잔류0·WSL 소유 checkout clean/a7a447a9 및 원래 등록 checkout1개를 확인했다. QA DB/volume·고정/공개 포트·Data 이미지 생성0이므로 회수 대상도 없었다. 시험 원본은 원격 작업 branch의 b72d722에 보존되어 재현 가능하다. 로컬 main a7a447a9·기존 stash는 보존한다. 현재 작업 branch는 검증 소스 보존 상태이며 아직 운영 배포·PR·병합·추가 유료 시험은 하지 않았다.
 
 - WSL 실제 검증: Git exact `b72d7222c72faf3b3c15505ef6a06c1ca2c0c896`의 격리 checkout에서 **140 passed / 0 skipped / 2.06초 / exit0**, 변경 Ruff6파일·strict mypy3파일·diff check 모두 exit0을 확인했다. 실제 Gateway loopback HTTP/보안 회귀와 합성 Provider MockTransport를 구분하며 실제 외부 모델·DB·사용자 질문 저장 성공으로 확대하지 않는다. Python wheel build exit0, SHA256 `0cc8fdc23218eb07d977bdab5f66f627499963cb264a76122f207233e292dc1d`다.
