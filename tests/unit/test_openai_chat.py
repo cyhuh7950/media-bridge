@@ -77,6 +77,70 @@ def test_chat_request_rejects_missing_messages() -> None:
     assert error.value.code == "invalid_request"
 
 
+def test_s18_chat_json_schema_and_output_cap_are_normalized_without_loss() -> None:
+    schema = {
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+        "required": ["answer"],
+        "additionalProperties": False,
+    }
+    result = chat_request_to_responses(
+        {
+            "model": "solar-pro4",
+            "messages": [
+                {"role": "system", "content": "Return only JSON."},
+                {"role": "user", "content": "sanitized evidence"},
+            ],
+            "max_tokens": 512,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "grounded_answer",
+                    "strict": True,
+                    "schema": schema,
+                },
+            },
+        }
+    )
+    assert result["instructions"] == "Return only JSON."
+    assert result["max_output_tokens"] == 512
+    assert result["text"] == {
+        "format": {
+            "type": "json_schema",
+            "name": "grounded_answer",
+            "strict": True,
+            "schema": schema,
+        }
+    }
+    assert "response_format" not in result
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"max_tokens": True},
+        {"max_tokens": 512.0},
+        {"max_tokens": 0},
+        {"max_tokens": 512, "max_completion_tokens": 1024},
+        {
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "test", "strict": 1, "schema": {}},
+            }
+        },
+        {"response_format": {"type": []}},
+        {"response_format": {"type": {}}},
+    ],
+)
+def test_s18_chat_conflicting_or_malformed_generation_contracts_are_rejected(
+    extra: dict[str, object],
+) -> None:
+    with pytest.raises(ChatNormalizationError):
+        chat_request_to_responses(
+            {"model": "solar-pro4", "messages": [{"role": "user", "content": "safe"}], **extra}
+        )
+
+
 def test_responses_body_maps_to_chat_completion() -> None:
     result = chat_response_from_responses(
         b'{"id":"resp_1","model":"solar-pro4","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hello"}]}]}',

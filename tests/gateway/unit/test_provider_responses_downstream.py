@@ -12,6 +12,287 @@ from media_bridge_gateway.downstream import ProviderResponsesDownstream
 from media_bridge_gateway.normalizer import digest_gateway_payload
 
 
+def _s18_sealed(signer: GateReceiptSigner, payload: dict[str, Any]) -> SealedGatewayRequest:
+    nonce = "s18-generation-options-0001"
+    digest = digest_gateway_payload({"payload": payload, "request_nonce": nonce})
+    binding = ReceiptBinding(
+        target_id="solar-alias",
+        capability="non_vision",
+        input_digest="input-digest",
+        output_digest=digest,
+        action="converted",
+    )
+    return SealedGatewayRequest(
+        target_id=binding.target_id,
+        capability=binding.capability,
+        action=binding.action,
+        payload=payload,
+        input_digest=binding.input_digest,
+        output_digest=digest,
+        receipt=signer.sign(binding),
+        request_nonce=nonce,
+        snapshot_version=1,
+    )
+
+
+_S18_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answer": {"type": "string"},
+        "cited_chunk_ids": {"type": "array", "items": {"type": "string"}},
+        "insufficient": {"type": "boolean"},
+    },
+    "required": ["answer", "cited_chunk_ids", "insufficient"],
+    "additionalProperties": False,
+}
+_S18_FORMAT = {
+    "type": "json_schema",
+    "name": "grounded_answer",
+    "strict": True,
+    "schema": _S18_SCHEMA,
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ingress", ["chat", "responses"])
+@pytest.mark.parametrize(
+    "catalog,protocol",
+    [
+        ("upstage-solar", "openai-chat-completions"),
+        ("openai", "openai-chat-completions"),
+        ("openai", "openai-responses"),
+    ],
+)
+@pytest.mark.parametrize(
+    "output",
+    [
+        '{"answer":"근거 답변","cited_chunk_ids":["chunk-1"],"insufficient":false}',
+        '{"answer":"근거에 정보가 없습니다.","cited_chunk_ids":[],"insufficient":true}',
+        "not JSON; do not repair this answer",
+    ],
+)
+async def test_s18_signed_generation_options_reach_actual_provider_request(
+    ingress: str,
+    catalog: str,
+    protocol: str,
+    output: str,
+) -> None:
+    import httpx
+
+    from media_bridge.llm_backends import build_llm_backend
+    from media_bridge.openai_chat import chat_request_to_responses
+
+    payload = {
+        "model": "solar-alias",
+        "input": "sanitized evidence",
+        "instructions": "Return only JSON. Preserve 한국어 instructions.",
+        "max_output_tokens": 512,
+        "text": {"format": _S18_FORMAT},
+    }
+    if ingress == "chat":
+        payload = chat_request_to_responses(
+            {
+                "model": "solar-alias",
+                "messages": [
+                    {"role": "system", "content": payload["instructions"]},
+                    {"role": "user", "content": "sanitized evidence"},
+                ],
+                "max_tokens": 512,
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "grounded_answer",
+                        "strict": True,
+                        "schema": _S18_SCHEMA,
+                    },
+                },
+            }
+        )
+    seen: list[httpx.Request] = []
+    loads: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        body = (
+            {"output_text": output}
+            if protocol == "openai-responses"
+            else {"choices": [{"message": {"content": output}}]}
+        )
+        return httpx.Response(200, json=body)
+
+    snapshot = _snapshot()
+    provider = snapshot["providers"][0]
+    provider.update(
+        catalog_id=catalog,
+        protocol=protocol,
+        endpoint="https://provider.example/v1",
+        model_id="solar-pro4" if catalog == "upstage-solar" else "gpt-5.1",
+    )
+
+    def credential() -> str:
+        loads.append("loaded")
+        return "synthetic-provider-secret"
+
+    signer = GateReceiptSigner(secret=b"r" * 32)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        downstream = ProviderResponsesDownstream(
+            snapshot=snapshot,
+            receipt_signer=signer,
+            backend_factory=lambda configuration: build_llm_backend(
+                configuration, credential_loader=credential, client=client
+            ),
+        )
+        response = await downstream.invoke(_s18_sealed(signer, payload))
+    assert len(seen) == 1
+    assert loads == ["loaded"]
+    outgoing = json.loads(seen[0].content)
+    assert outgoing["model"] == provider["model_id"]
+    if protocol == "openai-responses":
+        assert outgoing["instructions"] == "Return only JSON. Preserve 한국어 instructions."
+        assert outgoing["max_output_tokens"] == 512
+        assert outgoing["text"] == {"format": _S18_FORMAT}
+        assert outgoing["input"] == "sanitized evidence"
+        assert "max_tokens" not in outgoing
+    else:
+        assert outgoing["messages"][0] == {
+            "role": "system",
+            "content": "Return only JSON. Preserve 한국어 instructions.",
+        }
+        assert outgoing["messages"][-1] == {"role": "user", "content": "sanitized evidence"}
+        cap_key = "max_completion_tokens" if catalog == "openai" else "max_tokens"
+        other_key = "max_tokens" if catalog == "openai" else "max_completion_tokens"
+        assert outgoing[cap_key] == 512
+        assert other_key not in outgoing
+        assert outgoing["response_format"] == {
+            "type": "json_schema",
+            "json_schema": {"name": "grounded_answer", "strict": True, "schema": _S18_SCHEMA},
+        }
+        assert "max_output_tokens" not in outgoing
+    assert json.loads(response.body)["output"][0]["content"][0]["text"] == output
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"max_output_tokens": True},
+        {"max_output_tokens": 512.0},
+        {"max_output_tokens": 0},
+        {"max_output_tokens": -1},
+        {"max_tokens": 512, "max_output_tokens": 1024},
+        {"instructions": ["invalid"]},
+        {"text": {"format": {"type": "unknown"}}},
+        {"text": {"format": {**_S18_FORMAT, "strict": 1}}},
+        {"text": {"format": {**_S18_FORMAT, "schema": []}}},
+        {"temperature": 0.5},
+        {"tools": [{"type": "function"}]},
+        {"text": {"format": {"type": []}}},
+        {"text": {"format": {"type": {}}}},
+    ],
+)
+async def test_s18_invalid_generation_options_stop_before_backend_creation(
+    extra: dict[str, Any],
+) -> None:
+    from media_bridge_gateway.contracts import DownstreamError
+
+    signer = GateReceiptSigner(secret=b"r" * 32)
+    builds: list[object] = []
+
+    def build(provider: dict[str, Any]) -> CaptureBackend:
+        builds.append(provider)
+        return CaptureBackend()
+
+    downstream = ProviderResponsesDownstream(
+        snapshot=_snapshot(), backend_factory=build, receipt_signer=signer
+    )
+    with pytest.raises(DownstreamError) as error:
+        await downstream.invoke(
+            _s18_sealed(signer, {"model": "solar-alias", "input": "safe", **extra})
+        )
+    assert error.value.http_status == 400
+    assert builds == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "catalog,protocol,model",
+    [
+        ("gemini", "gemini-generate-content", "gemini-2.5-flash"),
+        ("anthropic", "anthropic-messages", "claude-sonnet-4"),
+    ],
+)
+async def test_s18_unverified_provider_options_never_load_credentials_or_call_http(
+    catalog: str,
+    protocol: str,
+    model: str,
+) -> None:
+    import httpx
+
+    from media_bridge.llm_backends import build_llm_backend
+    from media_bridge_gateway.contracts import DownstreamError
+
+    signer = GateReceiptSigner(secret=b"r" * 32)
+    snapshot = _snapshot()
+    snapshot["providers"][0].update(
+        catalog_id=catalog,
+        protocol=protocol,
+        model_id=model,
+        endpoint="https://provider.example/v1beta/models"
+        if catalog == "gemini"
+        else "https://provider.example/v1",
+        reasoning_effort="provider_default",
+    )
+    calls: list[str] = []
+
+    def credential() -> str:
+        calls.append("credential")
+        return "synthetic-secret"
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        calls.append("http")
+        return httpx.Response(200, json={})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        downstream = ProviderResponsesDownstream(
+            snapshot=snapshot,
+            receipt_signer=signer,
+            backend_factory=lambda provider: build_llm_backend(
+                provider, credential_loader=credential, client=client
+            ),
+        )
+        with pytest.raises(DownstreamError):
+            await downstream.invoke(
+                _s18_sealed(
+                    signer,
+                    {
+                        "model": "solar-alias",
+                        "input": "safe",
+                        "instructions": "JSON only",
+                        "max_output_tokens": 512,
+                        "text": {"format": _S18_FORMAT},
+                    },
+                )
+            )
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_s18_legacy_backend_rejects_options_without_silent_fallback() -> None:
+    from media_bridge_gateway.contracts import DownstreamError
+
+    backend = CaptureBackend()
+    signer = GateReceiptSigner(secret=b"r" * 32)
+    downstream = ProviderResponsesDownstream(
+        backend=backend, model="solar-alias", receipt_signer=signer
+    )
+    with pytest.raises(DownstreamError) as error:
+        await downstream.invoke(
+            _s18_sealed(signer, {"model": "solar-alias", "input": "safe", "max_output_tokens": 512})
+        )
+    assert error.value.http_status == 400
+    assert backend.context == ""
+
+
 class CaptureBackend:
     def __init__(self) -> None:
         self.context = ""
@@ -56,9 +337,7 @@ def _request(
 
 
 def _snapshot(*, duplicate: bool = False) -> dict[str, Any]:
-    models = [
-        {"id": "solar-alias", "provider_id": "provider-solar", "aliases": ["public-solar"]}
-    ]
+    models = [{"id": "solar-alias", "provider_id": "provider-solar", "aliases": ["public-solar"]}]
     providers = [
         {
             "id": "provider-solar",
@@ -72,9 +351,7 @@ def _snapshot(*, duplicate: bool = False) -> dict[str, Any]:
         }
     ]
     if duplicate:
-        models.append(
-            {"id": "solar-alias", "provider_id": "provider-other", "aliases": []}
-        )
+        models.append({"id": "solar-alias", "provider_id": "provider-other", "aliases": []})
         providers.append({**providers[0], "id": "provider-other"})
     return {"registry": {"models": models}, "providers": providers}
 
