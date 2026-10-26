@@ -169,9 +169,9 @@ async def test_document_parse_backend_sends_required_form_fields_and_extracts_co
     assert result.text == "ERROR 104"
 
 
-def _image_request(*, stream: bool = False) -> dict[str, Any]:
+def _image_request(*, stream: bool = False, model: str = "solar-pro4") -> dict[str, Any]:
     return {
-        "model": "solar-pro4",
+        "model": model,
         "stream": stream,
         "input": [
             {
@@ -269,6 +269,44 @@ async def test_image_request_reaches_solar_as_ocr_text_without_original_media(
     assert "ERROR 104 from screenshot" in serialized
     assert "input_image" not in serialized
     assert "data:image" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_auto_model_is_resolved_by_local_runtime_selector(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("TEST_SOLAR_API_KEY", "secret-not-logged")
+    runtime = build_personal_runtime(
+        model="solar-pro4",
+        asset_root=tmp_path / "assets",
+        receipt_secret=b"r" * 32,
+        ocr_backend=FakeOcr(),
+        downstream_factory=lambda signer: SolarResponsesDownstream(
+            endpoint="https://api.example.test/v1/chat/completions",
+            model="solar-pro4",
+            receipt_signer=signer,
+            api_key_env="TEST_SOLAR_API_KEY",
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(
+                    200,
+                    json={"choices": [{"message": {"content": "자동 선택 결과"}}]},
+                )
+            ),
+        ),
+    )
+    app = build_personal_app(runtime)
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1"
+        ) as client:
+            response = await client.post(
+                "/v1/responses", json=_image_request(model="auto")
+            )
+    finally:
+        await runtime.close()
+
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
