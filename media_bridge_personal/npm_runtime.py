@@ -828,6 +828,23 @@ class PersonalRuntime:
     clients: tuple[httpx.AsyncClient, ...] = field(default_factory=tuple)
 
     async def invoke(self, payload: object) -> GatewayResponse | tuple[int, dict[str, Any]]:
+        # The local profile has one configured Non-Vision LLM.  Accept the
+        # OpenAI-compatible `auto` selector and resolve it to that configured
+        # model before capability validation; never pass `auto` downstream.
+        if isinstance(payload, dict) and payload.get("model") == "auto":
+            configured_models = self.model_registry.available()
+            if len(configured_models) != 1:
+                return (
+                    422,
+                    {
+                        "error": {
+                            "type": "media_bridge_error",
+                            "code": "model_unavailable",
+                            "message": "Automatic model selection is unavailable.",
+                        }
+                    },
+                )
+            payload = {**payload, "model": configured_models[0].model_id}
         subject = DataPlaneSubject(
             credential_selector="personal",
             tenant_id="personal",
