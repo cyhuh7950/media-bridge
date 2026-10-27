@@ -1,5 +1,13 @@
 # Media Bridge 작업현황
 
+## 2026-10-27 Daon2 Main 인수: Gateway 비공개 HTTP 실패 진단 A안
+
+- 신산님 직접승인: Daon2 채팅 call_c50e22f8c33e432986749815f6b64cdb ‘A안 구현·QA·WSL/Server 반영 승인’. 승인정본 D:/Project/Daon2/docs/design/S25_GATEWAY_PRIVATE_FAILURE_DIAGNOSTIC_PROPOSAL_20261027.md SHA8004512ea3e93b9b8e7d080bf812d56f5ce88f54821643406d135819b440de88(독립C0/I0)를 따르며 source bytes불변이다. 기존 담당채팅에는 추가메시지를 보내지 않고 Daon2 Main이 직접 subagent구현/검수/통합한다.
+- Main기존main clean/HEAD=originmain13b23dae1da3097394ca36e0f605de394ff3c449·worktree1을확인하고 codex/gateway-private-http-diagnostics-20261027 격리branch/worktree를만들었다. 제품단일writer gateway_private_diagnostic_impl는 helper/app/llm_backend3곳+관련시험만소유하며최초tests단계다. 기존main·DB/Secret·환경·모델/route·공개응답·entrypoints변경0이다.
+- 시험작성: 신규 tests/unit/test_private_http_failure_diagnostics.py(d3d4a923…)와 tests/gateway/integration/test_private_http_failure_diagnostics.py(02c5ea2a…). 실제 app→factory/downstream/backend+MockTransport,닫힌14키/7flags·원bytes hash·동시/무context/reset·64KiB/UTF8·공개3필드·logger오류보존분모다. 예상48 parametrized cases는Main collection으로확인할때까지NOT RUN, 제품구현0/테스트실행·SDKimport0이다. 수기47→48집계정정1과일반sandbox gitstatus오류는Main실권한read에서정상확인했고Git설정수정0이다.
+- Main WSL fresh RO는 /home/daon/deploy/media-bridge clean/detacheda7a447a9·알려진venv0/Python3.12.3, 기존Server는b72d722 image/checkout·실설치6파일Git일치·running/restart0다. 기존b72 140PASS/과거593PASS기록을13b baseline으로사용하지않는다. Main은기존공급checkout을Git13b로받고새gitignore .venv에requirements.lock을설치중이며모델·DB·container 생성/교체0이다. QAvenv는이단계검증·rollback기간동안Main소유ACTIVE로유지하고단계종료후필요자료를보존/정리한다.
+- 다음: Main기존baseline→신규RED→제품구현재지시→필수회귀/정적/실wheel→독립검수→기존WSL구조exactSHA→같은Git기존Server Data만반영·실파일/health/rollback. 최초설치/온보딩/migration/snapshot발행·추가모델호출·기존UNKNOWN재송신은없다. Daon2원요청91783b1a/5917는보존하며원인확정/실Provider성공은아직미검증이다.
+
 ## 2026-10-16 — S18 소비자 요청의 system·JSON 형식·출력 상한 전달 보정 착수
 
 - Data 반영 후 승인2회 실제 소비자 시험: Daon_User QA-A에서 정상 Run6f9427bb는 Media Bridge/uss/solar-pro4/external_api completed·저장결과1/인용1, 원문346bytes/hash·다른사용자/다른Notebook404·실제화면복귀/새로고침을 확인했다. 자료밖 Runf27a9d9e는 JSON응답 object/필수키타입형성이지만 소비자 TEXT_GENERATION_GROUNDING_INVALID로 저장결과0·accepted다. 이전 nonJSON 실패와 구분하고 이 부족안내 실패를 성공으로 표시하지 않는다. 정확한 검증거부분기는 원응답미보관으로 미확정이다. 두요청모두512/64KiB이하·추가인증각소비1·자동retry0/추가생성0이며 실제usage/청구액은미확인이다. QA default/정책은 원래값12/deny27로회수했고 helper세션철회·DB/Secret/Control변경0이다. S18 전체판정은 [1]이며 Daon_User WORK_STATUS의 상세근거를 따른다.
